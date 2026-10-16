@@ -28,34 +28,78 @@
       .hud .warnings div { margin-top: 3px; }
       .hud .bad { color: #ff7a7f; }
       .hud .warn { color: #ffb347; }
-      .toolbar-wrap {
-        position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 1;
-        display: flex; flex-direction: column; align-items: center; gap: 6px;
-        max-width: calc(100vw - 32px); width: max-content;
+      /* Hotbar, in the style of Cities: Skylines 2: a frosted dark bar of icon
+         buttons, with a panel of item cards rising above it. */
+      :root { --hb-bg: rgba(22, 26, 32, 0.88); --hb-edge: rgba(255, 255, 255, 0.07); --hb-accent: #4aa8ff; }
+      .hotbar-wrap {
+        position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 1;
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+        max-width: calc(100vw - 24px); width: max-content; font-family: system-ui, sans-serif;
       }
-      .toolbar {
-        display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 8px;
-        background: rgba(20, 23, 28, 0.85); border-radius: 8px; font: 13px/1.3 system-ui, sans-serif;
-        max-width: calc(100vw - 32px); box-sizing: border-box;
+      .hotbar {
+        display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; padding: 6px;
+        background: var(--hb-bg); border: 1px solid var(--hb-edge); border-radius: 14px;
+        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
       }
-      .flyout {
-        display: none; padding: 8px 10px; background: rgba(20, 23, 28, 0.95); border: 1px solid #3d4550;
-        border-radius: 8px; font: 13px/1.3 system-ui, sans-serif; color: #d8dee6;
-        max-width: min(760px, calc(100vw - 32px)); box-sizing: border-box;
+      .hotbar .hb-btn {
+        position: relative; width: 62px; height: 58px; padding: 6px 0 4px; border: 0; border-radius: 10px;
+        background: transparent; color: #c9d2dc; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 3px; transition: background 0.12s, color 0.12s;
       }
-      .flyout.open { display: block; }
-      .flyout-title { font-weight: 600; margin-bottom: 6px; color: #fff; }
-      .flyout-items { display: flex; flex-wrap: wrap; gap: 6px; }
-      .flyout button { display: flex; flex-direction: column; align-items: flex-start; padding: 6px 10px; text-align: left; }
-      .flyout button small { color: #8a94a3; font-size: 11px; }
-      .flyout button small.bad { color: #ff7a7f; }
-      .flyout button.locked { opacity: 0.45; }
-      .flyout button.locked small { color: #c9a227; }
-      .flyout button.active { background: #2f6b50; border-color: #4cc38a; color: #fff; }
-      .toolbar button { display: flex; flex-direction: column; align-items: center; padding: 5px 10px; }
-      .toolbar button small { color: #8a94a3; font-size: 11px; }
-      .toolbar button.active small { color: #d8f5e6; }
-      .toolbar button.toggle { margin-left: 8px; }
+      .hotbar .hb-btn svg { width: 26px; height: 26px; }
+      .hotbar .hb-btn:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
+      .hotbar .hb-btn.open { background: rgba(255, 255, 255, 0.1); color: #fff; }
+      .hotbar .hb-btn.active { background: rgba(74, 168, 255, 0.16); color: var(--hb-accent); }
+      .hotbar .hb-btn.active::after {
+        content: ''; position: absolute; bottom: 2px; left: 22px; right: 22px; height: 3px;
+        border-radius: 2px; background: var(--hb-accent);
+      }
+      .hotbar .hb-btn.locked { opacity: 0.35; cursor: not-allowed; }
+      .hb-label { font-size: 10.5px; letter-spacing: 0.02em; }
+      .hb-key {
+        position: absolute; top: 3px; right: 5px; font-size: 9px; line-height: 13px; min-width: 13px;
+        border-radius: 3px; background: rgba(255, 255, 255, 0.1); color: #9aa6b4;
+      }
+      .hb-divider { width: 1px; height: 38px; margin: 0 6px; background: var(--hb-edge); }
+      .hb-panel {
+        display: none; padding: 10px 12px 12px; background: var(--hb-bg); border: 1px solid var(--hb-edge);
+        border-radius: 14px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); color: #d8dee6;
+        max-width: min(820px, calc(100vw - 24px)); box-sizing: border-box;
+      }
+      .hb-panel.open { display: block; }
+      .hb-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 14px; font-weight: 600; color: #fff; }
+      .hb-head svg { width: 18px; height: 18px; color: var(--hb-accent); }
+      .hb-head button { margin-left: auto; padding: 0 8px; background: transparent; border: 0; color: #8a94a3; }
+      .hb-head button:hover { color: #fff; background: transparent; }
+      .hb-cards { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+      .hb-card {
+        width: 118px; padding: 8px; border-radius: 10px; cursor: pointer; box-sizing: border-box;
+        background: rgba(255, 255, 255, 0.04); border: 1px solid transparent; transition: background 0.12s, border-color 0.12s;
+      }
+      .hb-card:hover { background: rgba(255, 255, 255, 0.08); }
+      .hb-card.active { border-color: var(--hb-accent); background: rgba(74, 168, 255, 0.12); }
+      .hb-card.locked { cursor: not-allowed; }
+      .hb-card.locked .hb-thumb svg, .hb-card.locked .hb-name, .hb-card.locked .hb-cost, .hb-card.locked .hb-stat { opacity: 0.35; }
+      .hb-thumb {
+        position: relative; height: 62px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(160deg, #2c3440, #1b2028); color: #dfe6ee; margin-bottom: 6px;
+      }
+      .hb-thumb svg { width: 38px; height: 38px; }
+      .hb-lock {
+        position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 2px; color: #ffd23a; font-size: 11px; font-weight: 600; opacity: 1;
+      }
+      .hb-card.locked .hb-lock svg { width: 18px; height: 18px; opacity: 1; }
+      .hb-name { font-size: 12px; font-weight: 600; color: #fff; line-height: 1.25; }
+      .hb-cost { font-size: 12px; color: #7fe0a8; margin-top: 2px; }
+      .hb-cost.bad { color: #ff7a7f; }
+      .hb-stat { font-size: 10.5px; color: #8a94a3; margin-top: 2px; line-height: 1.3; }
+      @media (max-width: 600px) {
+        .hotbar .hb-btn { width: 52px; height: 52px; }
+        .hb-card { width: 100px; }
+      }
       .menu-toggle { position: fixed; top: 12px; right: 12px; font: 13px system-ui, sans-serif; padding: 6px 12px; }
       .menu {
         position: fixed; top: 48px; right: 12px; width: min(300px, calc(100vw - 32px)); box-sizing: border-box;
@@ -70,8 +114,6 @@
       .menu .import-confirm.visible { display: block; }
       .menu .message { min-height: 1.2em; color: #9fe0bd; }
       .menu .message.error { color: #ff7a7f; }
-      .toolbar button.locked { opacity: 0.45; cursor: not-allowed; }
-      .toolbar button.locked small { color: #c9a227; }
       .hud .bar.xp .xp-fill { height: 100%; background: #8f7cff; transition: width 0.3s; }
       .hud .level { margin-bottom: 4px; }
       .goals {

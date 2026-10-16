@@ -3,6 +3,7 @@ import { type Tool, TOOL_HOTKEYS, toolCost, toolName } from '../input/tools';
 import { buildingStats } from '../sim/buildings';
 import { isUnlocked, unlockFor } from '../sim/progression';
 import type { GameState } from '../sim/state';
+import { type GroupIcon, ICONS, itemIcon } from './icons';
 
 export interface ToolbarHandlers {
   onSelectTool(tool: Tool): void;
@@ -12,167 +13,176 @@ export interface ToolbarHandlers {
 }
 
 interface Group {
-  id: string;
+  id: GroupIcon;
   label: string;
   tools: Tool[];
+  hotkey?: string;
 }
 
 const byCategory = (...cats: string[]): Tool[] => BUILDING_KINDS.filter((k) => cats.includes(buildingDef(k).category));
 
-// The build menu, grouped so it fits on screen: one button per group, and
-// clicking a group with several items opens a menu of them above the bar.
+// The hotbar, in the style of Cities: Skylines 2: icon buttons per group,
+// and a panel of item cards above the bar for groups with several items.
 const GROUPS: Group[] = [
-  { id: 'racks', label: 'Racks', tools: byCategory('rack') },
-  { id: 'power', label: 'Power', tools: byCategory('power') },
-  { id: 'cooling', label: 'Cooling', tools: [...byCategory('cooling', 'chiller'), ...FLOOR_KINDS] },
+  { id: 'racks', label: 'Racks', tools: byCategory('rack'), hotkey: TOOL_HOTKEYS.rack_basic },
+  { id: 'power', label: 'Power', tools: byCategory('power'), hotkey: TOOL_HOTKEYS.power_basic },
+  { id: 'cooling', label: 'Cooling', tools: [...byCategory('cooling', 'chiller'), ...FLOOR_KINDS], hotkey: TOOL_HOTKEYS.cooling_fan },
   { id: 'decor', label: 'Decor', tools: byCategory('decor') },
-  { id: 'sell', label: 'Sell', tools: ['sell'] },
+  { id: 'sell', label: 'Sell', tools: ['sell'], hotkey: TOOL_HOTKEYS.sell },
 ];
+
+interface Toggle {
+  id: GroupIcon;
+  label: string;
+  hotkey: string;
+  unlockId: string;
+  onClick: () => void;
+}
 
 export function groupOf(tool: Tool): Group | undefined {
   return GROUPS.find((g) => g.tools.includes(tool));
 }
 
-// One-line summary of a stock (un-upgraded) building for the menu.
-function summary(tool: Tool): string {
+const money = (n: number): string => `£${n.toLocaleString('en-GB')}`;
+
+// The headline number for a stock (un-upgraded) building on its card.
+function stat(tool: Tool): string {
   if (tool === 'sell') return `${CONFIG.economy.sellRefund * 100}% refund`;
-  const cost = `£${toolCost(tool).toLocaleString('en-GB')}`;
-  if (isFloorKind(tool)) return `${cost} &middot; goes under racks, needs a chiller`;
+  if (isFloorKind(tool)) return 'Under racks · needs chiller';
   const def = buildingDef(tool);
   const s = buildingStats({
     id: 0, kind: tool, x: 0, y: 0, builtAtTick: 0, status: 'ok', repairDoneTick: null, upgrade: 0, parts: {},
   });
   switch (def.category) {
-    case 'rack': return `${cost} &middot; £${s.income.toFixed(1)}/min &middot; ${s.powerDraw.toFixed(0)} kW`;
-    case 'power': return `${cost} &middot; +${s.powerSupply} kW`;
-    case 'cooling': return `${cost} &middot; ${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} &middot; ${s.powerDraw} kW`;
-    case 'chiller': return `${cost} &middot; feeds ${def.chillerCapacity} vents`;
-    case 'decor': return `${cost} &middot; +${s.prestige} prestige`;
+    case 'rack': return `£${s.income.toFixed(1)}/min · ${s.powerDraw.toFixed(0)} kW`;
+    case 'power': return `+${s.powerSupply} kW`;
+    case 'cooling': return `${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} area · ${s.powerDraw} kW`;
+    case 'chiller': return `Feeds ${def.chillerCapacity} vents · ${def.chillerRange} tiles`;
+    case 'decor': return `+${s.prestige} prestige`;
   }
 }
 
-function lockText(state: GameState, tool: Tool): string | null {
-  if (tool === 'sell' || isUnlocked(state, tool)) return null;
-  return `Unlocks at level ${unlockFor(tool)?.level ?? '?'}`;
-}
+const unlockLevel = (tool: Tool): number | null =>
+  tool === 'sell' ? null : (unlockFor(tool)?.level ?? null);
 
 export class Toolbar {
   private readonly groupButtons = new Map<string, HTMLButtonElement>();
-  private readonly toggles: { button: HTMLButtonElement; unlockId: string }[] = [];
-  private readonly flyout: HTMLElement;
+  private readonly toggleButtons: { button: HTMLButtonElement; toggle: Toggle }[] = [];
+  private readonly panel: HTMLElement;
   private openGroup: string | null = null;
-  // Last tool picked in each group, shown on the group's button.
-  private readonly picked = new Map<string, Tool>(GROUPS.map((g) => [g.id, g.tools[0]!]));
-  private lastFlyoutHtml = '';
-  private lastButtonsKey = '';
+  private lastPanelHtml = '';
 
   constructor(parent: HTMLElement, handlers: ToolbarHandlers) {
     const wrap = document.createElement('div');
-    wrap.className = 'toolbar-wrap';
-    this.flyout = document.createElement('div');
-    this.flyout.className = 'flyout';
+    wrap.className = 'hotbar-wrap';
+    this.panel = document.createElement('div');
+    this.panel.className = 'hb-panel';
     const bar = document.createElement('div');
-    bar.className = 'toolbar';
-    wrap.append(this.flyout, bar);
+    bar.className = 'hotbar';
+    wrap.append(this.panel, bar);
     parent.appendChild(wrap);
 
-    const makeButton = (onClick: () => void): HTMLButtonElement => {
-      const button = document.createElement('button');
-      // pointerdown so re-rendered labels never swallow a click.
-      button.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0) return;
-        onClick();
+    // pointerdown so a re-render between press and release never loses a click.
+    const button = (icon: GroupIcon, label: string, hotkey: string | undefined, onClick: () => void): HTMLButtonElement => {
+      const b = document.createElement('button');
+      b.className = 'hb-btn';
+      b.title = hotkey ? `${label} (${hotkey})` : label;
+      b.innerHTML = `${ICONS[icon]}<span class="hb-label">${label}</span>${hotkey ? `<span class="hb-key">${hotkey}</span>` : ''}`;
+      b.addEventListener('pointerdown', (e) => {
+        if (e.button === 0) onClick();
       });
-      bar.appendChild(button);
-      return button;
+      bar.appendChild(b);
+      return b;
     };
 
     for (const group of GROUPS) {
-      const button = makeButton(() => {
+      const b = button(group.id, group.label, group.hotkey, () => {
         if (group.tools.length === 1) {
           this.openGroup = null;
           handlers.onSelectTool(group.tools[0]!);
         } else {
           this.openGroup = this.openGroup === group.id ? null : group.id;
         }
-        this.lastFlyoutHtml = '';
+        this.lastPanelHtml = '';
       });
-      this.groupButtons.set(group.id, button);
+      this.groupButtons.set(group.id, b);
     }
 
-    const toggle = (label: string, sub: string, unlockId: string, onClick: () => void, first = false): void => {
-      const button = makeButton(onClick);
-      button.innerHTML = `${label}<small>${sub}</small>`;
-      if (first) button.classList.add('toggle');
-      this.toggles.push({ button, unlockId });
-    };
-    toggle('Heat map (H)', 'overlay', 'heat_map', handlers.onToggleHeat, true);
-    toggle('Contracts (K)', 'customers', 'contract_board', handlers.onToggleContracts);
-    toggle('Style (L)', 'prestige', 'room_styles', handlers.onToggleStyle);
+    const divider = document.createElement('div');
+    divider.className = 'hb-divider';
+    bar.appendChild(divider);
 
-    this.flyout.addEventListener('pointerdown', (e) => {
+    const toggles: Toggle[] = [
+      { id: 'heat', label: 'Heat', hotkey: 'H', unlockId: 'heat_map', onClick: handlers.onToggleHeat },
+      { id: 'contracts', label: 'Contracts', hotkey: 'K', unlockId: 'contract_board', onClick: handlers.onToggleContracts },
+      { id: 'style', label: 'Style', hotkey: 'L', unlockId: 'room_styles', onClick: handlers.onToggleStyle },
+    ];
+    for (const toggle of toggles) {
+      this.toggleButtons.push({ button: button(toggle.id, toggle.label, toggle.hotkey, toggle.onClick), toggle });
+    }
+
+    this.panel.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
-      const button = (e.target as HTMLElement).closest('button');
-      if (!button || button.disabled) return;
-      const tool = button.dataset.tool as Tool;
-      const group = groupOf(tool);
-      if (group) this.picked.set(group.id, tool);
-      handlers.onSelectTool(tool);
-      this.openGroup = null;
-      this.lastFlyoutHtml = '';
+      const target = (e.target as HTMLElement).closest<HTMLElement>('[data-tool],[data-act]');
+      if (!target) return;
+      if (target.dataset.act === 'close') {
+        this.openGroup = null;
+        return;
+      }
+      if (target.classList.contains('locked')) return;
+      handlers.onSelectTool(target.dataset.tool as Tool);
     });
   }
 
-  // Remember a tool picked by hotkey too, so its group shows it.
-  noteTool(tool: Tool): void {
-    const group = groupOf(tool);
-    if (group) this.picked.set(group.id, tool);
+  close(): void {
+    this.openGroup = null;
   }
 
   update(state: GameState, tool: Tool, open: { heat: boolean; contracts: boolean; style: boolean }): void {
-    this.noteTool(tool);
-    const key = [tool, ...GROUPS.map((g) => `${this.picked.get(g.id)}:${lockText(state, this.picked.get(g.id)!)}`)].join('|');
-    if (key !== this.lastButtonsKey) {
-      this.lastButtonsKey = key;
-      for (const group of GROUPS) {
-        const button = this.groupButtons.get(group.id)!;
-        const shown = this.picked.get(group.id)!;
-        const hotkey = TOOL_HOTKEYS[shown];
-        const arrow = group.tools.length > 1 ? ' ▴' : '';
-        const name = group.id === 'sell' ? 'Sell' : toolName(shown);
-        button.innerHTML = `${name}${hotkey ? ` (${hotkey})` : ''}${arrow}<small>${lockText(state, shown) ?? group.label}</small>`;
-        button.classList.toggle('active', group.tools.includes(tool));
-      }
+    for (const group of GROUPS) {
+      const b = this.groupButtons.get(group.id)!;
+      b.classList.toggle('active', group.tools.includes(tool));
+      b.classList.toggle('open', this.openGroup === group.id);
+      // Grey a group out only if nothing in it is unlocked yet.
+      b.classList.toggle('locked', !group.tools.some((t) => t === 'sell' || isUnlocked(state, t)));
     }
-
     const states = [open.heat, open.contracts, open.style];
-    this.toggles.forEach(({ button, unlockId }, i) => {
-      const locked = !isUnlocked(state, unlockId);
+    this.toggleButtons.forEach(({ button, toggle }, i) => {
+      const locked = !isUnlocked(state, toggle.unlockId);
       button.classList.toggle('locked', locked);
       button.classList.toggle('active', states[i]!);
+      button.title = locked
+        ? `${toggle.label}: unlocks at level ${unlockFor(toggle.unlockId)?.level ?? '?'}`
+        : `${toggle.label} (${toggle.hotkey})`;
     });
-
-    this.renderFlyout(state, tool);
+    this.renderPanel(state, tool);
   }
 
-  private renderFlyout(state: GameState, current: Tool): void {
+  private renderPanel(state: GameState, current: Tool): void {
     const group = GROUPS.find((g) => g.id === this.openGroup);
     if (!group) {
-      if (this.flyout.classList.contains('open')) this.flyout.classList.remove('open');
+      this.panel.classList.remove('open');
       return;
     }
-    const html = group.tools
-      .map((tool) => {
-        const lock = lockText(state, tool);
-        const unaffordable = !lock && state.cash < toolCost(tool);
-        return `<button data-tool="${tool}" class="${tool === current ? 'active' : ''} ${lock ? 'locked' : ''}" ${lock ? 'disabled' : ''}>
-          ${toolName(tool)}<small class="${unaffordable ? 'bad' : ''}">${lock ?? summary(tool)}</small></button>`;
-      })
-      .join('');
-    if (html !== this.lastFlyoutHtml) {
-      this.lastFlyoutHtml = html;
-      this.flyout.innerHTML = `<div class="flyout-title">${group.label}</div><div class="flyout-items">${html}</div>`;
+    const cards = group.tools.map((t) => {
+      const locked = t !== 'sell' && !isUnlocked(state, t);
+      const cost = toolCost(t);
+      const short = !locked && state.cash < cost;
+      return `
+        <div class="hb-card ${t === current ? 'active' : ''} ${locked ? 'locked' : ''}" data-tool="${t}">
+          <div class="hb-thumb">${itemIcon(t)}${locked ? `<div class="hb-lock">${ICONS.lock}<span>Lv ${unlockLevel(t)}</span></div>` : ''}</div>
+          <div class="hb-name">${toolName(t)}</div>
+          <div class="hb-cost ${short ? 'bad' : ''}">${cost ? money(cost) : '&nbsp;'}</div>
+          <div class="hb-stat">${stat(t)}</div>
+        </div>`;
+    });
+    const html = `
+      <div class="hb-head">${ICONS[group.id]}<span>${group.label}</span><button data-act="close" aria-label="Close">✕</button></div>
+      <div class="hb-cards">${cards.join('')}</div>`;
+    if (html !== this.lastPanelHtml) {
+      this.lastPanelHtml = html;
+      this.panel.innerHTML = html;
     }
-    this.flyout.classList.add('open');
+    this.panel.classList.add('open');
   }
 }
