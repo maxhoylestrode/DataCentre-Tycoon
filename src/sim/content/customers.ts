@@ -2,7 +2,9 @@ import type { CustomerType } from './types';
 
 // Customer types for the contract board. Each day's offers are rolled from
 // the types the player's level allows. Bigger customers pay more and
-// promise more, and punish failure harder.
+// promise more, and punish failure harder. Higher-level customers have
+// requirements: only racks that meet them can serve the contract, and pay
+// is set to beat what those better racks earn on walk-in.
 export const CUSTOMER_TYPES: CustomerType[] = [
   {
     id: 'local_business',
@@ -16,6 +18,7 @@ export const CUSTOMER_TYPES: CustomerType[] = [
     penaltyFraction: 0.1,
     xp: 80,
     nameSuffixes: ['Bakery', 'Dental', 'Motors', 'Florists', 'Accountants', 'Garage'],
+    color: 0x4cc38a,
   },
   {
     id: 'startup',
@@ -29,6 +32,7 @@ export const CUSTOMER_TYPES: CustomerType[] = [
     penaltyFraction: 0.2,
     xp: 150,
     nameSuffixes: ['Labs', 'AI', 'Cloud', 'HQ', 'ly', 'Hub'],
+    color: 0x4aa8ff,
   },
   {
     id: 'game_studio',
@@ -42,6 +46,23 @@ export const CUSTOMER_TYPES: CustomerType[] = [
     penaltyFraction: 0.3,
     xp: 250,
     nameSuffixes: ['Games', 'Interactive', 'Studios', 'Arcade'],
+    color: 0xff7ab8,
+  },
+  {
+    id: 'saas_platform',
+    name: 'SaaS platform',
+    minLevel: 9,
+    racks: [2, 4],
+    days: [4, 8],
+    // A stock Performance rack earns about 2.5× walk-in.
+    payMultiplier: [3.0, 3.5],
+    sla: [0.97, 0.985],
+    bonusFraction: 0.2,
+    penaltyFraction: 0.3,
+    xp: 350,
+    nameSuffixes: ['Cloud', 'Suite', 'Works', 'Desk', 'ify'],
+    color: 0x8f7cff,
+    requirement: { minRackTier: 2 },
   },
   {
     id: 'online_shop',
@@ -55,6 +76,54 @@ export const CUSTOMER_TYPES: CustomerType[] = [
     penaltyFraction: 0.4,
     xp: 400,
     nameSuffixes: ['Store', 'Market', 'Direct', 'Outlet', 'Supplies'],
+    color: 0xffb347,
+  },
+  {
+    id: 'streaming_service',
+    name: 'Streaming service',
+    minLevel: 12,
+    racks: [3, 6],
+    days: [5, 10],
+    payMultiplier: [3.2, 3.8],
+    sla: [0.98, 0.99],
+    bonusFraction: 0.25,
+    penaltyFraction: 0.4,
+    xp: 500,
+    nameSuffixes: ['Stream', 'TV', 'Play', 'Flix', 'Live'],
+    color: 0xff5a5f,
+    requirement: { minCores: 64 },
+  },
+  {
+    id: 'fintech',
+    name: 'Fintech',
+    minLevel: 16,
+    racks: [2, 5],
+    days: [6, 12],
+    // A stock Enterprise rack earns about 5× walk-in.
+    payMultiplier: [5.8, 6.8],
+    sla: [0.99, 0.995],
+    bonusFraction: 0.3,
+    penaltyFraction: 0.6,
+    xp: 800,
+    nameSuffixes: ['Pay', 'Capital', 'Ledger', 'Trade', 'Bank'],
+    color: 0x2bd4c4,
+    requirement: { minRackTier: 3, minCores: 160 },
+  },
+  {
+    id: 'ai_lab',
+    name: 'AI lab',
+    minLevel: 22,
+    racks: [2, 5],
+    days: [5, 10],
+    // A stock GPU rack earns about 13.5× walk-in.
+    payMultiplier: [15, 18],
+    sla: [0.985, 0.995],
+    bonusFraction: 0.3,
+    penaltyFraction: 0.6,
+    xp: 1_200,
+    nameSuffixes: ['AI', 'Intelligence', 'Neural', 'Labs', 'Mind'],
+    color: 0x76ff3a,
+    requirement: { gpu: true },
   },
 ];
 

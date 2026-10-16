@@ -54,6 +54,7 @@ export function rollOffer(state: GameState, type: CustomerType): ContractTerms {
     bonus: roundTo(totalPay * type.bonusFraction, 50),
     penalty: roundTo(totalPay * type.penaltyFraction, 50),
     xp: type.xp,
+    ...(type.requirement ? { requirement: { ...type.requirement } } : {}),
   };
   state.contracts.nextId += 1;
   return terms;

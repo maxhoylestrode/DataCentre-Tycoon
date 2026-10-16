@@ -9,14 +9,14 @@ import type { Part } from './types';
 // with them (shown in-game too). Names only, never logos.
 export const PARTS: Part[] = [
   // CPU
-  { id: 'cpu_xeon_e5_2620v4', slot: 'cpu', brand: 'Intel', model: 'Xeon E5-2620 v4', specs: '8 cores, 2.1 GHz', level: 1, cost: 0, income: 0, powerDraw: 0, heat: 0 },
-  { id: 'cpu_epyc_7302', slot: 'cpu', brand: 'AMD', model: 'EPYC 7302', specs: '16 cores, 3.0 GHz', level: 2, cost: 600, income: 0.5, powerDraw: 0.2, heat: 0.02 },
-  { id: 'cpu_xeon_gold_6338', slot: 'cpu', brand: 'Intel', model: 'Xeon Gold 6338', specs: '32 cores, 2.0 GHz', level: 5, cost: 1400, income: 1.1, powerDraw: 0.5, heat: 0.05 },
-  { id: 'cpu_epyc_7543', slot: 'cpu', brand: 'AMD', model: 'EPYC 7543', specs: '32 cores, 2.8 GHz', level: 8, cost: 2800, income: 1.8, powerDraw: 0.7, heat: 0.07 },
-  { id: 'cpu_epyc_7763', slot: 'cpu', brand: 'AMD', model: 'EPYC 7763', specs: '64 cores, 2.45 GHz', level: 12, cost: 5500, income: 2.8, powerDraw: 1.0, heat: 0.1 },
-  { id: 'cpu_xeon_platinum_8480', slot: 'cpu', brand: 'Intel', model: 'Xeon Platinum 8480+', specs: '56 cores, 2.0 GHz', level: 16, cost: 9500, income: 3.8, powerDraw: 1.3, heat: 0.13 },
-  { id: 'cpu_epyc_9654', slot: 'cpu', brand: 'AMD', model: 'EPYC 9654', specs: '96 cores, 2.4 GHz', level: 20, cost: 16000, income: 5.2, powerDraw: 1.6, heat: 0.17 },
-  { id: 'cpu_epyc_9754', slot: 'cpu', brand: 'AMD', model: 'EPYC 9754', specs: '128 cores, 2.25 GHz', level: 26, cost: 26000, income: 6.8, powerDraw: 1.9, heat: 0.2 },
+  { id: 'cpu_xeon_e5_2620v4', slot: 'cpu', cores: 8, brand: 'Intel', model: 'Xeon E5-2620 v4', specs: '8 cores, 2.1 GHz', level: 1, cost: 0, income: 0, powerDraw: 0, heat: 0 },
+  { id: 'cpu_epyc_7302', slot: 'cpu', cores: 16, brand: 'AMD', model: 'EPYC 7302', specs: '16 cores, 3.0 GHz', level: 2, cost: 600, income: 0.5, powerDraw: 0.2, heat: 0.02 },
+  { id: 'cpu_xeon_gold_6338', slot: 'cpu', cores: 32, brand: 'Intel', model: 'Xeon Gold 6338', specs: '32 cores, 2.0 GHz', level: 5, cost: 1400, income: 1.1, powerDraw: 0.5, heat: 0.05 },
+  { id: 'cpu_epyc_7543', slot: 'cpu', cores: 32, brand: 'AMD', model: 'EPYC 7543', specs: '32 cores, 2.8 GHz', level: 8, cost: 2800, income: 1.8, powerDraw: 0.7, heat: 0.07 },
+  { id: 'cpu_epyc_7763', slot: 'cpu', cores: 64, brand: 'AMD', model: 'EPYC 7763', specs: '64 cores, 2.45 GHz', level: 12, cost: 5500, income: 2.8, powerDraw: 1.0, heat: 0.1 },
+  { id: 'cpu_xeon_platinum_8480', slot: 'cpu', cores: 56, brand: 'Intel', model: 'Xeon Platinum 8480+', specs: '56 cores, 2.0 GHz', level: 16, cost: 9500, income: 3.8, powerDraw: 1.3, heat: 0.13 },
+  { id: 'cpu_epyc_9654', slot: 'cpu', cores: 96, brand: 'AMD', model: 'EPYC 9654', specs: '96 cores, 2.4 GHz', level: 20, cost: 16000, income: 5.2, powerDraw: 1.6, heat: 0.17 },
+  { id: 'cpu_epyc_9754', slot: 'cpu', cores: 128, brand: 'AMD', model: 'EPYC 9754', specs: '128 cores, 2.25 GHz', level: 26, cost: 26000, income: 6.8, powerDraw: 1.9, heat: 0.2 },
 
   // RAM
   { id: 'ram_32gb_ddr4', slot: 'ram', brand: 'Micron', model: '32 GB DDR4-2400 ECC', specs: '32 GB', level: 1, cost: 0, income: 0, powerDraw: 0, heat: 0 },

@@ -3,12 +3,13 @@
 // contractBoard.ts and commands.ts.
 
 import { CONFIG } from '../config';
-import { buildingStats, rackFill } from './buildings';
+import { buildingStats, meetsRequirement, rackFill } from './buildings';
 import {
   type Building,
   categoryOf,
   type Contract,
   type ContractResult,
+  type ContractTerms,
   type GameState,
   isRunning,
   racksOf,
@@ -21,23 +22,53 @@ export interface RackAllocation {
   assigned: Map<number, number>;
 }
 
-// Contracts are served oldest first. They take the racks that would earn
-// least on walk-in (newest, least upgraded), leaving the best racks earning
-// walk-in income, since a contract pays the same whichever racks serve it.
-export function allocateRacks(state: GameState): RackAllocation {
+// Shares racks out between contracts. Contracts with requirements pick
+// first (only some racks can serve them), then the rest, oldest first.
+// Each takes the qualifying racks that would earn least on walk-in (newest,
+// least upgraded), since a contract pays the same whichever racks serve it.
+function assign(
+  state: GameState,
+  racks: Building[],
+  contracts: ContractTerms[],
+): { assigned: Map<number, number>; used: Set<Building> } {
   const walkInValue = (b: Building): number => buildingStats(b).income * rackFill(state, b);
-  const working = state.buildings
-    .filter((b) => categoryOf(b) === 'rack' && isRunning(b))
-    .sort((a, b) => walkInValue(a) - walkInValue(b) || b.builtAtTick - a.builtAtTick || b.id - a.id);
+  const pool = [...racks].sort(
+    (a, b) => walkInValue(a) - walkInValue(b) || b.builtAtTick - a.builtAtTick || b.id - a.id,
+  );
+  const order = [...contracts].sort((a, b) => Number(!a.requirement) - Number(!b.requirement) || a.id - b.id);
 
   const assigned = new Map<number, number>();
-  let used = 0;
-  for (const contract of state.contracts.active) {
-    const n = Math.min(contract.racks, working.length - used);
+  const used = new Set<Building>();
+  for (const contract of order) {
+    let n = 0;
+    for (const rack of pool) {
+      if (n >= contract.racks) break;
+      if (used.has(rack) || !meetsRequirement(rack, contract.requirement)) continue;
+      used.add(rack);
+      n++;
+    }
     assigned.set(contract.id, n);
-    used += n;
   }
-  return { walkIn: working.slice(used), assigned };
+  return { assigned, used };
+}
+
+export function allocateRacks(state: GameState): RackAllocation {
+  const working = state.buildings.filter((b) => categoryOf(b) === 'rack' && isRunning(b));
+  const { assigned, used } = assign(state, working, state.contracts.active);
+  return { walkIn: working.filter((b) => !used.has(b)), assigned };
+}
+
+// Whether you own enough suitable racks (working or not) to take this offer
+// on top of your current contracts.
+export function canTakeOffer(state: GameState, offer: ContractTerms): boolean {
+  const owned = racksOf(state);
+  const { assigned } = assign(state, owned, [...state.contracts.active, offer]);
+  return state.contracts.active.every((c) => (assigned.get(c.id) ?? 0) >= c.racks) && assigned.get(offer.id) === offer.racks;
+}
+
+// Racks you own that meet a requirement.
+export function qualifyingRacks(state: GameState, req: ContractTerms['requirement']): number {
+  return racksOf(state).filter((b) => meetsRequirement(b, req)).length;
 }
 
 export function contractIncomePerTick(state: GameState, allocation: RackAllocation, efficiency: number): number {

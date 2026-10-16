@@ -18,7 +18,7 @@ import { isInteriorEdge, isRoomBoundaryEdge, wallAt } from './walls';
 import { isOwnedTile, nextLotPrice, purchasableLots } from './lots';
 import { ROOM_STYLES } from './content/styles';
 import { contractBoardOpen, refreshOffers } from './contractBoard';
-import { cancelActiveContract, freeRacks } from './contracts';
+import { cancelActiveContract, canTakeOffer } from './contracts';
 import { canAfford, repairCost } from './economy';
 import { investedValue, nextPart, partCost, slotsOf, upgradeCost } from './buildings';
 import { awardBuildXp, checkProgress, isUnlocked, levelOf, upgradeCap } from './progression';
@@ -224,7 +224,7 @@ export function signContract(state: GameState, offerId: number): CommandResult {
   if (!contractBoardOpen(state)) return { ok: false, reason: 'locked' };
   const offer = state.contracts.offers.find((o) => o.id === offerId);
   if (!offer) return { ok: false, reason: 'no_offer' };
-  if (freeRacks(state) < offer.racks) return { ok: false, reason: 'not_enough_racks' };
+  if (!canTakeOffer(state, offer)) return { ok: false, reason: 'not_enough_racks' };
 
   state.contracts.offers = state.contracts.offers.filter((o) => o.id !== offerId);
   state.contracts.active.push({

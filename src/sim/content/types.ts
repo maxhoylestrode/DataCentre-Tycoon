@@ -24,6 +24,18 @@ export interface Part {
   heat: number;
   // Cooling slot only: fraction of the rack's heat removed, 0..1.
   heatReduction?: number;
+  // CPU slot only: cores per server.
+  cores?: number;
+}
+
+// What a rack must have to serve a contract. All given fields must be met.
+export interface ContractRequirement {
+  // Minimum rack model tier (1 = Entry, 2 = Performance, 3 = Enterprise...).
+  minRackTier?: number;
+  // Minimum CPU cores in the whole rack (cores per server × servers).
+  minCores?: number;
+  // Rack must have a GPU slot.
+  gpu?: boolean;
 }
 
 // A room-sized plot on the map grid.
@@ -109,6 +121,10 @@ export interface CustomerType {
   xp: number;
   // Company names are a prefix from CUSTOMER_NAME_PREFIXES plus one of these.
   nameSuffixes: string[];
+  // Accent colour for this customer type in the contracts panel.
+  color: number;
+  // Only racks meeting this can serve the contract (and it can't be signed without them).
+  requirement?: ContractRequirement;
 }
 
 export interface Achievement {

@@ -83,7 +83,9 @@ describe('floor vents', () => {
     const state = floorState();
     const costs = costsPerTick(state);
     placeFloor(state, 'floor_vent', 3, 3);
-    expect(costsPerTick(state)).toBeCloseTo(costs + CONFIG.floors.floor_vent.upkeepPerTick);
+    expect(costsPerTick(state)).toBeCloseTo(
+      costs + CONFIG.floors.floor_vent.upkeepPerTick * CONFIG.economy.runningCostMultiplier,
+    );
     const cash = state.cash;
     expect(removeFloor(state, 3, 3)).toEqual({ ok: true });
     expect(state.cash).toBe(cash + CONFIG.floors.floor_vent.cost * CONFIG.economy.sellRefund);

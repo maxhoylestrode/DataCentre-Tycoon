@@ -250,6 +250,28 @@ describe('content', () => {
       }
     });
 
+    it('requirements can actually be met by some rack, and every type has a colour', () => {
+      const rackDefs = BUILDING_KINDS.map(buildingDef).filter((d) => d.category === 'rack');
+      const maxTier = Math.max(...rackDefs.map((d) => d.tier ?? 0));
+      const maxCores = Math.max(...PARTS.map((p) => p.cores ?? 0)) * Math.max(...rackDefs.map((d) => d.partMultiplier ?? 1));
+      for (const t of CUSTOMER_TYPES) {
+        expect(Number.isInteger(t.color) && t.color >= 0, t.id).toBe(true);
+        const req = t.requirement;
+        if (!req) continue;
+        if (req.minRackTier !== undefined) expect(req.minRackTier >= 1 && req.minRackTier <= maxTier, t.id).toBe(true);
+        if (req.minCores !== undefined) expect(req.minCores > 0 && req.minCores <= maxCores, t.id).toBe(true);
+        if (req.gpu) expect(rackDefs.some((d) => d.slots?.includes('gpu')), t.id).toBe(true);
+      }
+    });
+
+    it('every rack model has a tier, and CPUs list their cores', () => {
+      for (const kind of BUILDING_KINDS) {
+        const def = buildingDef(kind);
+        if (def.category === 'rack') expect(Number.isInteger(def.tier) && def.tier! >= 1, kind).toBe(true);
+      }
+      for (const p of PARTS.filter((p) => p.slot === 'cpu')) expect((p.cores ?? 0) > 0, p.id).toBe(true);
+    });
+
     it('at least one is available as soon as the contract board unlocks', () => {
       const boardLevel = UNLOCKS.find((u) => u.id === 'contract_board')!.level;
       expect(CUSTOMER_TYPES.some((t) => t.minLevel <= boardLevel)).toBe(true);

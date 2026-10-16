@@ -9,6 +9,7 @@ import {
   type WallKind,
 } from '../config';
 import { STARTING_LOT } from './content/lots';
+import type { ContractRequirement } from './content/types';
 import { MAP_HEIGHT, MAP_WIDTH } from './lots';
 
 // Only racks use 'failed' and 'repairing'; other buildings stay 'ok'.
@@ -101,6 +102,8 @@ export interface ContractTerms {
   bonus: number;
   penalty: number;
   xp: number;
+  // Copied from the customer type when offered. Missing means any rack will do.
+  requirement?: ContractRequirement;
 }
 
 export interface Contract extends ContractTerms {

@@ -30,8 +30,8 @@ export const CONFIG = {
     // one full rack's profit, or a single rack can never pay its way.
     rentPerTick: 0.25,
     // Multiplies rent and every building's and floor tile's upkeep. Raised
-    // from 1 to 1.1 when money was piling up too fast.
-    runningCostMultiplier: 1.1,
+    // from 1 to 1.1, then by another 30% to 1.43, when money piled up too fast.
+    runningCostMultiplier: 1.43,
     // Cash may go this far below zero before bankruptcy. Purchases still need
     // enough positive cash.
     overdraftLimit: 500,
@@ -65,36 +65,36 @@ export const CONFIG = {
       name: 'Entry rack', category: 'rack', cost: 1000, upkeepPerTick: 0.8, incomePerTick: 2.4,
       powerDraw: 4, powerSupply: 0, heatPerTick: 0.65, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 },
-      partMultiplier: 1, powerFactor: 1, heatFactor: 1,
+      partMultiplier: 1, powerFactor: 1, heatFactor: 1, tier: 1,
       slots: ['cpu', 'ram', 'storage', 'network', 'cooling'],
     },
     rack_performance: {
-      name: 'Performance rack', category: 'rack', cost: 5000, upkeepPerTick: 1.8, incomePerTick: 2.4,
+      name: 'Performance rack', category: 'rack', cost: 7000, upkeepPerTick: 1.8, incomePerTick: 2.4,
       powerDraw: 4, powerSupply: 0, heatPerTick: 0.65, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 },
-      partMultiplier: 2.5, powerFactor: 2.2, heatFactor: 1.8,
+      partMultiplier: 2.5, powerFactor: 2.2, heatFactor: 1.8, tier: 2,
       slots: ['cpu', 'ram', 'storage', 'network', 'cooling'],
     },
     rack_enterprise: {
-      name: 'Enterprise rack', category: 'rack', cost: 15000, upkeepPerTick: 4, incomePerTick: 2.4,
+      name: 'Enterprise rack', category: 'rack', cost: 21000, upkeepPerTick: 4, incomePerTick: 2.4,
       powerDraw: 4, powerSupply: 0, heatPerTick: 0.65, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 },
-      partMultiplier: 5, powerFactor: 4, heatFactor: 3.2,
+      partMultiplier: 5, powerFactor: 4, heatFactor: 3.2, tier: 3,
       slots: ['cpu', 'ram', 'storage', 'network', 'cooling'],
     },
     rack_gpu: {
       // Base includes the stock GPU (NVIDIA T4).
-      name: 'GPU compute rack', category: 'rack', cost: 40000, upkeepPerTick: 8, incomePerTick: 5.4,
+      name: 'GPU compute rack', category: 'rack', cost: 56000, upkeepPerTick: 8, incomePerTick: 5.4,
       powerDraw: 5.5, powerSupply: 0, heatPerTick: 0.95, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 },
-      partMultiplier: 6, powerFactor: 5, heatFactor: 4,
+      partMultiplier: 6, powerFactor: 5, heatFactor: 4, tier: 4,
       slots: ['cpu', 'ram', 'storage', 'network', 'gpu', 'cooling'],
     },
     rack_hyperscale: {
-      name: 'Hyperscale pod', category: 'rack', cost: 120000, upkeepPerTick: 15, incomePerTick: 2.4,
+      name: 'Hyperscale pod', category: 'rack', cost: 168000, upkeepPerTick: 15, incomePerTick: 2.4,
       powerDraw: 4, powerSupply: 0, heatPerTick: 0.65, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 },
-      partMultiplier: 12, powerFactor: 9, heatFactor: 6.5,
+      partMultiplier: 12, powerFactor: 9, heatFactor: 6.5, tier: 5,
       slots: ['cpu', 'ram', 'storage', 'network', 'cooling'],
     },
     power_basic: {
@@ -111,44 +111,44 @@ export const CONFIG = {
     },
     cooling_inrow: {
       // Strong but short range: sits in a row of racks.
-      name: 'In-row cooler', category: 'cooling', cost: 3500, upkeepPerTick: 0.8, incomePerTick: 0,
+      name: 'In-row cooler', category: 'cooling', cost: 4900, upkeepPerTick: 0.8, incomePerTick: 0,
       powerDraw: 5, powerSupply: 0, heatPerTick: 0, coolingStrength: 0.08, coolingRadius: 1,
       upgrade: { output: 0.15, powerDraw: 0, heat: 0 },
     },
     chiller: {
       // Feeds floor vents within range. Does no cooling on its own.
-      name: 'Chiller', category: 'chiller', cost: 6000, upkeepPerTick: 1, incomePerTick: 0,
+      name: 'Chiller', category: 'chiller', cost: 8400, upkeepPerTick: 1, incomePerTick: 0,
       powerDraw: 6, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 },
       chillerRange: 4, chillerCapacity: 12,
     },
     plant_small: {
-      name: 'Potted plant', category: 'decor', cost: 300, upkeepPerTick: 0, incomePerTick: 0,
+      name: 'Potted plant', category: 'decor', cost: 420, upkeepPerTick: 0, incomePerTick: 0,
       powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 1,
     },
     light_pillar: {
-      name: 'LED light pillar', category: 'decor', cost: 1200, upkeepPerTick: 0.02, incomePerTick: 0,
+      name: 'LED light pillar', category: 'decor', cost: 1680, upkeepPerTick: 0.02, incomePerTick: 0,
       powerDraw: 0.5, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 3,
     },
     plant_tree: {
-      name: 'Office tree', category: 'decor', cost: 800, upkeepPerTick: 0, incomePerTick: 0,
+      name: 'Office tree', category: 'decor', cost: 1120, upkeepPerTick: 0, incomePerTick: 0,
       powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 2,
     },
     desk_reception: {
-      name: 'Reception desk', category: 'decor', cost: 3000, upkeepPerTick: 0, incomePerTick: 0,
+      name: 'Reception desk', category: 'decor', cost: 4200, upkeepPerTick: 0, incomePerTick: 0,
       powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 5,
     },
     sign_company: {
-      name: 'Company sign', category: 'decor', cost: 5000, upkeepPerTick: 0.02, incomePerTick: 0,
+      name: 'Company sign', category: 'decor', cost: 7000, upkeepPerTick: 0.02, incomePerTick: 0,
       powerDraw: 0.3, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 8,
     },
     server_showcase: {
-      name: 'Retro server showcase', category: 'decor', cost: 15000, upkeepPerTick: 0, incomePerTick: 0,
+      name: 'Retro server showcase', category: 'decor', cost: 21000, upkeepPerTick: 0, incomePerTick: 0,
       powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 15,
     },
@@ -157,7 +157,7 @@ export const CONFIG = {
   floors: {
     floor_vent: {
       // Cools only its own tile, and only while a chiller in range feeds it.
-      name: 'Floor vent', cost: 300, upkeepPerTick: 0.05, coolingStrength: 0.04,
+      name: 'Floor vent', cost: 420, upkeepPerTick: 0.05, coolingStrength: 0.04,
     },
   },
   // Interior walls, drawn along the lines between tiles. Heat can't spread
@@ -289,7 +289,8 @@ export interface BuildingDef {
   readonly coolingStrength: number;
   readonly coolingRadius: number;
   readonly upgrade: { readonly output: number; readonly powerDraw: number; readonly heat: number };
-  // Racks only.
+  // Racks only. tier ranks rack models (1 = entry) for contract requirements.
+  readonly tier?: number;
   readonly partMultiplier?: number;
   readonly powerFactor?: number;
   readonly heatFactor?: number;

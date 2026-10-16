@@ -308,6 +308,11 @@ Done when: I can create an account, play on one device, log in on another and co
   - **Save v3** adds contracts and the RNG seed. A v2 save migrates with no contracts and a seed taken from its tick count.
   - **Dev helper**: `dct.level(n)` and `dct.cash(n)` in the browser console, only on the local dev server.
 - 2026-10-16: Building upgrades added (user request). User chose a trade-off for racks (more power and heat), a cap that rises with player level, and **real brand names** for the planned rack components. Hardware, cooling types and looks became Milestone 7; staff and incidents moved to Milestone 8. Panel buttons use `pointerdown`, because live re-renders would swallow `click` events.
+- 2026-10-17: Second balance pass, contract requirements, contracts page redesign (user request).
+  - **Balance:** running costs multiplier 1.1 → 1.43 (+30%). Everything except the starter kit (Entry rack, Power unit, Cooling unit) and walls costs 40% more.
+  - **Contract requirements:** customer types can require a minimum rack tier, minimum CPU cores per rack (cores per server × servers), or a GPU rack. Racks have a `tier`; CPU parts have `cores`. Contracts with requirements get first pick of qualifying racks. Signing checks a full allocation over owned racks (`canTakeOffer`).
+  - **New customer types:** SaaS platform (L9, Performance+), Streaming service (L12, 64+ cores), Fintech (L16, Enterprise+ and 160+ cores), AI lab (L22, GPU racks). Pay is set to beat those racks' walk-in income. Every customer type has a colour.
+  - **Contracts page:** summary tiles, colour-coded customer cards with avatar, type chip, stat tiles, bonus/penalty pills, requirement badges (✓/✕ with how many suitable racks you have), uptime bar with a promise marker, time bar, and recent results.
 - 2026-10-17: Balance pass and rooms (user request).
   - **Balance:**
     - Every upgrade costs 15% more (`CONFIG.upgrades.costMultiplier`, applied to levels and parts).

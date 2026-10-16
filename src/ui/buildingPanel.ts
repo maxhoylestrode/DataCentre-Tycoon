@@ -7,6 +7,8 @@ import {
   nextPart,
   partContribution,
   partCost,
+  rackCores,
+  rackTier,
   slotsOf,
   upgradeCost,
 } from '../sim/buildings';
@@ -144,7 +146,10 @@ export class BuildingPanel {
          <div class="pips">${Array.from({ length: max }, (_, i) => `<span class="${i < b.upgrade ? 'on' : ''}"></span>`).join('')}</div>`
       : '';
 
-    const extra = category === 'chiller' ? this.chillerInfo(state, b) : '';
+    const extra =
+      category === 'chiller' ? this.chillerInfo(state, b)
+      : isRack ? `<div class="muted">${rackCores(b)} CPU cores &middot; ${def.name} (tier ${rackTier(b)}): what contract requirements check</div>`
+      : '';
 
     return `
       <h2>${def.name}${levelLine}</h2>

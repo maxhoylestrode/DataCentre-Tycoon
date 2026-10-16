@@ -3,7 +3,7 @@
 
 import { buildingDef, CONFIG, type PartSlot } from '../config';
 import { PARTS } from './content/parts';
-import type { Part } from './content/types';
+import type { ContractRequirement, Part } from './content/types';
 import type { Building, GameState } from './state';
 
 export interface BuildingStats {
@@ -118,6 +118,27 @@ export function investedValue(building: Building): number {
     for (let i = 1; i <= upTo; i++) total += partCost(building, path[i]!);
   }
   return total;
+}
+
+// CPU cores across the whole rack: cores per server × servers.
+export function rackCores(building: Building): number {
+  if (!slotsOf(building).includes('cpu')) return 0;
+  const cpu = installedPart(building, 'cpu');
+  return Math.round((cpu?.cores ?? 0) * (buildingDef(building.kind).partMultiplier ?? 1));
+}
+
+export function rackTier(building: Building): number {
+  return buildingDef(building.kind).tier ?? 0;
+}
+
+// Whether a rack can serve a contract with this requirement.
+export function meetsRequirement(building: Building, req: ContractRequirement | undefined): boolean {
+  if (!slotsOf(building).length) return false;
+  if (!req) return true;
+  if (req.minRackTier !== undefined && rackTier(building) < req.minRackTier) return false;
+  if (req.minCores !== undefined && rackCores(building) < req.minCores) return false;
+  if (req.gpu && !slotsOf(building).includes('gpu')) return false;
+  return true;
 }
 
 // How many part upgrades a rack has had, used for its trim colour and pips.

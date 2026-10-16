@@ -12,6 +12,7 @@ import { MAP_HEIGHT, MAP_WIDTH } from './lots';
 import { ACHIEVEMENTS } from './content/achievements';
 import { GOALS } from './content/goals';
 import { PARTS } from './content/parts';
+import type { ContractRequirement } from './content/types';
 import { ROOM_STYLES } from './content/styles';
 import {
   type Building,
@@ -307,7 +308,20 @@ function readTerms(raw: unknown): ContractTerms | null {
     bonus: Math.max(0, finite(raw.bonus) ?? 0),
     penalty: Math.max(0, finite(raw.penalty) ?? 0),
     xp: Math.max(0, finite(raw.xp) ?? 0),
+    ...readRequirement(raw.requirement),
   };
+}
+
+// Only known, valid requirement fields are kept.
+function readRequirement(raw: unknown): { requirement?: ContractRequirement } {
+  if (!isObject(raw)) return {};
+  const req: ContractRequirement = {};
+  const tier = intIn(raw.minRackTier, 1, 100);
+  const cores = finite(raw.minCores);
+  if (tier !== null) req.minRackTier = tier;
+  if (cores !== null && cores > 0) req.minCores = cores;
+  if (raw.gpu === true) req.gpu = true;
+  return Object.keys(req).length ? { requirement: req } : {};
 }
 
 // Unknown floor kinds, off-grid tiles and duplicates are dropped.
