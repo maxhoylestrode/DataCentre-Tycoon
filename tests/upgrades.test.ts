@@ -49,7 +49,7 @@ describe('upgrade levels', () => {
     const state = stateAtLevel(10);
     placeBuilding(state, 'power_basic', 0, 0);
     const unit = getBuildingAt(state, 0, 0)!;
-    expect(upgradeCost(unit, 0)).toBe(B.power_basic.cost * U.firstCostFraction);
+    expect(upgradeCost(unit, 0)).toBe(Math.round((B.power_basic.cost * U.firstCostFraction * U.costMultiplier) / 10) * 10);
     for (let l = 1; l < U.maxLevel; l++) expect(upgradeCost(unit, l)).toBeGreaterThan(upgradeCost(unit, l - 1));
   });
 

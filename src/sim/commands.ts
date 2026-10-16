@@ -14,7 +14,8 @@ import {
   type Speed,
   type WallKind,
 } from '../config';
-import { isInteriorEdge, wallAt } from './walls';
+import { isInteriorEdge, isRoomBoundaryEdge, wallAt } from './walls';
+import { isOwnedTile, nextLotPrice, purchasableLots } from './lots';
 import { ROOM_STYLES } from './content/styles';
 import { contractBoardOpen, refreshOffers } from './contractBoard';
 import { cancelActiveContract, freeRacks } from './contracts';
@@ -30,6 +31,7 @@ export function placeBuilding(state: GameState, kind: BuildingKind, x: number, y
   if (!isBuildingKind(kind)) return { ok: false, reason: 'unknown_kind' };
   if (!isUnlocked(state, kind)) return { ok: false, reason: 'locked' };
   if (!isInBounds(state, x, y)) return { ok: false, reason: 'out_of_bounds' };
+  if (!isOwnedTile(state, x, y)) return { ok: false, reason: 'not_owned' };
   if (getBuildingAt(state, x, y)) return { ok: false, reason: 'occupied' };
   if (!canAfford(state, kind)) return { ok: false, reason: 'insufficient_funds' };
 
@@ -131,6 +133,7 @@ export function placeFloor(state: GameState, kind: FloorKind, x: number, y: numb
   if (!isFloorKind(kind)) return { ok: false, reason: 'unknown_kind' };
   if (!isUnlocked(state, kind)) return { ok: false, reason: 'locked' };
   if (!isInBounds(state, x, y)) return { ok: false, reason: 'out_of_bounds' };
+  if (!isOwnedTile(state, x, y)) return { ok: false, reason: 'not_owned' };
   if (floorAt(state, x, y)) return { ok: false, reason: 'occupied' };
   const cost = floorDef(kind).cost;
   if (state.cash < cost) return { ok: false, reason: 'insufficient_funds' };
@@ -157,6 +160,8 @@ export function placeWall(state: GameState, kind: WallKind, x: number, y: number
   if (!isUnlocked(state, kind)) return { ok: false, reason: 'locked' };
   if (!isInteriorEdge(state, x, y, dir)) return { ok: false, reason: 'out_of_bounds' };
   if (wallAt(state, x, y, dir)) return { ok: false, reason: 'occupied' };
+  // There's already a wall between rooms; only a doorway or glass can replace it.
+  if (kind === 'wall_basic' && isRoomBoundaryEdge(state, x, y, dir)) return { ok: false, reason: 'occupied' };
   const cost = CONFIG.walls[kind].cost;
   if (state.cash < cost) return { ok: false, reason: 'insufficient_funds' };
 
@@ -171,6 +176,20 @@ export function removeWall(state: GameState, x: number, y: number, dir: 'h' | 'v
   if (!wall) return { ok: false, reason: 'empty' };
   state.walls = state.walls.filter((w) => w !== wall);
   state.cash += CONFIG.walls[wall.kind].cost * CONFIG.economy.sellRefund;
+  return { ok: true };
+}
+
+// Buys the room (lot) next to one you already own.
+export function buyLot(state: GameState, lotId: string): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  if (state.ownedLots.includes(lotId)) return { ok: false, reason: 'owned' };
+  if (!purchasableLots(state).some((l) => l.id === lotId)) return { ok: false, reason: 'not_adjacent' };
+  const price = nextLotPrice(state);
+  if (state.cash < price) return { ok: false, reason: 'insufficient_funds' };
+
+  state.cash -= price;
+  state.ownedLots.push(lotId);
+  afterProgress(state);
   return { ok: true };
 }
 

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { ToolAction } from '../input/tools';
+import { lotSize, lotsOnMap, purchasableLots } from '../sim/lots';
+import type { GameState } from '../sim/state';
 
 export interface Tile {
   x: number;
@@ -18,21 +20,80 @@ export function worldToTile(gridWidth: number, gridHeight: number, point: THREE.
   return { x, y };
 }
 
-export function createGridLines(gridWidth: number, gridHeight: number): THREE.LineSegments {
-  const points: number[] = [];
-  const hw = gridWidth / 2;
-  const hh = gridHeight / 2;
-  for (let i = 0; i <= gridWidth; i++) points.push(i - hw, 0, -hh, i - hw, 0, hh);
-  for (let j = 0; j <= gridHeight; j++) points.push(-hw, 0, j - hh, hw, 0, j - hh);
+const gridMat = new THREE.LineBasicMaterial({ color: 0x8a919b, transparent: true, opacity: 0.6 });
+const lockedMat = new THREE.MeshStandardMaterial({ color: 0x1e2229, roughness: 1 });
+const forSaleMat = new THREE.MeshStandardMaterial({ color: 0x2a313b, roughness: 1 });
+const forSaleEdgeMat = new THREE.LineDashedMaterial({ color: 0x4aa8ff, dashSize: 0.6, gapSize: 0.4 });
+const padlockMat = new THREE.MeshStandardMaterial({ color: 0xffd23a, metalness: 0.5, roughness: 0.35 });
 
+// Grid lines over the rooms you own, and plates over locked rooms: lots
+// for sale (next to an owned room) get a dashed outline and a padlock.
+// Rebuilt whenever a room is bought.
+export class LotsLayer {
+  readonly group = new THREE.Group();
+  private key = '';
+
+  update(state: GameState): void {
+    const key = state.ownedLots.join(',');
+    if (key === this.key) return;
+    this.key = key;
+    this.group.clear();
+
+    const { w: lw, h: lh } = lotSize(state);
+    const forSale = new Set(purchasableLots(state).map((l) => l.id));
+    for (const lot of lotsOnMap(state)) {
+      const x0 = lot.col * lw - state.width / 2;
+      const z0 = lot.row * lh - state.height / 2;
+      if (state.ownedLots.includes(lot.id)) {
+        this.group.add(gridLines(x0, z0, lw, lh));
+        continue;
+      }
+      const sale = forSale.has(lot.id);
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(lw - 0.3, 0.1, lh - 0.3), sale ? forSaleMat : lockedMat);
+      plate.position.set(x0 + lw / 2, -0.25, z0 + lh / 2);
+      plate.receiveShadow = true;
+      this.group.add(plate);
+      if (!sale) continue;
+
+      const outline = new THREE.LineLoop(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(x0 + 0.4, -0.19, z0 + 0.4),
+          new THREE.Vector3(x0 + lw - 0.4, -0.19, z0 + 0.4),
+          new THREE.Vector3(x0 + lw - 0.4, -0.19, z0 + lh - 0.4),
+          new THREE.Vector3(x0 + 0.4, -0.19, z0 + lh - 0.4),
+        ]),
+        forSaleEdgeMat,
+      );
+      outline.computeLineDistances();
+      this.group.add(outline);
+      this.group.add(padlock(x0 + lw / 2, z0 + lh / 2));
+    }
+  }
+}
+
+function gridLines(x0: number, z0: number, w: number, h: number): THREE.LineSegments {
+  const points: number[] = [];
+  for (let i = 0; i <= w; i++) points.push(x0 + i, 0, z0, x0 + i, 0, z0 + h);
+  for (let j = 0; j <= h; j++) points.push(x0, 0, z0 + j, x0 + w, 0, z0 + j);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
-  const lines = new THREE.LineSegments(
-    geometry,
-    new THREE.LineBasicMaterial({ color: 0x8a919b, transparent: true, opacity: 0.6 }),
-  );
+  const lines = new THREE.LineSegments(geometry, gridMat);
   lines.position.y = 0.002;
   return lines;
+}
+
+// A chunky gold padlock standing in the middle of a room for sale.
+function padlock(x: number, z: number): THREE.Group {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1, 0.5), padlockMat);
+  body.position.y = 0.3;
+  body.castShadow = true;
+  const shackle = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.1, 8, 20, Math.PI), padlockMat);
+  shackle.position.y = 0.8;
+  shackle.castShadow = true;
+  group.add(body, shackle);
+  group.position.set(x, 0, z);
+  return group;
 }
 
 const HOVER_COLOURS: Record<ToolAction, number> = {

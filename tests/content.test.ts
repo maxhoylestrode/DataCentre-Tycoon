@@ -12,6 +12,7 @@ import {
   type PartSlot,
   WALL_KINDS,
 } from '../src/config';
+import { LOTS, STARTING_LOT } from '../src/sim/content/lots';
 import { PARTS } from '../src/sim/content/parts';
 import { ROOM_STYLES } from '../src/sim/content/styles';
 import { validateCondition } from '../src/sim/conditions';
@@ -195,6 +196,31 @@ describe('content', () => {
         expect(s.id, s.id).toMatch(ID_PATTERN);
         expect(s.cost >= 0 && s.prestige >= 0 && s.level >= 1, s.id).toBe(true);
       }
+    });
+  });
+
+  describe('lots', () => {
+    it('have unique ids and positions, include the starting room, and connect to it', () => {
+      expect(duplicates(LOTS.map((l) => l.id))).toEqual([]);
+      expect(duplicates(LOTS.map((l) => `${l.col},${l.row}`))).toEqual([]);
+      const start = LOTS.find((l) => l.id === STARTING_LOT);
+      expect(start).toBeDefined();
+      // Every lot is reachable by buying neighbours, starting from the first room.
+      const reached = new Set([STARTING_LOT]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const l of LOTS) {
+          if (reached.has(l.id)) continue;
+          const touches = LOTS.some((o) => reached.has(o.id) && Math.abs(o.col - l.col) + Math.abs(o.row - l.row) === 1);
+          if (touches) {
+            reached.add(l.id);
+            grew = true;
+          }
+        }
+      }
+      expect(LOTS.filter((l) => !reached.has(l.id)).map((l) => l.id)).toEqual([]);
+      for (const l of LOTS) expect(l.col >= 0 && l.row >= 0, l.id).toBe(true);
     });
   });
 

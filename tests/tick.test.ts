@@ -7,6 +7,8 @@ import { tick } from '../src/sim/tick';
 const B = CONFIG.buildings;
 const E = CONFIG.economy;
 const DAY = CONFIG.time.ticksPerDay;
+// Rent for the one room a new game owns, after the running-cost multiplier.
+const RENT = E.rentPerTick * E.runningCostMultiplier;
 
 function runTicks(state: GameState, n: number): void {
   for (let i = 0; i < n; i++) tick(state);
@@ -32,12 +34,12 @@ describe('tick', () => {
   it('charges rent with no buildings', () => {
     const state = createInitialState(5, 5);
     runTicks(state, 10);
-    expect(state.cash).toBeCloseTo(E.startingCash - 10 * E.rentPerTick);
+    expect(state.cash).toBeCloseTo(E.startingCash - 10 * RENT);
   });
 
   it('allows an overdraft down to the limit', () => {
     const state = createInitialState(5, 5);
-    state.cash = -E.overdraftLimit + E.rentPerTick;
+    state.cash = -E.overdraftLimit + RENT;
     tick(state);
     expect(state.cash).toBeCloseTo(-E.overdraftLimit);
     expect(state.bankrupt).toBe(false);

@@ -151,6 +151,16 @@ Add it to `CONFIG.buildings` with `category: 'decor'` and a `prestige` value, an
 
 Add it to `CONFIG.walls` (`name`, `cost`) and an unlock entry with `type: 'wall'`. It appears in the Walls menu automatically. For a new look, add a branch in `buildSegment` in `src/render/walls.ts` and an icon in `src/ui/icons.ts`. Every wall type blocks heat.
 
+## Add a room (lot)
+
+`src/sim/content/lots.ts`. Each lot is a `CONFIG.lots.width × height` room at a column and row on the map grid. Lots must touch an existing one (the content test checks every lot can be reached from the starting room) and should only extend right (+col) or towards the camera (+row), so existing coordinates never move. The map grows automatically, and old saves load onto the bigger map.
+
+```ts
+{ id: 'lot_3_0', col: 3, row: 0 },
+```
+
+Prices go by how many rooms have been bought (`CONFIG.lots.prices`, doubling past the end), not by which lot.
+
 ## Add a customer type
 
 `src/sim/content/customers.ts`. Each morning the contract board rolls `CONFIG.contracts.offersPerDay` offers from the types whose `minLevel` you have reached. Ranges are `[min, max]`, both inclusive.

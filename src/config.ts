@@ -2,16 +2,21 @@
 // because the sim reads this file too.
 
 export const CONFIG = {
-  grid: {
+  // The map is a grid of lots (rooms) this size; layout in content/lots.ts.
+  // You start owning one and buy more next to it.
+  lots: {
     width: 20,
     height: 14,
+    // Price of the 1st, 2nd, 3rd... room bought. Past the end, each doubles.
+    prices: [200_000, 500_000, 1_000_000, 2_000_000, 4_000_000, 8_000_000],
   },
   time: {
     // 1 tick = 1 game minute.
     ticksPerDay: 1440,
     // Sim ticks per real second at 1x speed. A game day lasts 144s at 1x.
     ticksPerSecondAt1x: 10,
-    speeds: [1, 2, 4],
+    // Fastest is 3x: 4x made days fly by too quickly to manage.
+    speeds: [1, 2, 3],
     // Safety cap so a long frame (e.g. a background tab) can't freeze the page.
     maxTicksPerFrame: 100,
   },
@@ -21,9 +26,12 @@ export const CONFIG = {
     sellRefund: 0.5,
     // A new rack fills with customers linearly over this many ticks.
     rackRampTicks: 1440,
-    // Fixed room cost per tick. Must stay well below one full rack's profit,
-    // or a single rack can never pay its way.
+    // Room cost per tick, charged for every room owned. Must stay well below
+    // one full rack's profit, or a single rack can never pay its way.
     rentPerTick: 0.25,
+    // Multiplies rent and every building's and floor tile's upkeep. Raised
+    // from 1 to 1.1 when money was piling up too fast.
+    runningCostMultiplier: 1.1,
     // Cash may go this far below zero before bankruptcy. Purchases still need
     // enough positive cash.
     overdraftLimit: 500,
@@ -177,9 +185,15 @@ export const CONFIG = {
   upgrades: {
     // Hard cap. The usable cap is also limited to the player's level.
     maxLevel: 10,
-    // Upgrading from level L costs cost * firstCostFraction * costGrowth ^ L.
+    // Upgrading from level L costs cost * firstCostFraction * costGrowth ^ L * costMultiplier.
     firstCostFraction: 0.5,
     costGrowth: 1.4,
+    // Applies to level upgrades and rack parts alike. Raised from 1 to 1.15
+    // when upgrades felt too cheap.
+    costMultiplier: 1.15,
+    // Scales the income every rack part adds. Lowered from 1 to 0.9 so
+    // upgrades take longer to pay for themselves.
+    partIncomeMultiplier: 0.9,
   },
   power: {
     // Supply from the building's own mains connection, before any power units.

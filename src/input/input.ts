@@ -24,7 +24,7 @@ export interface InputHandlers {
   onDrawEnd(clientX: number, clientY: number, cancelled: boolean): void;
 }
 
-const SPEED_KEYS: Record<string, Speed> = { Digit1: 1, Digit2: 2, Digit3: 4 };
+const SPEED_KEYS: Record<string, Speed> = { Digit1: 1, Digit2: 2, Digit3: 3 };
 const TOOL_KEYS: Record<string, Tool> = Object.fromEntries(
   Object.entries(TOOL_HOTKEYS).map(([tool, key]) => [`Key${key}`, tool as Tool]),
 );

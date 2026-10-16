@@ -67,6 +67,13 @@ export const ACHIEVEMENTS: Achievement[] = [
     reward: { xp: 1_000 },
   },
   {
+    id: 'campus',
+    name: 'Campus',
+    description: 'Own every room on the map',
+    condition: { type: 'roomsOwned', min: 7 },
+    reward: { xp: 2_000 },
+  },
+  {
     id: 'millionaire',
     name: 'Millionaire',
     description: 'Earn £1,000,000 in total',

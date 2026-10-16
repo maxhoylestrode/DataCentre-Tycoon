@@ -193,6 +193,13 @@ export const GOALS: Goal[] = [
     after: ['floor_cooling'],
   },
   {
+    id: 'second_room',
+    description: 'Expand: buy a second room',
+    condition: { type: 'roomsOwned', min: 2 },
+    reward: { xp: 1_000 },
+    after: ['earn_50k'],
+  },
+  {
     id: 'earn_250k',
     description: 'Earn £250,000 in total',
     condition: { type: 'totalEarned', min: 250_000 },

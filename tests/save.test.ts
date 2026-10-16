@@ -15,7 +15,7 @@ function playedGame(): GameState {
   placeBuilding(state, 'cooling_fan', 3, 2);
   for (let i = 0; i < 300; i++) tick(state);
   getBuildingAt(state, 2, 1)!.status = 'failed';
-  state.speed = 4;
+  state.speed = 3;
   state.paused = true;
   return state;
 }
@@ -41,7 +41,7 @@ describe('save and load', () => {
     expect(loaded.height).toBe(8);
     expect(loaded.cash).toBeCloseTo(state.cash);
     expect(loaded.tick).toBe(state.tick);
-    expect(loaded.speed).toBe(4);
+    expect(loaded.speed).toBe(3);
     expect(loaded.paused).toBe(true);
     expect(loaded.nextBuildingId).toBe(state.nextBuildingId);
     expect(loaded.buildings).toEqual(state.buildings);
@@ -105,7 +105,7 @@ describe('save and load', () => {
   it('fills missing or invalid fields with new-game defaults', () => {
     const text = tamper(playedGame(), (save) => {
       delete save.data.cash;
-      save.data.speed = 3;
+      save.data.speed = 4;
       save.data.temps = 'hot';
     });
     const loaded = load(text);

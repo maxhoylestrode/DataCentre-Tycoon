@@ -7,6 +7,7 @@ import { installedPart, slotsOf } from './buildings';
 import { netIncomePerTick } from './economy';
 import { feedVents } from './floor';
 import { levelInfo } from './levels';
+import { roomsOwned } from './lots';
 import { prestigeOf } from './prestige';
 import { dayOf, type GameState, racksOf } from './state';
 
@@ -29,7 +30,8 @@ export type Condition =
   | { type: 'highestUpgrade'; min: number }
   | { type: 'prestige'; min: number }
   | { type: 'fedVents'; min: number }
-  | { type: 'liquidCooledRacks'; min: number };
+  | { type: 'liquidCooledRacks'; min: number }
+  | { type: 'roomsOwned'; min: number };
 
 export type ConditionType = Condition['type'];
 
@@ -64,6 +66,7 @@ const EVALUATORS: Evaluators = {
   // Racks with any cooling part beyond stock air cooling.
   liquidCooledRacks: (s) =>
     s.buildings.filter((b) => slotsOf(b).includes('cooling') && (installedPart(b, 'cooling')?.heatReduction ?? 0) > 0).length,
+  roomsOwned: (s) => roomsOwned(s),
 };
 
 export function isConditionType(type: string): type is ConditionType {

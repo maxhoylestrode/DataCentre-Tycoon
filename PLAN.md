@@ -308,6 +308,20 @@ Done when: I can create an account, play on one device, log in on another and co
   - **Save v3** adds contracts and the RNG seed. A v2 save migrates with no contracts and a seed taken from its tick count.
   - **Dev helper**: `dct.level(n)` and `dct.cash(n)` in the browser console, only on the local dev server.
 - 2026-10-16: Building upgrades added (user request). User chose a trade-off for racks (more power and heat), a cap that rises with player level, and **real brand names** for the planned rack components. Hardware, cooling types and looks became Milestone 7; staff and incidents moved to Milestone 8. Panel buttons use `pointerdown`, because live re-renders would swallow `click` events.
+- 2026-10-17: Balance pass and rooms (user request).
+  - **Balance:**
+    - Every upgrade costs 15% more (`CONFIG.upgrades.costMultiplier`, applied to levels and parts).
+    - Rack parts add 10% less income (`partIncomeMultiplier`).
+    - Rent, building upkeep and floor upkeep are 10% higher (`economy.runningCostMultiplier`).
+    - Fastest speed is now 3x instead of 4x.
+    - Starting rack price unchanged.
+  - **Rooms:**
+    - The map is a grid of 20×14 lots (`sim/content/lots.ts`, 7 for now). You start with one and can buy any lot touching one you own, for £200k, £500k, £1M, £2M, £4M, £8M (then doubling).
+    - Rent is charged per room owned.
+    - Walls between rooms are permanent and always block heat; doors or glass can be swapped in.
+    - Locked rooms show as dark plates; rooms for sale get a dashed outline, a padlock and a clickable price label.
+    - The sun now follows the camera so shadows stay sharp on the bigger map.
+    - Save v7: old single-room saves load onto the full map with only the starting room owned.
 - 2026-10-16: Interior walls (user request).
   - **Placement:** walls sit on tile edges (`state.walls`, each `{ kind, x, y, dir }`), drawn by left-dragging along grid lines with a wall tool (right-drag still pans). Wall (L2), Door (L2) and Glass wall (L8). Doors are closed server-room doors, so they block heat like walls.
   - **Heat:** walls block diffusion, and cooling units only reach tiles within their radius that they can get to without crossing a wall (`sim/walls.ts`). Chiller pipes run under the floor and ignore walls.

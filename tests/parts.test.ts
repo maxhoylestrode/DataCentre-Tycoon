@@ -48,7 +48,7 @@ describe('rack parts', () => {
     const part = nextPart(rack, 'cpu')!;
     upgradeSlot(state, 0, 0, 'cpu', 1);
     const after = buildingStats(rack);
-    expect(after.income - before.income).toBeCloseTo(part.income);
+    expect(after.income - before.income).toBeCloseTo(part.income * CONFIG.upgrades.partIncomeMultiplier);
     expect(after.powerDraw - before.powerDraw).toBeCloseTo(part.powerDraw);
     expect(after.heat - before.heat).toBeCloseTo(part.heat);
   });

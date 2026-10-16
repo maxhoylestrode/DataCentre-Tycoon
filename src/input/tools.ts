@@ -14,6 +14,7 @@ import {
 import { investedValue } from '../sim/buildings';
 import { placeBuilding, placeFloor, removeFloor, repairRack, sellBuilding } from '../sim/commands';
 import { canAfford, repairCost } from '../sim/economy';
+import { isOwnedTile, lotAt, nextLotPrice, purchasableLots } from '../sim/lots';
 import { isUnlocked, unlockFor } from '../sim/progression';
 import { categoryOf, floorAt, type GameState, getBuildingAt } from '../sim/state';
 
@@ -56,6 +57,13 @@ export function toolCost(tool: Tool): number {
 
 export function previewTool(state: GameState, tool: Tool, x: number, y: number): ToolPreview | null {
   if (state.bankrupt) return null;
+  if (!isOwnedTile(state, x, y)) {
+    const lot = lotAt(state, x, y);
+    if (lot && purchasableLots(state).some((l) => l.id === lot.id)) {
+      return { action: 'blocked', text: `Room for sale: ${money(nextLotPrice(state))}. Click to buy` };
+    }
+    return { action: 'blocked', text: 'Locked room: buy a room next to it first' };
+  }
   const building = getBuildingAt(state, x, y);
   const floor = floorAt(state, x, y);
 

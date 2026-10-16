@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
+import { isOwnedTile } from '../sim/lots';
 import type { GameState } from '../sim/state';
 
 const H = CONFIG.heat;
@@ -65,7 +66,8 @@ export class HeatOverlay {
         this.data[i] = this.colour.r * 255;
         this.data[i + 1] = this.colour.g * 255;
         this.data[i + 2] = this.colour.b * 255;
-        this.data[i + 3] = (0.25 + 0.5 * u) * 255;
+        // Rooms you don't own stay uncoloured.
+        this.data[i + 3] = isOwnedTile(state, x, y) ? (0.25 + 0.5 * u) * 255 : 0;
       }
     }
     this.texture.needsUpdate = true;

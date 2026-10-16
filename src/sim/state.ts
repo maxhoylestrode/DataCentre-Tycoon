@@ -8,6 +8,8 @@ import {
   type Speed,
   type WallKind,
 } from '../config';
+import { STARTING_LOT } from './content/lots';
+import { MAP_HEIGHT, MAP_WIDTH } from './lots';
 
 // Only racks use 'failed' and 'repairing'; other buildings stay 'ok'.
 export type BuildingStatus = 'ok' | 'failed' | 'repairing';
@@ -173,6 +175,8 @@ export interface GameState {
   floor: FloorTile[];
   walls: WallSegment[];
   style: StyleState;
+  // Lot ids (content/lots.ts) the player owns. Only owned tiles can be built on.
+  ownedLots: string[];
   // Temperature of every tile in °C, indexed y * width + x.
   temps: number[];
   cash: number;
@@ -187,11 +191,8 @@ export interface GameState {
 }
 
 // The seed defaults to 1 so tests are repeatable; the game passes a random one.
-export function createInitialState(
-  width: number = CONFIG.grid.width,
-  height: number = CONFIG.grid.height,
-  seed = 1,
-): GameState {
+// Defaults to the full map; tests pass small grids, which act as one room.
+export function createInitialState(width: number = MAP_WIDTH, height: number = MAP_HEIGHT, seed = 1): GameState {
   return {
     width,
     height,
@@ -200,6 +201,7 @@ export function createInitialState(
     floor: [],
     walls: [],
     style: createStyleState(),
+    ownedLots: [STARTING_LOT],
     temps: new Array<number>(width * height).fill(CONFIG.heat.ambient),
     cash: CONFIG.economy.startingCash,
     tick: 0,

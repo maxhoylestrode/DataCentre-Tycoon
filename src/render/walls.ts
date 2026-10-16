@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { CONFIG, type WallKind } from '../config';
 import type { Edge } from '../input/walls';
+import { LOTS } from '../sim/content/lots';
 import { ROOM_STYLES } from '../sim/content/styles';
+import { lotSize } from '../sim/lots';
 import type { GameState } from '../sim/state';
 
 const { low, full, thickness: T } = CONFIG.wallHeights;
@@ -75,6 +77,23 @@ function placeOnEdge(group: THREE.Object3D, edge: Edge, w: number, h: number): v
 
 const keyOf = (e: Edge): string => `${e.x},${e.y},${e.dir}`;
 
+// Every tile edge on the wall between two owned rooms.
+function roomBoundaryEdges(state: GameState): Edge[] {
+  const { w, h } = lotSize(state);
+  const owned = LOTS.filter((l) => state.ownedLots.includes(l.id));
+  const has = (col: number, row: number): boolean => owned.some((l) => l.col === col && l.row === row);
+  const edges: Edge[] = [];
+  for (const lot of owned) {
+    if (has(lot.col + 1, lot.row)) {
+      for (let y = lot.row * h; y < (lot.row + 1) * h; y++) edges.push({ x: (lot.col + 1) * w, y, dir: 'v' });
+    }
+    if (has(lot.col, lot.row + 1)) {
+      for (let x = lot.col * w; x < (lot.col + 1) * w; x++) edges.push({ x, y: (lot.row + 1) * h, dir: 'h' });
+    }
+  }
+  return edges;
+}
+
 // Interior walls, plus a ghost preview while the player is drawing them.
 export class WallLayer {
   readonly group = new THREE.Group();
@@ -105,7 +124,14 @@ export class WallLayer {
 
     const height = this.fullHeight ? full : low;
     const alive = new Set<string>();
-    for (const wall of state.walls) {
+    // Walls between two owned rooms are plain walls unless the player has put
+    // a door or glass there.
+    const walls: { kind: WallKind; x: number; y: number; dir: 'h' | 'v' }[] = [...state.walls];
+    const placed = new Set(state.walls.map(keyOf));
+    for (const edge of roomBoundaryEdges(state)) {
+      if (!placed.has(keyOf(edge))) walls.push({ ...edge, kind: 'wall_basic' });
+    }
+    for (const wall of walls) {
       const key = keyOf(wall);
       alive.add(key);
       const existing = this.segments.get(key);

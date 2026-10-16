@@ -1,17 +1,33 @@
 // Interior wall lookups. Walls sit on edges between tiles; the room's outer
 // walls are not segments (the grid boundary already blocks everything).
 
+import { isLotBoundary, isOwnedTile, lotSize } from './lots';
 import type { GameState, WallSegment } from './state';
 
 export function wallAt(state: GameState, x: number, y: number, dir: 'h' | 'v'): WallSegment | undefined {
   return state.walls.find((w) => w.x === x && w.y === y && w.dir === dir);
 }
 
-// Only edges strictly inside the room can hold a wall.
+// The two tiles an edge separates.
+export function edgeTiles(x: number, y: number, dir: 'h' | 'v'): [[number, number], [number, number]] {
+  return dir === 'h' ? [[x, y - 1], [x, y]] : [[x - 1, y], [x, y]];
+}
+
+// Edges between two owned tiles can hold a wall. Edges between two owned
+// rooms are permanent walls, which can only be swapped for a door or glass.
 export function isInteriorEdge(state: GameState, x: number, y: number, dir: 'h' | 'v'): boolean {
   if (!Number.isInteger(x) || !Number.isInteger(y)) return false;
-  if (dir === 'h') return x >= 0 && x < state.width && y >= 1 && y < state.height;
-  return x >= 1 && x < state.width && y >= 0 && y < state.height;
+  const inGrid = dir === 'h'
+    ? x >= 0 && x < state.width && y >= 1 && y < state.height
+    : x >= 1 && x < state.width && y >= 0 && y < state.height;
+  if (!inGrid) return false;
+  const [[x1, y1], [x2, y2]] = edgeTiles(x, y, dir);
+  return isOwnedTile(state, x1, y1) && isOwnedTile(state, x2, y2);
+}
+
+export function isRoomBoundaryEdge(state: GameState, x: number, y: number, dir: 'h' | 'v'): boolean {
+  const [[x1, y1], [x2, y2]] = edgeTiles(x, y, dir);
+  return isLotBoundary(state, x1, y1, x2, y2);
 }
 
 // Fast "is there a wall between these neighbours" lookups, built once per use.
@@ -23,8 +39,17 @@ export interface WallGrid {
 }
 
 export function wallGrid(state: GameState): WallGrid {
-  const n = state.width * state.height;
+  const { width: w, height: h } = state;
+  const n = w * h;
   const grid: WallGrid = { up: new Uint8Array(n), left: new Uint8Array(n) };
+  // Room boundaries are always walls (doors and glass in them still block heat).
+  const lot = lotSize(state);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (y > 0 && y % lot.h === 0) grid.up[y * w + x] = 1;
+      if (x > 0 && x % lot.w === 0) grid.left[y * w + x] = 1;
+    }
+  }
   for (const w of state.walls) {
     const i = w.y * state.width + w.x;
     if (w.dir === 'h') grid.up[i] = 1;

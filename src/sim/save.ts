@@ -7,6 +7,8 @@
 
 import { buildingDef, CONFIG, isBuildingKind, isFloorKind, isWallKind, type Speed } from '../config';
 import { isInteriorEdge } from './walls';
+import { LOTS, STARTING_LOT } from './content/lots';
+import { MAP_HEIGHT, MAP_WIDTH } from './lots';
 import { ACHIEVEMENTS } from './content/achievements';
 import { GOALS } from './content/goals';
 import { PARTS } from './content/parts';
@@ -36,7 +38,8 @@ import {
 // v4: adds building upgrade levels.
 // v5: racks upgrade through parts instead of levels; adds the floor layer and room style.
 // v6: adds interior walls.
-export const SAVE_VERSION = 6;
+// v7: adds rooms (owned lots); the map grows to fit every lot.
+export const SAVE_VERSION = 7;
 
 // Part ids as they were when v5 was introduced. Hard-coded so this migration
 // never changes if the parts catalogue does later.
@@ -104,6 +107,7 @@ const MIGRATIONS: Record<number, (data: Data) => Data> = {
     style: null,
   }),
   5: (data) => ({ ...data, walls: [] }),
+  6: (data) => ({ ...data, ownedLots: ['lot_0_0'] }),
 };
 
 export function serialize(state: GameState, now: Date = new Date()): string {
@@ -133,6 +137,7 @@ export function serialize(state: GameState, now: Date = new Date()): string {
       })),
       floor: state.floor.map((f) => ({ kind: f.kind, x: f.x, y: f.y })),
       walls: state.walls.map((w) => ({ kind: w.kind, x: w.x, y: w.y, dir: w.dir })),
+      ownedLots: [...state.ownedLots],
       style: { ...state.style, owned: [...state.style.owned] },
       // Rounded to keep saves small; nobody can see the third decimal.
       temps: state.temps.map((t) => Math.round(t * 100) / 100),
@@ -189,8 +194,14 @@ export function deserialize(text: string): LoadResult {
 // Anything missing or invalid falls back to the new-game default, and
 // buildings with unknown ids are dropped.
 function readState(data: Data): GameState {
-  const width = intIn(data.width, 1, MAX_GRID) ?? CONFIG.grid.width;
-  const height = intIn(data.height, 1, MAX_GRID) ?? CONFIG.grid.height;
+  const savedWidth = intIn(data.width, 1, MAX_GRID) ?? MAP_WIDTH;
+  const savedHeight = intIn(data.height, 1, MAX_GRID) ?? MAP_HEIGHT;
+  // A real game (at least one room in size) loads onto the current map, so
+  // adding rooms to content grows old maps. Lots only extend right and
+  // forward, so existing coordinates stay put. Smaller test grids are kept.
+  const isGameMap = savedWidth >= CONFIG.lots.width && savedHeight >= CONFIG.lots.height;
+  const width = isGameMap ? Math.max(savedWidth, MAP_WIDTH) : savedWidth;
+  const height = isGameMap ? Math.max(savedHeight, MAP_HEIGHT) : savedHeight;
   const state = createInitialState(width, height);
 
   state.cash = finite(data.cash) ?? state.cash;
@@ -211,10 +222,16 @@ function readState(data: Data): GameState {
   const maxId = state.buildings.reduce((m, b) => Math.max(m, b.id), 0);
   state.nextBuildingId = Math.max(maxId + 1, intIn(data.nextBuildingId, 1, Number.MAX_SAFE_INTEGER) ?? 1);
 
+  // Copy saved temperatures tile by tile, in case the map grew.
   const temps = data.temps;
-  if (Array.isArray(temps) && temps.length === width * height && temps.every((t) => finite(t) !== null)) {
-    state.temps = temps.map((t) => Math.max(CONFIG.heat.ambient, t as number));
+  if (Array.isArray(temps) && temps.length === savedWidth * savedHeight && temps.every((t) => finite(t) !== null)) {
+    for (let y = 0; y < savedHeight; y++) {
+      for (let x = 0; x < savedWidth; x++) {
+        state.temps[y * width + x] = Math.max(CONFIG.heat.ambient, temps[y * savedWidth + x] as number);
+      }
+    }
   }
+  state.ownedLots = readOwnedLots(data.ownedLots);
   state.floor = readFloor(data.floor, width, height);
   state.walls = readWalls(data.walls, state);
   state.style = readStyle(data.style);
@@ -306,6 +323,12 @@ function readFloor(raw: unknown, width: number, height: number): FloorTile[] {
     tiles.push({ kind: item.kind, x, y });
   }
   return tiles;
+}
+
+// Unknown lot ids are dropped; the starting room is always owned.
+function readOwnedLots(raw: unknown): string[] {
+  const known = new Set(LOTS.map((l) => l.id));
+  return [...new Set([STARTING_LOT, ...uniqueKnown(raw, known)])];
 }
 
 // Unknown wall kinds, edges outside the room and duplicates are dropped.

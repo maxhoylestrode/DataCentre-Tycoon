@@ -15,8 +15,8 @@ describe('clock', () => {
 
   it('scales with speed', () => {
     const state = createInitialState(5, 5);
-    setSpeed(state, 4);
-    expect(advanceClock(createClock(), state, 1)).toBe(TPS * 4);
+    setSpeed(state, 3);
+    expect(advanceClock(createClock(), state, 1)).toBe(TPS * 3);
   });
 
   it('carries fractional ticks across frames', () => {

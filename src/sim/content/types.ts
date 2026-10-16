@@ -26,6 +26,14 @@ export interface Part {
   heatReduction?: number;
 }
 
+// A room-sized plot on the map grid.
+export interface Lot {
+  // Stable id, stored in saves.
+  id: string;
+  col: number;
+  row: number;
+}
+
 // Room-wide looks bought from the Style panel. One active per slot.
 export interface RoomStyle {
   // Stable id, stored in saves.

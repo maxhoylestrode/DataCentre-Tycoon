@@ -34,6 +34,12 @@ export class CameraRig {
     this.camera.updateProjectionMatrix();
   }
 
+  // Points the camera at a spot on the floor (world x, z).
+  focus(x: number, z: number): void {
+    this.target.set(x, 0, z);
+    this.update();
+  }
+
   zoomBy(factor: number): void {
     const { minZoom, maxZoom } = CONFIG.camera;
     this.camera.zoom = THREE.MathUtils.clamp(this.camera.zoom * factor, minZoom, maxZoom);

@@ -1,6 +1,7 @@
 import { CONFIG } from './config';
 import { advanceClock, createClock } from './sim/clock';
 import {
+  buyLot,
   buyStyle,
   cancelContract,
   repairRack,
@@ -13,12 +14,12 @@ import {
   upgradeBuilding,
   upgradePart,
 } from './sim/commands';
-import { isInteriorEdge, wallAt } from './sim/walls';
+import { isInteriorEdge, isRoomBoundaryEdge, wallAt } from './sim/walls';
 import { type Edge, edgesBetween, nearestCorner, nearestEdge } from './input/walls';
 import { WallLayer } from './render/walls';
 import { createInitialState, type GameState } from './sim/state';
 import { CameraRig } from './render/camera';
-import { createGridLines, HoverHighlight, type Tile, TilePicker } from './render/grid';
+import { HoverHighlight, LotsLayer, type Tile, TilePicker, tileToWorld } from './render/grid';
 import { HeatOverlay } from './render/heatmap';
 import { BuildingLayer, FloorLayer } from './render/models';
 import { createScene } from './render/scene';
@@ -26,6 +27,8 @@ import { attachInput } from './input/input';
 import { applyTool, isWallTool, previewTool, type Tool, type ToolPreview } from './input/tools';
 import { exportSaveFile, loadGame, loadSettings, readSaveFile, saveGame, saveSettings } from './io/storage';
 import { isUnlocked, totalXpForLevel } from './sim/progression';
+import { isOwnedTile, lotAt, lotSize, purchasableLots } from './sim/lots';
+import { RoomSale } from './ui/rooms';
 import { Announcer } from './ui/announcer';
 import { BuildingPanel } from './ui/buildingPanel';
 import { ContractsPanel } from './ui/contracts';
@@ -45,8 +48,12 @@ let state: GameState = loaded?.ok ? loaded.state : newGame();
 const clock = createClock();
 
 const container = document.getElementById('app') as HTMLElement;
-const { renderer, scene, room } = createScene(container, state.width, state.height);
+const { renderer, scene, room } = createScene(container);
 const rig = new CameraRig(container.clientWidth / container.clientHeight, state.width, state.height);
+// Start looking at the middle of the starting room, not the middle of the map.
+const startLot = lotSize(state);
+const startCentre = tileToWorld(state.width, state.height, startLot.w / 2 - 0.5, startLot.h / 2 - 0.5);
+rig.focus(startCentre.x, startCentre.z);
 const picker = new TilePicker(rig.camera, renderer.domElement, state.width, state.height);
 
 const hover = new HoverHighlight(state.width, state.height);
@@ -56,10 +63,11 @@ const heat = new HeatOverlay(state.width, state.height);
 const buildings = new BuildingLayer();
 const floor = new FloorLayer();
 const walls = new WallLayer();
+const lots = new LotsLayer();
 scene.add(
   floor.group,
   walls.group,
-  createGridLines(state.width, state.height),
+  lots.group,
   heat.mesh,
   selection.mesh,
   hover.mesh,
@@ -96,7 +104,9 @@ function checkWallEdges(edges: Edge[]): { edge: Edge; ok: boolean }[] {
   const cost = CONFIG.walls[tool].cost;
   let cash = state.cash;
   return edges.map((edge) => {
-    const free = isInteriorEdge(state, edge.x, edge.y, edge.dir) && !wallAt(state, edge.x, edge.y, edge.dir);
+    // The wall between rooms is already there: only doors or glass can replace it.
+    const boundaryClash = tool === 'wall_basic' && isRoomBoundaryEdge(state, edge.x, edge.y, edge.dir);
+    const free = isInteriorEdge(state, edge.x, edge.y, edge.dir) && !wallAt(state, edge.x, edge.y, edge.dir) && !boundaryClash;
     const ok = free && isUnlocked(state, tool) && cash >= cost;
     if (ok) cash -= cost;
     return { edge, ok };
@@ -143,6 +153,7 @@ const stylePanel = new StylePanel(document.body, { onChoose: (id) => buyStyle(st
 const toggleStyle = (): void => {
   if (isUnlocked(state, 'room_styles')) stylePanel.toggle();
 };
+const roomSale = new RoomSale(document.body, { onBuy: (id) => buyLot(state, id) });
 
 const startNewGame = (): void => {
   state = newGame();
@@ -155,6 +166,8 @@ const startNewGame = (): void => {
   contracts.toggle(false);
   stylePanel.toggle(false);
   buildingPanel.close();
+  roomSale.close();
+  rig.focus(startCentre.x, startCentre.z);
   announcer.reset(state);
   persist();
 };
@@ -230,6 +243,7 @@ const closePanels = (): void => {
   buildingPanel.close();
   contracts.toggle(false);
   stylePanel.toggle(false);
+  roomSale.close();
 };
 
 const updateInput = attachInput(renderer.domElement, rig, {
@@ -272,6 +286,12 @@ const updateInput = attachInput(renderer.domElement, rig, {
     }
     const tile = picker.pick(cx, cy);
     if (!tile) return;
+    // Clicking a room for sale offers to buy it.
+    if (!isOwnedTile(state, tile.x, tile.y)) {
+      const lot = lotAt(state, tile.x, tile.y);
+      if (lot && purchasableLots(state).some((l) => l.id === lot.id)) roomSale.ask(lot.id);
+      return;
+    }
     const action = applyTool(state, tool, tile.x, tile.y);
     const clicked = state.buildings.find((b) => b.x === tile.x && b.y === tile.y);
     if (action === 'inspect' && clicked) buildingPanel.show(clicked.id);
@@ -336,7 +356,10 @@ function frame(now: number): void {
   buildings.sync(state, dt);
   floor.sync(state);
   walls.sync(state);
-  room.apply(state.style);
+  lots.update(state);
+  room.update(state);
+  room.follow(rig.target);
+  roomSale.update(state, rig.camera, renderer.domElement);
   heat.update(state);
   hover.set(preview && preview.action !== 'draw' ? hoveredTile : null, preview?.action ?? 'place');
   hud.update(state, hoveredTile, preview);

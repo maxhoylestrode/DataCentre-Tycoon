@@ -45,13 +45,14 @@ describe('economy', () => {
   it('costs are rent plus upkeep for every building, working or not', () => {
     const state = testState(5, 5);
     state.cash = 100_000;
-    expect(costsPerTick(state)).toBe(E.rentPerTick);
+    const m = E.runningCostMultiplier;
+    expect(costsPerTick(state)).toBeCloseTo(E.rentPerTick * m);
     placeBuilding(state, 'rack_basic', 0, 0);
     placeBuilding(state, 'power_basic', 1, 0);
     placeBuilding(state, 'cooling_fan', 2, 0);
     getBuildingAt(state, 0, 0)!.status = 'failed';
     expect(costsPerTick(state)).toBeCloseTo(
-      E.rentPerTick + B.rack_basic.upkeepPerTick + B.power_basic.upkeepPerTick + B.cooling_fan.upkeepPerTick,
+      (E.rentPerTick + B.rack_basic.upkeepPerTick + B.power_basic.upkeepPerTick + B.cooling_fan.upkeepPerTick) * m,
     );
   });
 

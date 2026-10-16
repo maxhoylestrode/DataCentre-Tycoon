@@ -50,16 +50,18 @@ export function nextPart(building: Building, slot: PartSlot): Part | null {
   return path[index + 1] ?? null;
 }
 
+const U = CONFIG.upgrades;
+
 // Parts are priced per server, so bigger racks pay more for the same part.
 export function partCost(building: Building, part: Part): number {
-  return Math.round(part.cost * (buildingDef(building.kind).partMultiplier ?? 1));
+  return Math.round((part.cost * (buildingDef(building.kind).partMultiplier ?? 1) * U.costMultiplier) / 10) * 10;
 }
 
 // What a part adds to this rack, after the rack's multipliers.
 export function partContribution(building: Building, part: Part): { income: number; powerDraw: number } {
   const def = buildingDef(building.kind);
   return {
-    income: part.income * (def.partMultiplier ?? 1),
+    income: part.income * U.partIncomeMultiplier * (def.partMultiplier ?? 1),
     powerDraw: part.powerDraw * (def.powerFactor ?? 1),
   };
 }
@@ -69,7 +71,7 @@ export function buildingStats(building: Building, level: number = building.upgra
   const output = 1 + def.upgrade.output * level;
   const stats: BuildingStats = {
     income: def.incomePerTick * output,
-    upkeep: def.upkeepPerTick,
+    upkeep: def.upkeepPerTick * CONFIG.economy.runningCostMultiplier,
     powerDraw: def.powerDraw * (1 + def.upgrade.powerDraw * level),
     powerSupply: def.powerSupply * output,
     heat: def.heatPerTick * (1 + def.upgrade.heat * level),
@@ -87,7 +89,7 @@ export function buildingStats(building: Building, level: number = building.upgra
     for (const slot of slots) {
       const part = installedPart(building, slot);
       if (!part) continue;
-      income += part.income;
+      income += part.income * U.partIncomeMultiplier;
       powerDraw += part.powerDraw;
       heat += part.heat;
       heatReduction = Math.max(heatReduction, part.heatReduction ?? 0);
@@ -101,8 +103,8 @@ export function buildingStats(building: Building, level: number = building.upgra
 
 // Cost to go from the building's current upgrade level to the next.
 export function upgradeCost(building: Building, level: number = building.upgrade): number {
-  const U = CONFIG.upgrades;
-  return Math.round((buildingDef(building.kind).cost * U.firstCostFraction * U.costGrowth ** level) / 10) * 10;
+  const base = buildingDef(building.kind).cost * U.firstCostFraction * U.costGrowth ** level * U.costMultiplier;
+  return Math.round(base / 10) * 10;
 }
 
 // Purchase price plus every upgrade and part bought; selling refunds a share of this.
