@@ -16,10 +16,17 @@ export { levelInfo, type LevelInfo, totalXpForLevel, xpToNext } from './levels';
 const P = CONFIG.progression;
 
 // Mechanics that exist in code and can be gated by an unlock.
-export const MECHANICS = ['heat_map', 'contract_board'] as const;
+export const MECHANICS = ['heat_map', 'contract_board', 'upgrades'] as const;
 
 export function levelOf(state: GameState): number {
   return levelInfo(state.progress.xp).level;
+}
+
+// Highest upgrade level buildings can reach right now: your level, up to the
+// hard cap. 0 until upgrades unlock.
+export function upgradeCap(state: GameState): number {
+  if (!isUnlocked(state, 'upgrades')) return 0;
+  return Math.min(CONFIG.upgrades.maxLevel, levelOf(state));
 }
 
 export function tierFor(level: number): Tier {

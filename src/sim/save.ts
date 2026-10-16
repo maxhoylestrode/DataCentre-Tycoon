@@ -26,7 +26,8 @@ import {
 // v1: Milestone 3 game (buildings, cash, time, heat).
 // v2: adds progress (XP, goals, achievements, stats).
 // v3: adds contracts and the RNG seed.
-export const SAVE_VERSION = 3;
+// v4: adds building upgrade levels.
+export const SAVE_VERSION = 4;
 const GAME_ID = 'datacentre-tycoon';
 const MAX_GRID = 200;
 
@@ -53,6 +54,13 @@ const MIGRATIONS: Record<number, (data: Data) => Data> = {
     contracts: { offers: [], active: [], history: [], nextId: 1, offersDay: 0 },
     rngSeed: typeof data.tick === 'number' ? data.tick + 1 : 1,
   }),
+  // Every existing building starts un-upgraded.
+  3: (data) => ({
+    ...data,
+    buildings: Array.isArray(data.buildings)
+      ? data.buildings.map((b: unknown) => (isObject(b) ? { ...b, upgrade: 0 } : b))
+      : data.buildings,
+  }),
 };
 
 export function serialize(state: GameState, now: Date = new Date()): string {
@@ -77,6 +85,7 @@ export function serialize(state: GameState, now: Date = new Date()): string {
         builtAtTick: b.builtAtTick,
         status: b.status,
         repairDoneTick: b.repairDoneTick,
+        upgrade: b.upgrade,
       })),
       // Rounded to keep saves small; nobody can see the third decimal.
       temps: state.temps.map((t) => Math.round(t * 100) / 100),
@@ -269,7 +278,9 @@ function readBuilding(raw: unknown, width: number, height: number): Building | n
 
   const status = STATUSES.includes(raw.status as BuildingStatus) ? (raw.status as BuildingStatus) : 'ok';
   const repairDoneTick = status === 'repairing' ? (finite(raw.repairDoneTick) ?? 0) : null;
-  return { id, kind: raw.kind, x, y, builtAtTick: finite(raw.builtAtTick) ?? 0, status, repairDoneTick };
+  // Clamped in case the max level is ever lowered.
+  const upgrade = Math.min(CONFIG.upgrades.maxLevel, intIn(raw.upgrade, 0, Number.MAX_SAFE_INTEGER) ?? 0);
+  return { id, kind: raw.kind, x, y, builtAtTick: finite(raw.builtAtTick) ?? 0, status, repairDoneTick, upgrade };
 }
 
 function isObject(v: unknown): v is Data {

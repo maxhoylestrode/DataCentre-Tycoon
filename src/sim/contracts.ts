@@ -3,6 +3,7 @@
 // contractBoard.ts and commands.ts.
 
 import { CONFIG } from '../config';
+import { buildingStats, rackFill } from './buildings';
 import {
   type Building,
   categoryOf,
@@ -20,12 +21,14 @@ export interface RackAllocation {
   assigned: Map<number, number>;
 }
 
-// Contracts are served oldest first. They take the newest working racks,
-// leaving the longest-running (most ramped-up) racks on walk-in income.
+// Contracts are served oldest first. They take the racks that would earn
+// least on walk-in (newest, least upgraded), leaving the best racks earning
+// walk-in income, since a contract pays the same whichever racks serve it.
 export function allocateRacks(state: GameState): RackAllocation {
+  const walkInValue = (b: Building): number => buildingStats(b).income * rackFill(state, b);
   const working = state.buildings
     .filter((b) => categoryOf(b) === 'rack' && isRunning(b))
-    .sort((a, b) => b.builtAtTick - a.builtAtTick || b.id - a.id);
+    .sort((a, b) => walkInValue(a) - walkInValue(b) || b.builtAtTick - a.builtAtTick || b.id - a.id);
 
   const assigned = new Map<number, number>();
   let used = 0;

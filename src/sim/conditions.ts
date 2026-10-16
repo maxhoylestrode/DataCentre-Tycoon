@@ -21,7 +21,9 @@ export type Condition =
   | { type: 'contractsCompleted'; min: number }
   | { type: 'contractsFailed'; min: number }
   | { type: 'activeContracts'; min: number }
-  | { type: 'perfectContracts'; min: number };
+  | { type: 'perfectContracts'; min: number }
+  | { type: 'upgrades'; min: number }
+  | { type: 'highestUpgrade'; min: number };
 
 export type ConditionType = Condition['type'];
 
@@ -49,6 +51,8 @@ const EVALUATORS: Evaluators = {
   contractsFailed: (s) => s.progress.stats.contractsFailed,
   activeContracts: (s) => s.contracts.active.length,
   perfectContracts: (s) => s.progress.stats.perfectContracts,
+  upgrades: (s) => s.progress.stats.upgrades,
+  highestUpgrade: (s) => s.buildings.reduce((m, b) => Math.max(m, b.upgrade), 0),
 };
 
 export function isConditionType(type: string): type is ConditionType {

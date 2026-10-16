@@ -219,6 +219,18 @@ describe('conditions', () => {
   it('failures', () => expect(isMet(state, { type: 'failures', min: 4 })).toBe(false));
   it('level', () => expect(evaluate(state, { type: 'level', min: 10 }).current).toBe(10));
 
+  it('upgrades', () => {
+    const s = createInitialState(5, 5);
+    s.progress.stats.upgrades = 7;
+    expect(evaluate(s, { type: 'upgrades', min: 1 }).current).toBe(7);
+  });
+  it('highestUpgrade', () => {
+    expect(evaluate(state, { type: 'highestUpgrade', min: 1 }).current).toBe(0);
+    state.buildings[0]!.upgrade = 4;
+    expect(evaluate(state, { type: 'highestUpgrade', min: 1 }).current).toBe(4);
+    state.buildings[0]!.upgrade = 0;
+  });
+
   describe('contract conditions', () => {
     const s = createInitialState(10, 10);
     Object.assign(s.progress.stats, { contractsSigned: 4, contractsCompleted: 3, contractsFailed: 1, perfectContracts: 2 });

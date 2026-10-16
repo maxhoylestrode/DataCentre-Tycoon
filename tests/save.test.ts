@@ -73,6 +73,7 @@ describe('save and load', () => {
       builtAtTick: 0,
       status: 'ok',
       repairDoneTick: null,
+      upgrade: 0,
     });
     // No copies of content definitions (names, costs) in the save.
     for (const b of save.data.buildings) {
@@ -220,6 +221,12 @@ describe('migrations', () => {
 
   it('re-saves a migrated game at the current version', () => {
     expect(JSON.parse(serialize(load(V1_SAVE))).version).toBe(SAVE_VERSION);
+  });
+
+  it('migrates older buildings to upgrade level 0, and clamps levels above the max', () => {
+    expect(load(V1_SAVE).buildings.every((b) => b.upgrade === 0)).toBe(true);
+    const text = tamper(playedGame(), (save) => (save.data.buildings[0].upgrade = 99));
+    expect(load(text).buildings[0]!.upgrade).toBe(CONFIG.upgrades.maxLevel);
   });
 
   it('migrates a v2 save to no contracts and a deterministic seed', () => {

@@ -46,6 +46,20 @@ export const GOALS: Goal[] = [
     after: ['first_power'],
   },
   {
+    id: 'first_upgrade',
+    description: 'Upgrade a building (click it)',
+    condition: { type: 'upgrades', min: 1 },
+    reward: { xp: 100 },
+    after: ['first_power'],
+  },
+  {
+    id: 'upgrade_to_5',
+    description: 'Upgrade a building to level 5',
+    condition: { type: 'highestUpgrade', min: 5 },
+    reward: { xp: 400, cash: 2_000 },
+    after: ['first_upgrade'],
+  },
+  {
     id: 'day_3',
     description: 'Stay in business until day 3',
     condition: { type: 'day', min: 3 },

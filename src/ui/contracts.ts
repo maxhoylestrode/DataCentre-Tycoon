@@ -40,10 +40,12 @@ export class ContractsPanel {
     parent.appendChild(this.root);
     this.body = this.root.querySelector('.contracts-body') as HTMLElement;
 
-    // One listener for every button, since the body is re-rendered.
-    this.root.addEventListener('click', (e) => {
+    // One listener for every button, since the body is re-rendered. pointerdown,
+    // not click: a button replaced between press and release would miss a click.
+    this.root.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
       const button = (e.target as HTMLElement).closest('button');
-      if (!button) return;
+      if (!button || button.disabled) return;
       const id = Number(button.dataset.id);
       const act = button.dataset.act;
       if (act === 'close') this.toggle(false);

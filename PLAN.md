@@ -122,10 +122,49 @@ Unlocks at level 6 (the "Small hosting company" tier) as the `contract_board` me
 
 **Done when:** after level 6 I can sign contracts, watch their uptime, get paid a bonus for keeping my promises, and get hit by a penalty when overheating or brownouts break them.
 
+### Building upgrades (built 2026-10-16, between Milestones 6 and 7)
+- Click any building with a build tool to open its panel: stats now and after the next upgrade, Upgrade, Repair and Sell.
+- **Levels 0–10.** The `upgrades` mechanic unlocks at level 2, and the max upgrade level = player level (capped at 10). Each level costs more (`cost × 0.5 × 1.4^level`).
+- **Trade-off for racks:** +15% income per level, but also +6% power draw and +6% heat. Power and cooling units just get +15% supply or cooling per level.
+- **Data-driven:** each building's `upgrade` block in `CONFIG.buildings`, read through `sim/buildings.ts` (`buildingStats`), so the economy, power, heat and contracts all see upgrades.
+- **Selling** refunds 50% of the purchase price plus every upgrade.
+- **Contracts** now take the racks that would earn least on walk-in, so upgraded racks keep their walk-in income.
+- **Models** show a coloured trim (grey → gold) and one pip per level. Save v4.
+
+### Milestone 7: Hardware, cooling types and looks (draft, confirm decisions before starting)
+The player's ideas: better racks unlocked by level, racks with real specs whose individual parts you upgrade, different cooling types such as floor cooling, and decoration to make the datacentre look good.
+
+**Better rack models** (`CONFIG.buildings`, each with an unlock level), getting more expensive and more power-hungry:
+- e.g. Entry server rack (L1, today's rack) → Performance rack (L8) → Enterprise rack (L14) → GPU compute rack (L22) → Hyperscale pod (L31).
+- Each has a different base income, power, heat and size feel, plus a different model (taller, glass door, blue/green LED colours). "Better is not strictly better": bigger racks need serious power and cooling.
+
+**Racks with real specs and component slots:**
+- Each rack has slots: **CPU, RAM, Storage, Network**, plus **GPU** on GPU racks. Each slot holds a part from a parts catalogue (`sim/content/parts.ts`, data only) with brand, model, specs (cores/GHz, GB, TB, Gbps), and its effect: **+£/min**, plus power and heat.
+- **Real brand names, as the user chose:** e.g. CPU: AMD EPYC and Intel Xeon generations; GPU: NVIDIA data-centre cards; RAM: Samsung/Micron ECC; Storage: Samsung/Seagate/WD; Network: Mellanox/Intel NICs. Names only, never logos, plus a small in-game note: "Product names are trademarks of their owners. This game is not affiliated with them."
+- The rack panel shows each slot: current part, its specs and £/min, and the next part to upgrade to (cost, unlock level, +£/min). Better parts unlock with level.
+- Saves store only part ids per slot, as usual.
+
+**Cooling types** (each a building or attachment, data-driven where possible):
+- Fan cooling unit (today's).
+- In-row cooler: strong but short range.
+- **Raised floor / underfloor cooling:** cooled floor tiles placed *under* racks (a second layer on the grid), cheap per tile but needs a chiller to feed it.
+- Liquid cooling: a per-rack attachment that removes most of that rack's heat. Expensive, high level.
+- Hot/cold aisle containment as a layout bonus.
+
+**Looks (cosmetics):**
+- Floor tile styles, wall colours and finishes, LED strip lighting, cable trays, signage with a company name, plants and a front desk. All procedural primitives, no image files.
+- Open question: purely visual, or a small "prestige" bonus (e.g. better contract offers)?
+
+**Decisions to ask before starting:**
+1. **Parts vs upgrade levels.** Should rack components replace the generic upgrade levels on racks (power and cooling keep levels), or sit on top of them?
+2. **Cosmetics:** pure looks, or a prestige bonus?
+3. **Underfloor cooling:** a separate floor layer (more depth, more UI), or simpler "cooled floor" buildings?
+4. **Order:** probably racks + parts first, then cooling types, then cosmetics, each playable on its own.
+
 ### Later milestones (outline only, replan before starting)
 5. ✅ (done 2026-10-16) Local save/load: versioned saves in localStorage, export/import save file, settings. Done early because progression needs persistence.
-7. Staff and random incidents
-8. Hardware tiers, upgrades, research
+8. Staff and random incidents (moved after hardware at the user's request)
+- Research tree (was part of the old "hardware tiers, upgrades, research" milestone; revisit after Milestone 7)
 9. Accounts and cloud saves (see Accounts and cloud saves below)
 10. Tutorial hints, polish: sound, particles, UI cleanup, balance pass
 
@@ -258,3 +297,4 @@ Done when: I can create an account, play on one device, log in on another and co
   - **Cancelling and selling**: cancelling costs the penalty. Selling racks you've promised is allowed; it just causes downtime.
   - **Save v3** adds contracts and the RNG seed. A v2 save migrates with no contracts and a seed taken from its tick count.
   - **Dev helper**: `dct.level(n)` and `dct.cash(n)` in the browser console, only on the local dev server.
+- 2026-10-16: Building upgrades added (user request). User chose a trade-off for racks (more power and heat), a cap that rises with player level, and **real brand names** for the planned rack components. Hardware, cooling types and looks became Milestone 7; staff and incidents moved to Milestone 8. Panel buttons use `pointerdown`, because live re-renders would swallow `click` events.

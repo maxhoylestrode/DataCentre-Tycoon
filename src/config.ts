@@ -39,21 +39,34 @@ export const CONFIG = {
   // upkeepPerTick: charged from the moment it is built.
   // heatPerTick: added to the building's own tile while it runs.
   // coolingStrength / coolingRadius: see the heat section.
+  // upgrade: added per upgrade level, as a fraction of the base value.
+  //   output = income (racks), power supply (power) or cooling strength (cooling).
+  //   powerDraw / heat are the downside, so upgraded racks need more power and cooling.
   buildings: {
     rack_basic: {
       name: 'Rack', category: 'rack', cost: 1000, upkeepPerTick: 0.8, incomePerTick: 2.4,
       powerDraw: 4, powerSupply: 0, heatPerTick: 0.65, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0.15, powerDraw: 0.06, heat: 0.06 },
     },
     power_basic: {
       name: 'Power unit', category: 'power', cost: 1500, upkeepPerTick: 0.3, incomePerTick: 0,
       powerDraw: 0, powerSupply: 20, heatPerTick: 0.3, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0.15, powerDraw: 0, heat: 0 },
     },
     cooling_fan: {
       name: 'Cooling unit', category: 'cooling', cost: 1200, upkeepPerTick: 0.4, incomePerTick: 0,
       powerDraw: 3, powerSupply: 0, heatPerTick: 0,
       // Tuned so one unit keeps a 3x3 rack block warm but alive, two keep it cool.
       coolingStrength: 0.03, coolingRadius: 2,
+      upgrade: { output: 0.15, powerDraw: 0, heat: 0 },
     },
+  },
+  upgrades: {
+    // Hard cap. The usable cap is also limited to the player's level.
+    maxLevel: 10,
+    // Upgrading from level L costs cost * firstCostFraction * costGrowth ^ L.
+    firstCostFraction: 0.5,
+    costGrowth: 1.4,
   },
   power: {
     // Supply from the building's own mains connection, before any power units.
@@ -139,6 +152,7 @@ export interface BuildingDef {
   readonly heatPerTick: number;
   readonly coolingStrength: number;
   readonly coolingRadius: number;
+  readonly upgrade: { readonly output: number; readonly powerDraw: number; readonly heat: number };
 }
 
 // Typed lookup so every building has the same fields whatever its id.

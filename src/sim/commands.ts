@@ -5,7 +5,8 @@ import { type BuildingKind, buildingDef, CONFIG, isBuildingKind, type Speed } fr
 import { contractBoardOpen, refreshOffers } from './contractBoard';
 import { cancelActiveContract, freeRacks } from './contracts';
 import { canAfford, repairCost } from './economy';
-import { awardBuildXp, checkProgress, isUnlocked } from './progression';
+import { investedValue, upgradeCost } from './buildings';
+import { awardBuildXp, checkProgress, isUnlocked, upgradeCap } from './progression';
 import { categoryOf, type GameState, getBuildingAt, isInBounds } from './state';
 
 export type CommandResult = { ok: true } | { ok: false; reason: string };
@@ -27,6 +28,7 @@ export function placeBuilding(state: GameState, kind: BuildingKind, x: number, y
     builtAtTick: state.tick,
     status: 'ok',
     repairDoneTick: null,
+    upgrade: 0,
   });
   state.nextBuildingId += 1;
   state.progress.stats.built += 1;
@@ -48,7 +50,25 @@ export function sellBuilding(state: GameState, x: number, y: number): CommandRes
   if (index === -1) return { ok: false, reason: 'empty' };
 
   const [sold] = state.buildings.splice(index, 1);
-  state.cash += buildingDef(sold!.kind).cost * CONFIG.economy.sellRefund;
+  state.cash += investedValue(sold!) * CONFIG.economy.sellRefund;
+  return { ok: true };
+}
+
+export function upgradeBuilding(state: GameState, x: number, y: number): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  const building = getBuildingAt(state, x, y);
+  if (!building) return { ok: false, reason: 'empty' };
+  if (building.status !== 'ok') return { ok: false, reason: 'not_working' };
+  if (building.upgrade >= upgradeCap(state)) return { ok: false, reason: 'at_cap' };
+  const cost = upgradeCost(building);
+  if (state.cash < cost) return { ok: false, reason: 'insufficient_funds' };
+
+  state.cash -= cost;
+  building.upgrade += 1;
+  state.progress.stats.upgrades += 1;
+  // Shares the daily-capped building XP trickle.
+  awardBuildXp(state);
+  afterProgress(state);
   return { ok: true };
 }
 

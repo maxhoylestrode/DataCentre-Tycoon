@@ -46,6 +46,13 @@ export const ACHIEVEMENTS: Achievement[] = [
     reward: { xp: 200 },
   },
   {
+    id: 'maxed_out',
+    name: 'Turned up to 10',
+    description: 'Upgrade a building to level 10',
+    condition: { type: 'highestUpgrade', min: 10 },
+    reward: { xp: 300 },
+  },
+  {
     id: 'millionaire',
     name: 'Millionaire',
     description: 'Earn £1,000,000 in total',

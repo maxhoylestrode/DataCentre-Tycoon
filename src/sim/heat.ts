@@ -2,7 +2,8 @@
 // heat spreads to neighbouring tiles, every tile slowly leaks heat back
 // towards ambient, and cooling units pull nearby tiles down faster.
 
-import { buildingDef, CONFIG } from '../config';
+import { CONFIG } from '../config';
+import { buildingStats } from './buildings';
 import { categoryOf, type GameState, isRunning, tempAt } from './state';
 
 const H = CONFIG.heat;
@@ -14,10 +15,10 @@ export function stepHeat(state: GameState, efficiency: number): void {
 
   for (const b of state.buildings) {
     if (!isRunning(b)) continue;
-    const def = buildingDef(b.kind);
+    const def = buildingStats(b);
     // Racks and coolers slow down in a brownout; power units do not.
     const scale = def.powerDraw > 0 ? efficiency : 1;
-    heatIn[b.y * w + b.x]! += def.heatPerTick * scale;
+    heatIn[b.y * w + b.x]! += def.heat * scale;
 
     if (def.coolingStrength > 0) {
       const r = def.coolingRadius;

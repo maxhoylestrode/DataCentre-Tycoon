@@ -105,6 +105,28 @@
       .contracts .good { color: #4cc38a; }
       .contracts .bad { color: #ff7a7f; }
       button:disabled { opacity: 0.45; cursor: not-allowed; }
+      button.primary { background: #3b2f6b; border-color: #8f7cff; color: #fff; }
+      button.primary:hover:not(:disabled) { background: #4a3c85; }
+      .building-panel {
+        position: fixed; right: 12px; bottom: 96px; z-index: 2; display: none;
+        width: min(290px, calc(100vw - 32px)); box-sizing: border-box; padding: 12px 14px;
+        background: rgba(20, 23, 28, 0.95); border: 1px solid #3d4550; border-radius: 10px;
+        color: #d8dee6; font: 13px/1.5 system-ui, sans-serif;
+      }
+      .building-panel.open { display: block; }
+      .building-panel .close { position: absolute; top: 8px; right: 8px; padding: 2px 8px; }
+      .building-panel h2 { margin: 0 0 4px; font-size: 15px; color: #fff; }
+      .building-panel .muted { color: #8a94a3; }
+      .building-panel .good { color: #4cc38a; }
+      .building-panel .bad { color: #ff7a7f; }
+      .building-panel .up { color: #b9a8ff; }
+      .building-panel table { width: 100%; margin: 6px 0; border-collapse: collapse; }
+      .building-panel td { padding: 2px 0; }
+      .building-panel td:last-child { text-align: right; }
+      .building-panel button { margin: 4px 4px 0 0; }
+      .building-panel .pips { display: flex; gap: 3px; margin: 2px 0 6px; }
+      .building-panel .pips span { width: 18px; height: 5px; border-radius: 2px; background: #2a3039; }
+      .building-panel .pips span.on { background: #b28cff; }
       button.danger { border-color: #7a3a3d; }
       button.danger:hover { background: #4a2a2d; }
       button {

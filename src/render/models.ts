@@ -38,6 +38,43 @@ interface BuildingView {
   update(state: GameState, building: Building, dt: number): void;
 }
 
+// Trim colour by upgrade level: grey, then green through blue and purple to gold.
+const TRIM_MATS = [
+  0x6b7280, 0x3fbf6a, 0x2bb3a3, 0x2f8fe0, 0x4a62e8, 0x7a4ff0, 0xa346e6, 0xd13fb0, 0xe8603a, 0xf0a020, 0xffd23a,
+].map((color, i) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: i === 0 ? 0 : 0.35 }));
+const pipGeo = new THREE.BoxGeometry(0.05, 0.03, 0.05);
+
+// A coloured band around the top of a model plus one pip per upgrade level
+// along its front edge. Returns a function that shows a given level.
+function addUpgradeMarks(group: THREE.Group, topY: number, width: number, depth: number): (level: number) => void {
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(width + 0.02, 0.04, depth + 0.02), TRIM_MATS[0]!);
+  trim.position.y = topY - 0.02;
+  group.add(trim);
+
+  const max = CONFIG.upgrades.maxLevel;
+  const spacing = (width * 0.85) / max;
+  const pips: THREE.Mesh[] = [];
+  for (let i = 0; i < max; i++) {
+    const pip = new THREE.Mesh(pipGeo, TRIM_MATS[0]!);
+    pip.position.set(-width * 0.425 + spacing * (i + 0.5), topY + 0.015, depth / 2 - 0.05);
+    group.add(pip);
+    pips.push(pip);
+  }
+
+  let shown = -1;
+  return (level) => {
+    if (level === shown) return;
+    shown = level;
+    const mat = TRIM_MATS[Math.min(level, TRIM_MATS.length - 1)]!;
+    trim.visible = level > 0;
+    trim.material = mat;
+    pips.forEach((pip, i) => {
+      pip.visible = i < level;
+      pip.material = mat;
+    });
+  };
+}
+
 // Dark cabinet facing +z (towards the camera). LEDs light bottom-up as the
 // rack fills, all red when failed, all blue while repairing. The front panel
 // glows orange when the tile is above the warning temperature.
@@ -59,10 +96,12 @@ function createRackView(): BuildingView {
     group.add(led);
     leds.push(led);
   }
+  const showUpgrade = addUpgradeMarks(group, RH, RW, RD);
 
   return {
     group,
     update(state, rack) {
+      showUpgrade(rack.upgrade);
       let lit = 0;
       let on: THREE.Material = ledOnMat;
       if (rack.status === 'failed') [lit, on] = [LED_COUNT, ledFailMat];
@@ -99,8 +138,9 @@ function createPowerView(): BuildingView {
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.08, 0.02), darkMat);
   stripe.position.set(0, 0.45, 0.43);
   group.add(stripe);
+  const showUpgrade = addUpgradeMarks(group, 0.7, 0.85, 0.85);
 
-  return { group, update() {} };
+  return { group, update: (_state, building) => showUpgrade(building.upgrade) };
 }
 
 // White unit with a spinning fan on top. The fan slows in a brownout.
@@ -123,10 +163,12 @@ function createCoolingView(): BuildingView {
     fan.add(blade);
   }
   group.add(fan);
+  const showUpgrade = addUpgradeMarks(group, 0.9, 0.85, 0.85);
 
   return {
     group,
-    update(state, _building, dt) {
+    update(state, building, dt) {
+      showUpgrade(building.upgrade);
       if (!state.paused && !state.bankrupt) fan.rotation.y += dt * 8 * state.speed * powerEfficiency(state);
     },
   };

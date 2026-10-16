@@ -5,6 +5,13 @@ import type { Unlock } from './types';
 export const UNLOCKS: Unlock[] = [
   { id: 'rack_basic', type: 'building', level: 1 },
   { id: 'power_basic', type: 'building', level: 2 },
+  {
+    id: 'upgrades',
+    type: 'mechanic',
+    level: 2,
+    name: 'Upgrades',
+    description: 'Click a building to upgrade it. Max upgrade level = your level.',
+  },
   { id: 'cooling_fan', type: 'building', level: 3 },
   {
     id: 'heat_map',

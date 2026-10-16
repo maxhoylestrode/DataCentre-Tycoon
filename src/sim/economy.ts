@@ -1,14 +1,12 @@
 import { type BuildingKind, buildingDef, CONFIG } from '../config';
+import { buildingStats, rackFill } from './buildings';
 import { allocateRacks, contractIncomePerTick, type RackAllocation } from './contracts';
 import { powerEfficiency } from './power';
 import type { Building, GameState } from './state';
 
-const E = CONFIG.economy;
+export { rackFill } from './buildings';
 
-// 0 when just built, rising linearly to 1 over rackRampTicks.
-export function rackFill(state: GameState, rack: Building): number {
-  return Math.min(1, Math.max(0, (state.tick - rack.builtAtTick) / E.rackRampTicks));
-}
+const E = CONFIG.economy;
 
 export interface IncomeBreakdown {
   // Working racks not under contract: scaled by fill and brownout efficiency.
@@ -23,7 +21,7 @@ export function incomeBreakdown(state: GameState): IncomeBreakdown {
   const efficiency = powerEfficiency(state);
   const allocation = allocateRacks(state);
   const walkIn = allocation.walkIn.reduce(
-    (sum, b) => sum + buildingDef(b.kind).incomePerTick * rackFill(state, b) * efficiency,
+    (sum, b) => sum + buildingStats(b).income * rackFill(state, b) * efficiency,
     0,
   );
   return { walkIn, contracts: contractIncomePerTick(state, allocation, efficiency), allocation, efficiency };
@@ -36,7 +34,7 @@ export function incomePerTick(state: GameState): number {
 
 // Rent plus upkeep for every building, working or not.
 export function costsPerTick(state: GameState): number {
-  return state.buildings.reduce<number>((sum, b) => sum + buildingDef(b.kind).upkeepPerTick, E.rentPerTick);
+  return state.buildings.reduce<number>((sum, b) => sum + buildingStats(b).upkeep, E.rentPerTick);
 }
 
 export function netIncomePerTick(state: GameState): number {

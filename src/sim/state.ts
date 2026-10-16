@@ -12,6 +12,8 @@ export interface Building {
   status: BuildingStatus;
   // Tick at which a repairing rack comes back online.
   repairDoneTick: number | null;
+  // Upgrade level, 0 (as built) to CONFIG.upgrades.maxLevel.
+  upgrade: number;
 }
 
 // Running totals used by goals, achievements and XP rules.
@@ -32,6 +34,7 @@ export interface Stats {
   // Completed with 100% uptime.
   perfectContracts: number;
   contractIncome: number;
+  upgrades: number;
 }
 
 // What a customer is offering. Rolled once when the offer is made, then
@@ -110,6 +113,7 @@ export function createProgress(): Progress {
       contractsFailed: 0,
       perfectContracts: 0,
       contractIncome: 0,
+      upgrades: 0,
     },
   };
 }

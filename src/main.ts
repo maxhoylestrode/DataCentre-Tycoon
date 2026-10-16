@@ -1,6 +1,14 @@
 import { CONFIG } from './config';
 import { advanceClock, createClock } from './sim/clock';
-import { cancelContract, setSpeed, signContract, togglePause } from './sim/commands';
+import {
+  cancelContract,
+  repairRack,
+  sellBuilding,
+  setSpeed,
+  signContract,
+  togglePause,
+  upgradeBuilding,
+} from './sim/commands';
 import { createInitialState, type GameState } from './sim/state';
 import { CameraRig } from './render/camera';
 import { createGridLines, HoverHighlight, type Tile, TilePicker } from './render/grid';
@@ -12,6 +20,7 @@ import { applyTool, previewTool, type Tool } from './input/tools';
 import { exportSaveFile, loadGame, loadSettings, readSaveFile, saveGame, saveSettings } from './io/storage';
 import { isUnlocked, totalXpForLevel } from './sim/progression';
 import { Announcer } from './ui/announcer';
+import { BuildingPanel } from './ui/buildingPanel';
 import { ContractsPanel } from './ui/contracts';
 import { GoalsPanel } from './ui/goals';
 import { Hud } from './ui/hud';
@@ -33,9 +42,11 @@ const rig = new CameraRig(container.clientWidth / container.clientHeight, state.
 const picker = new TilePicker(rig.camera, renderer.domElement, state.width, state.height);
 
 const hover = new HoverHighlight(state.width, state.height);
+// Marks the building whose panel is open.
+const selection = new HoverHighlight(state.width, state.height);
 const heat = new HeatOverlay(state.width, state.height);
 const buildings = new BuildingLayer();
-scene.add(createGridLines(state.width, state.height), heat.mesh, hover.mesh, buildings.group);
+scene.add(createGridLines(state.width, state.height), heat.mesh, selection.mesh, hover.mesh, buildings.group);
 
 // UI state: lives here, not in the sim.
 let tool: Tool = 'rack_basic';
@@ -58,6 +69,16 @@ const contracts = new ContractsPanel(document.body, {
 const toggleContracts = (): void => {
   if (isUnlocked(state, 'contract_board')) contracts.toggle();
 };
+// The panel works with building ids; commands take tile coordinates.
+const withBuilding = (id: number, run: (x: number, y: number) => void): void => {
+  const b = state.buildings.find((x) => x.id === id);
+  if (b) run(b.x, b.y);
+};
+const buildingPanel = new BuildingPanel(document.body, {
+  onUpgrade: (id) => withBuilding(id, (x, y) => upgradeBuilding(state, x, y)),
+  onSell: (id) => withBuilding(id, (x, y) => sellBuilding(state, x, y)),
+  onRepair: (id) => withBuilding(id, (x, y) => repairRack(state, x, y)),
+});
 
 const startNewGame = (): void => {
   state = newGame();
@@ -66,6 +87,7 @@ const startNewGame = (): void => {
   tool = 'rack_basic';
   heat.visible = false;
   contracts.toggle(false);
+  buildingPanel.close();
   announcer.reset(state);
   persist();
 };
@@ -136,7 +158,11 @@ const updateInput = attachInput(renderer.domElement, rig, {
   onHoverEnd: () => (hoveredTile = null),
   onClick: (cx, cy) => {
     const tile = picker.pick(cx, cy);
-    if (tile) applyTool(state, tool, tile.x, tile.y);
+    if (!tile) return;
+    const action = applyTool(state, tool, tile.x, tile.y);
+    const clicked = state.buildings.find((b) => b.x === tile.x && b.y === tile.y);
+    if (action === 'inspect' && clicked) buildingPanel.show(clicked.id);
+    else if (action !== 'repair') buildingPanel.close();
   },
   onTogglePause: () => togglePause(state),
   onSetSpeed: (speed) => setSpeed(state, speed),
@@ -180,6 +206,8 @@ function frame(now: number): void {
   toolbar.update(state, tool, heat.visible, contracts.open);
   goals.update(state);
   contracts.update(state);
+  const selected = buildingPanel.update(state);
+  selection.set(selected ? { x: selected.x, y: selected.y } : null, 'inspect');
   announcer.update(state);
   menu.update();
   renderer.render(scene, rig.camera);

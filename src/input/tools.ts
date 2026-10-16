@@ -8,7 +8,8 @@ import { isUnlocked, unlockFor } from '../sim/progression';
 import { categoryOf, type GameState, getBuildingAt } from '../sim/state';
 
 export type Tool = BuildingKind | 'sell';
-export type ToolAction = 'place' | 'sell' | 'repair' | 'blocked';
+// inspect: clicking opens the building panel (stats, upgrade, sell).
+export type ToolAction = 'place' | 'sell' | 'repair' | 'inspect' | 'blocked';
 
 // Buildings added later without a hotkey are still selectable from the toolbar.
 export const TOOL_HOTKEYS: Partial<Record<Tool, string>> = {
@@ -42,8 +43,9 @@ export function previewTool(state: GameState, tool: Tool, x: number, y: number):
       if (state.cash < cost) return { action: 'blocked', text: `Can't afford repair (${money(cost)})` };
       return { action: 'repair', text: `Repair rack: ${money(cost)}, offline ${hours}h` };
     }
-    if (building.status === 'repairing') return { action: 'blocked', text: 'Under repair' };
-    return { action: 'blocked', text: `${buildingDef(building.kind).name} already here` };
+    const level = building.upgrade > 0 ? ` (level ${building.upgrade})` : '';
+    const status = building.status === 'repairing' ? ', under repair' : '';
+    return { action: 'inspect', text: `${buildingDef(building.kind).name}${level}${status}: click for details` };
   }
 
   const def = buildingDef(tool);
@@ -54,10 +56,12 @@ export function previewTool(state: GameState, tool: Tool, x: number, y: number):
   return { action: 'place', text: `Build ${def.name}: ${money(def.cost)}` };
 }
 
-export function applyTool(state: GameState, tool: Tool, x: number, y: number): void {
+// Returns what the click did, so the caller can open the building panel on 'inspect'.
+export function applyTool(state: GameState, tool: Tool, x: number, y: number): ToolAction | null {
   const preview = previewTool(state, tool, x, y);
-  if (!preview) return;
+  if (!preview) return null;
   if (preview.action === 'place' && tool !== 'sell') placeBuilding(state, tool, x, y);
   else if (preview.action === 'sell') sellBuilding(state, x, y);
   else if (preview.action === 'repair') repairRack(state, x, y);
+  return preview.action;
 }

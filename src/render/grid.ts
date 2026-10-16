@@ -39,6 +39,7 @@ const HOVER_COLOURS: Record<ToolAction, number> = {
   place: 0x4cc38a,
   sell: 0xe0565b,
   repair: 0x4f9cf0,
+  inspect: 0xb28cff,
   blocked: 0x7d838c,
 };
 

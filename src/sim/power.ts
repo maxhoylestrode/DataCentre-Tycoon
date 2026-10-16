@@ -1,13 +1,14 @@
-import { buildingDef, CONFIG } from '../config';
+import { CONFIG } from '../config';
+import { buildingStats } from './buildings';
 import { type GameState, isRunning } from './state';
 
 export function powerSupply(state: GameState): number {
-  return state.buildings.reduce<number>((sum, b) => sum + buildingDef(b.kind).powerSupply, CONFIG.power.baseSupply);
+  return state.buildings.reduce<number>((sum, b) => sum + buildingStats(b).powerSupply, CONFIG.power.baseSupply);
 }
 
 // What everything that is switched on wants to draw. Failed and repairing racks draw nothing.
 export function powerDraw(state: GameState): number {
-  return state.buildings.reduce((sum, b) => sum + (isRunning(b) ? buildingDef(b.kind).powerDraw : 0), 0);
+  return state.buildings.reduce((sum, b) => sum + (isRunning(b) ? buildingStats(b).powerDraw : 0), 0);
 }
 
 // Brownout: when draw exceeds supply, everything runs at supply / draw.
