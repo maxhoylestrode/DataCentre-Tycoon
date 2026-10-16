@@ -176,7 +176,8 @@ I will keep adding progression after reaching the top, so adding content must ne
 
 ## Hosting and deployment
 
-- The frontend is a static Vite build. Deploy it to Cloudflare Pages (or Vercel) from a GitHub repo, build command `npm run build`, output dir `dist`.
+- The frontend is a static Vite build, deployed to **GitHub Pages** by `.github/workflows/deploy.yml` on every push to `main` (it runs the tests first, so a failing test blocks the deploy).
+- Repo: https://github.com/maxhoylestrode/DataCentre-Tycoon. Live URL: https://maxhoylestrode.github.io/DataCentre-Tycoon/
 - Deploy right after Milestone 1 and keep it deployed, so I can play on my phone and catch build problems early.
 - Pick the permanent URL early. Set Vite's `base` correctly if not hosted at a domain root.
 
@@ -231,6 +232,7 @@ Done when: I can create an account, play on one device, log in on another and co
   - `racks` became `buildings` with a `kind` (rack, power or cooling), with every building's numbers in `CONFIG.buildings`.
   - Click-to-toggle was replaced by tools (R/P/C/X). Clicking a failed rack with a build tool repairs it. Tool logic is in `src/input/tools.ts`.
   - Heat numbers were tuned with a throwaway scenario script. The heat balance tests lock in that a lone rack stays cool, an uncooled 3x3 block fails within a day, and two cooling units save it.
+- 2026-10-16: Hosting is GitHub Pages instead of Cloudflare Pages/Vercel (user's choice). Vite `base: './'` already works under the `/DataCentre-Tycoon/` subpath. Commits use the GitHub noreply email so the real address stays out of public history.
 - 2026-10-16: Built Milestones 5 (saves) and 4 (progression) together, saves first. Both confirmed. Saves went first so that progression state is persisted from the start and the v1 → v2 save migration gets a real test.
   - **Building ids are now permanent**: `rack_basic`, `power_basic`, `cooling_fan`. Each has a `category` (rack, power or cooling) that decides its behaviour, and its own income and cooling numbers in `CONFIG.buildings`, so a new rack type is a pure data addition.
   - **Saves**: `src/sim/save.ts` (pure, versioned, migration chain, unknown ids dropped, invalid fields fall back to defaults). `src/io/storage.ts` handles localStorage and file export/import; a save that fails to load is copied to a `.backup` key before anything else happens. Autosave every 30s, on tab hide and on page close. The ⚙ menu has Save now, Export, Import (with confirmation), an autosave toggle and New game (click twice). Importing reloads the page so the room is rebuilt.
