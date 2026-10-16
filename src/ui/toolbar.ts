@@ -3,6 +3,7 @@ import { type Tool, TOOL_HOTKEYS, toolCost, toolName } from '../input/tools';
 import { buildingStats } from '../sim/buildings';
 import { isUnlocked, unlockFor } from '../sim/progression';
 import type { GameState } from '../sim/state';
+import { kw } from './format';
 import { type GroupIcon, ICONS, itemIcon } from './icons';
 
 export interface ToolbarHandlers {
@@ -54,9 +55,9 @@ function stat(tool: Tool): string {
     id: 0, kind: tool, x: 0, y: 0, builtAtTick: 0, status: 'ok', repairDoneTick: null, upgrade: 0, parts: {},
   });
   switch (def.category) {
-    case 'rack': return `£${s.income.toFixed(1)}/min · ${s.powerDraw.toFixed(0)} kW`;
-    case 'power': return `+${s.powerSupply} kW`;
-    case 'cooling': return `${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} area · ${s.powerDraw} kW`;
+    case 'rack': return `£${s.income.toFixed(1)}/min · ${kw(s.powerDraw)}`;
+    case 'power': return `+${kw(s.powerSupply)}`;
+    case 'cooling': return `${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} area · ${kw(s.powerDraw)}`;
     case 'chiller': return `Feeds ${def.chillerCapacity} vents · ${def.chillerRange} tiles`;
     case 'decor': return `+${s.prestige} prestige`;
   }

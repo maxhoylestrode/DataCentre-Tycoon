@@ -16,6 +16,7 @@ import { repairCost } from '../sim/economy';
 import { feedVents } from '../sim/floor';
 import { isUnlocked, levelOf, unlockFor, upgradeCap } from '../sim/progression';
 import { type Building, categoryOf, type GameState, tempAt } from '../sim/state';
+import { kw, num } from './format';
 
 export interface BuildingPanelHandlers {
   onUpgrade(buildingId: number): void;
@@ -36,16 +37,16 @@ interface StatRow {
 const ROWS: Record<string, StatRow[]> = {
   rack: [
     { label: 'Income at full', value: (s) => perMin(s.income) },
-    { label: 'Power draw', value: (s) => `${s.powerDraw.toFixed(1)} kW` },
-    { label: 'Heat output', value: (s) => s.heat.toFixed(2) },
+    { label: 'Power draw', value: (s) => kw(s.powerDraw) },
+    { label: 'Heat output', value: (s) => num(s.heat, 2) },
   ],
-  power: [{ label: 'Power supply', value: (s) => `${s.powerSupply.toFixed(1)} kW` }],
+  power: [{ label: 'Power supply', value: (s) => kw(s.powerSupply) }],
   cooling: [
-    { label: 'Cooling power', value: (s) => `${(s.coolingStrength * 100).toFixed(1)}` },
+    { label: 'Cooling power', value: (s) => num(s.coolingStrength * 100) },
     { label: 'Area', value: (s) => `${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} tiles` },
-    { label: 'Power draw', value: (s) => `${s.powerDraw.toFixed(1)} kW` },
+    { label: 'Power draw', value: (s) => kw(s.powerDraw) },
   ],
-  chiller: [{ label: 'Power draw', value: (s) => `${s.powerDraw.toFixed(1)} kW` }],
+  chiller: [{ label: 'Power draw', value: (s) => kw(s.powerDraw) }],
   decor: [{ label: 'Prestige', value: (s) => `+${s.prestige}` }],
 };
 

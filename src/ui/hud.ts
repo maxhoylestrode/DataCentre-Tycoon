@@ -4,6 +4,7 @@ import { committedRacks } from '../sim/contracts';
 import { costsPerTick, incomePerTick, repairCost } from '../sim/economy';
 import { powerDraw, powerEfficiency, powerSupply } from '../sim/power';
 import { prestigeOf } from '../sim/prestige';
+import { kw, num } from './format';
 import { levelInfo, tierFor } from '../sim/progression';
 import { type GameState, racksOf, tempAt } from '../sim/state';
 import type { Tile } from '../render/grid';
@@ -140,7 +141,7 @@ export class Hud {
     const text = [
       state.progress.xp,
       prestige,
-      money(state.cash), income.toFixed(2), costs.toFixed(2), state.tick, supply, draw,
+      money(state.cash), income.toFixed(2), costs.toFixed(2), state.tick, num(supply), num(draw),
       temp?.toFixed(1), preview?.text, state.paused, state.speed, state.bankrupt, warningList.join(),
     ].join('|');
     if (text === this.lastText) return;
@@ -161,7 +162,7 @@ export class Hud {
     this.prestige.textContent = prestige > 0 ? `Prestige ${prestige}` : '';
 
     const load = supply > 0 ? draw / supply : 1;
-    this.powerText.innerHTML = `Power: ${draw} / ${supply} kW`;
+    this.powerText.innerHTML = `Power: ${num(draw)} / ${kw(supply)}`;
     this.powerFill.style.width = `${Math.min(100, load * 100)}%`;
     this.powerFill.className = `fill ${load > 1 ? 'over' : load > 0.85 ? 'high' : ''}`;
 
