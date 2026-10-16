@@ -4,6 +4,7 @@
 
 import { CONFIG } from '../config';
 import { buildingStats } from './buildings';
+import { feedVents } from './floor';
 import { categoryOf, type GameState, isRunning, tempAt } from './state';
 
 const H = CONFIG.heat;
@@ -29,6 +30,10 @@ export function stepHeat(state: GameState, efficiency: number): void {
       }
     }
   }
+
+  // Fed floor vents cool their own tile; the chillers feeding them slow in a brownout.
+  const ventStrength = CONFIG.floors.floor_vent.coolingStrength * efficiency;
+  for (const i of feedVents(state).fed) cooling[i]! += ventStrength;
 
   const next = new Array<number>(w * h);
   for (let y = 0; y < h; y++) {

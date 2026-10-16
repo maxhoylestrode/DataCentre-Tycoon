@@ -1,4 +1,12 @@
-import { type BuildingCategory, type BuildingKind, buildingDef, CONFIG, type Speed } from '../config';
+import {
+  type BuildingCategory,
+  type BuildingKind,
+  buildingDef,
+  CONFIG,
+  type FloorKind,
+  type PartSlot,
+  type Speed,
+} from '../config';
 
 // Only racks use 'failed' and 'repairing'; other buildings stay 'ok'.
 export type BuildingStatus = 'ok' | 'failed' | 'repairing';
@@ -12,8 +20,36 @@ export interface Building {
   status: BuildingStatus;
   // Tick at which a repairing rack comes back online.
   repairDoneTick: number | null;
-  // Upgrade level, 0 (as built) to CONFIG.upgrades.maxLevel.
+  // Upgrade level, 0 (as built) to CONFIG.upgrades.maxLevel. Racks stay at 0
+  // and upgrade through parts instead.
   upgrade: number;
+  // Racks only: installed part id per slot. A missing slot means the stock part.
+  parts: Partial<Record<PartSlot, string>>;
+}
+
+// Something painted on the floor layer; it can sit under a building.
+export interface FloorTile {
+  kind: FloorKind;
+  x: number;
+  y: number;
+}
+
+export interface StyleState {
+  // Active room style id per slot (content/styles.ts).
+  floor: string;
+  wall: string;
+  lighting: string;
+  // Every style bought, including the free defaults.
+  owned: string[];
+}
+
+export function createStyleState(): StyleState {
+  return {
+    floor: 'floor_standard',
+    wall: 'wall_grey',
+    lighting: 'light_standard',
+    owned: ['floor_standard', 'wall_grey', 'light_standard'],
+  };
 }
 
 // Running totals used by goals, achievements and XP rules.
@@ -123,6 +159,8 @@ export interface GameState {
   height: number;
   buildings: Building[];
   nextBuildingId: number;
+  floor: FloorTile[];
+  style: StyleState;
   // Temperature of every tile in °C, indexed y * width + x.
   temps: number[];
   cash: number;
@@ -147,6 +185,8 @@ export function createInitialState(
     height,
     buildings: [],
     nextBuildingId: 1,
+    floor: [],
+    style: createStyleState(),
     temps: new Array<number>(width * height).fill(CONFIG.heat.ambient),
     cash: CONFIG.economy.startingCash,
     tick: 0,
@@ -174,6 +214,10 @@ export function getBuildingAt(state: GameState, x: number, y: number): Building 
 
 export function categoryOf(building: Building): BuildingCategory {
   return buildingDef(building.kind).category;
+}
+
+export function floorAt(state: GameState, x: number, y: number): FloorTile | undefined {
+  return state.floor.find((f) => f.x === x && f.y === y);
 }
 
 export function racksOf(state: GameState): Building[] {

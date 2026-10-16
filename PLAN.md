@@ -131,7 +131,17 @@ Unlocks at level 6 (the "Small hosting company" tier) as the `contract_board` me
 - **Contracts** now take the racks that would earn least on walk-in, so upgraded racks keep their walk-in income.
 - **Models** show a coloured trim (grey → gold) and one pip per level. Save v4.
 
-### Milestone 7: Hardware, cooling types and looks (draft, confirm decisions before starting)
+### Milestone 7: Hardware, cooling types and looks (built 2026-10-16, awaiting confirmation)
+**Built:**
+- **5 rack models:** Entry (L1), Performance (L8), Enterprise (L14), GPU compute (L22), Hyperscale pod (L31), each with its own look.
+- **Part slots:** CPU, RAM, storage, network, cooling, plus GPU on GPU racks, filled from a 40-part catalogue of real-brand parts (`sim/content/parts.ts`). Part numbers are "adds over stock", which kept the entry rack's balance unchanged. Parts replace rack upgrade levels; power and cooling units keep their levels. v4 rack levels convert to equivalent parts in save v5.
+- **Liquid cooling** is the rack cooling slot: rear-door (-35% heat, L12), direct liquid (-60%, L18), immersion (-85%, L30). A Hyperscale pod overheats on air and is fine with immersion (tested).
+- **In-row cooler** (L9) and **chiller + floor vents** (L11). Vents are a second floor layer that can sit under racks; a chiller feeds up to 12 within 4 tiles.
+- **Prestige** from 6 decorations and room styles (floor, walls, lighting). Each point adds 0.5% contract pay (cap 30%) and +1 daily offer per 25 points (cap +2).
+- **UI:** grouped build menu (Racks / Power / Cooling / Decor / Sell), rack part slots in the building panel, Style panel (L), prestige in the HUD.
+- **Not built:** hot/cold aisle containment (dropped to keep scope sane; revisit later).
+
+**Original draft (kept for reference):**
 The player's ideas: better racks unlocked by level, racks with real specs whose individual parts you upgrade, different cooling types such as floor cooling, and decoration to make the datacentre look good.
 
 **Better rack models** (`CONFIG.buildings`, each with an unlock level), getting more expensive and more power-hungry:
@@ -298,3 +308,4 @@ Done when: I can create an account, play on one device, log in on another and co
   - **Save v3** adds contracts and the RNG seed. A v2 save migrates with no contracts and a seed taken from its tick count.
   - **Dev helper**: `dct.level(n)` and `dct.cash(n)` in the browser console, only on the local dev server.
 - 2026-10-16: Building upgrades added (user request). User chose a trade-off for racks (more power and heat), a cap that rises with player level, and **real brand names** for the planned rack components. Hardware, cooling types and looks became Milestone 7; staff and incidents moved to Milestone 8. Panel buttons use `pointerdown`, because live re-renders would swallow `click` events.
+- 2026-10-16: Milestone 7 decisions (user): parts replace rack levels, decor gives prestige that improves contracts, underfloor cooling is a floor layer fed by chillers, everything delivered at once. Rack parts use real brand names with a trademark note in the rack panel. Save v5.

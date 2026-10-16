@@ -2,7 +2,9 @@
 // entry fails here instead of breaking the game at runtime.
 
 import { describe, expect, it } from 'vitest';
-import { BUILDING_KINDS, isBuildingKind } from '../src/config';
+import { BUILDING_KINDS, buildingDef, FLOOR_KINDS, isBuildingKind, isFloorKind, type PartSlot } from '../src/config';
+import { PARTS } from '../src/sim/content/parts';
+import { ROOM_STYLES } from '../src/sim/content/styles';
 import { validateCondition } from '../src/sim/conditions';
 import { ACHIEVEMENTS } from '../src/sim/content/achievements';
 import { CUSTOMER_NAME_PREFIXES, CUSTOMER_TYPES } from '../src/sim/content/customers';
@@ -58,13 +60,15 @@ describe('content', () => {
     it('point at things that exist', () => {
       for (const unlock of UNLOCKS) {
         if (unlock.type === 'building') expect(isBuildingKind(unlock.id), unlock.id).toBe(true);
+        else if (unlock.type === 'floor') expect(isFloorKind(unlock.id), unlock.id).toBe(true);
         else expect(MECHANICS as readonly string[], unlock.id).toContain(unlock.id);
       }
     });
 
-    it('cover every building and mechanic, so nothing is unreachable', () => {
+    it('cover every building, floor and mechanic, so nothing is unreachable', () => {
       const ids = UNLOCKS.map((u) => u.id);
       for (const kind of BUILDING_KINDS) expect(ids, kind).toContain(kind);
+      for (const kind of FLOOR_KINDS) expect(ids, kind).toContain(kind);
       for (const mechanic of MECHANICS) expect(ids, mechanic).toContain(mechanic);
     });
 
@@ -116,6 +120,70 @@ describe('content', () => {
         }
       }
       expect(GOALS.filter((g) => !done.has(g.id)).map((g) => g.id)).toEqual([]);
+    });
+  });
+
+  describe('parts', () => {
+    const slots: PartSlot[] = ['cpu', 'ram', 'storage', 'network', 'gpu', 'cooling'];
+
+    it('have unique well-formed ids, a brand, model and specs', () => {
+      expect(duplicates(PARTS.map((p) => p.id))).toEqual([]);
+      for (const p of PARTS) {
+        expect(p.id, p.id).toMatch(ID_PATTERN);
+        expect(p.brand && p.model && p.specs, p.id).toBeTruthy();
+        expect(Number.isFinite(p.income) && Number.isFinite(p.powerDraw) && Number.isFinite(p.heat), p.id).toBe(true);
+        expect(p.cost >= 0 && Number.isInteger(p.level) && p.level >= 1, p.id).toBe(true);
+        if (p.heatReduction !== undefined) expect(p.heatReduction >= 0 && p.heatReduction < 1, p.id).toBe(true);
+      }
+    });
+
+    it('each slot starts with a free stock part that adds nothing', () => {
+      for (const slot of slots) {
+        const stock = PARTS.find((p) => p.slot === slot);
+        expect(stock, slot).toBeDefined();
+        expect(stock!.cost, slot).toBe(0);
+        expect([stock!.income, stock!.powerDraw, stock!.heat, stock!.heatReduction ?? 0], slot).toEqual([0, 0, 0, 0]);
+      }
+    });
+
+    it('each slot path gets better, and never unlocks a step earlier than the one before', () => {
+      for (const slot of slots) {
+        const path = PARTS.filter((p) => p.slot === slot);
+        for (let i = 1; i < path.length; i++) {
+          const [prev, cur] = [path[i - 1]!, path[i]!];
+          expect(cur.level >= prev.level, cur.id).toBe(true);
+          expect(cur.cost > prev.cost, cur.id).toBe(true);
+          const better = cur.income > prev.income || (cur.heatReduction ?? 0) > (prev.heatReduction ?? 0);
+          expect(better, cur.id).toBe(true);
+        }
+      }
+    });
+
+    it('every rack’s slots have parts, and stock parts are available when the rack unlocks', () => {
+      for (const kind of BUILDING_KINDS) {
+        const def = buildingDef(kind);
+        const rackLevel = UNLOCKS.find((u) => u.id === kind)!.level;
+        for (const slot of def.slots ?? []) {
+          const stock = PARTS.find((p) => p.slot === slot);
+          expect(stock, `${kind}.${slot}`).toBeDefined();
+          expect(stock!.level <= rackLevel, `${kind}.${slot}`).toBe(true);
+        }
+      }
+    });
+  });
+
+  describe('room styles', () => {
+    it('have unique ids, and each slot has a free level-1 default first', () => {
+      expect(duplicates(ROOM_STYLES.map((s) => s.id))).toEqual([]);
+      for (const slot of ['floor', 'wall', 'lighting'] as const) {
+        const first = ROOM_STYLES.find((s) => s.slot === slot)!;
+        expect(first, slot).toBeDefined();
+        expect([first.cost, first.level, first.prestige], slot).toEqual([0, 1, 0]);
+      }
+      for (const s of ROOM_STYLES) {
+        expect(s.id, s.id).toMatch(ID_PATTERN);
+        expect(s.cost >= 0 && s.prestige >= 0 && s.level >= 1, s.id).toBe(true);
+      }
     });
   });
 

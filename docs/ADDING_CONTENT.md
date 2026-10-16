@@ -84,6 +84,11 @@ Code that implements the mechanic checks `isUnlocked(state, 'contract_board')`.
 | `contractsFailed` | `min` | at least `min` contracts ended with the promise broken |
 | `activeContracts` | `min` | at least `min` contracts are running right now |
 | `perfectContracts` | `min` | at least `min` contracts were completed at 100% uptime |
+| `upgrades` | `min` | at least `min` upgrades bought (levels and parts) |
+| `highestUpgrade` | `min` | some power/cooling unit is at upgrade level `min` |
+| `prestige` | `min` | prestige is at least `min` |
+| `fedVents` | `min` | at least `min` floor vents are fed by a chiller |
+| `liquidCooledRacks` | `min` | at least `min` racks have a non-stock cooling part |
 
 **Adding a condition type** is engine work, but small: in `src/sim/conditions.ts` add it to the `Condition` union and add one evaluator (a function returning the current value) to `EVALUATORS`. TypeScript won't compile until both are there. Then add a test for it in the `conditions` block of `tests/progression.test.ts`.
 
@@ -99,6 +104,47 @@ Code that implements the mechanic checks `isUnlocked(state, 'contract_board')`.
   condition: { type: 'buildingCount', kind: 'power_basic', min: 3 },
   reward: { xp: 100 },
 },
+```
+
+## Add a rack model
+
+Add it to `CONFIG.buildings` with `category: 'rack'`, then an unlock entry. Its look comes from `RACK_LOOKS` in `src/render/models.ts` and needs an entry in `FACTORIES` there (TypeScript insists).
+
+```ts
+rack_quantum: {
+  name: 'Quantum rack', category: 'rack', cost: 300000, upkeepPerTick: 30, incomePerTick: 2.4,
+  powerDraw: 4, powerSupply: 0, heatPerTick: 0.65, coolingStrength: 0, coolingRadius: 0,
+  upgrade: { output: 0, powerDraw: 0, heat: 0 },
+  partMultiplier: 20, powerFactor: 14, heatFactor: 10,
+  slots: ['cpu', 'ram', 'storage', 'network', 'cooling'],
+},
+```
+
+`incomePerTick / powerDraw / heatPerTick` are one server with stock parts. The rack holds `partMultiplier` servers' worth (income and part prices scale by it); power and heat scale by `powerFactor` / `heatFactor`.
+
+## Add a rack part
+
+`src/sim/content/parts.ts`. Within a slot, parts are an upgrade path **in file order**, and the first part in each slot is the free stock part. Numbers are what the part adds over stock, per server.
+
+```ts
+{ id: 'cpu_epyc_9965', slot: 'cpu', brand: 'AMD', model: 'EPYC 9965', specs: '192 cores, 2.25 GHz',
+  level: 34, cost: 40000, income: 8.6, powerDraw: 2.3, heat: 0.24 },
+```
+
+Insert it at the right place in its slot's path. The content test checks that each step costs more, earns more (or removes more heat) and never unlocks earlier than the step before. Cooling-slot parts use `heatReduction` (0..1) instead of income.
+
+Real product names are fine (names only, never logos); the in-game note covers trademarks.
+
+## Add a decoration
+
+Add it to `CONFIG.buildings` with `category: 'decor'` and a `prestige` value, an unlock entry, and a model in `FACTORIES` (`src/render/models.ts`). It shows up in the Decor menu automatically.
+
+## Add a room style
+
+`src/sim/content/styles.ts`. `slot` is `floor`, `wall` or `lighting`; the first style in each slot is the free default. Lighting styles can set `intensity` and an `accent` glow colour.
+
+```ts
+{ id: 'wall_glass', slot: 'wall', name: 'Glass partition', level: 24, cost: 30000, prestige: 12, color: 0x9fb8c8 },
 ```
 
 ## Add a customer type

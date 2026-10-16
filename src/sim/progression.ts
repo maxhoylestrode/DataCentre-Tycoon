@@ -16,7 +16,7 @@ export { levelInfo, type LevelInfo, totalXpForLevel, xpToNext } from './levels';
 const P = CONFIG.progression;
 
 // Mechanics that exist in code and can be gated by an unlock.
-export const MECHANICS = ['heat_map', 'contract_board', 'upgrades'] as const;
+export const MECHANICS = ['heat_map', 'contract_board', 'upgrades', 'room_styles'] as const;
 
 export function levelOf(state: GameState): number {
   return levelInfo(state.progress.xp).level;

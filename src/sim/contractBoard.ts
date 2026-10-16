@@ -5,6 +5,7 @@ import { CONFIG } from '../config';
 import { CUSTOMER_NAME_PREFIXES, CUSTOMER_TYPES } from './content/customers';
 import type { CustomerType, Range } from './content/types';
 import { isUnlocked, levelOf } from './progression';
+import { prestigeExtraOffers, prestigePayBonus } from './prestige';
 import { pick, randomInt, randomRange } from './rng';
 import { type ContractTerms, dayOf, type GameState } from './state';
 
@@ -33,7 +34,11 @@ function companyName(state: GameState, type: CustomerType): string {
 export function rollOffer(state: GameState, type: CustomerType): ContractTerms {
   const racks = randomInt(state, type.racks[0], type.racks[1]);
   const days = randomInt(state, type.days[0], type.days[1]);
-  const payPerRackPerTick = roundTo(CONFIG.contracts.basePayPerRackPerTick * rollRange(state, type.payMultiplier), 0.01);
+  const prestige = 1 + prestigePayBonus(state);
+  const payPerRackPerTick = roundTo(
+    CONFIG.contracts.basePayPerRackPerTick * rollRange(state, type.payMultiplier) * prestige,
+    0.01,
+  );
   // SLA in 0.5% steps so it reads cleanly (95%, 97.5%...).
   const sla = Math.min(1, roundTo(rollRange(state, type.sla), 0.005));
   const totalPay = racks * days * CONFIG.time.ticksPerDay * payPerRackPerTick;
@@ -63,7 +68,8 @@ export function refreshOffers(state: GameState): void {
 
   const types = availableCustomerTypes(levelOf(state));
   state.contracts.offers = [];
-  for (let i = 0; i < CONFIG.contracts.offersPerDay && types.length > 0; i++) {
+  const count = CONFIG.contracts.offersPerDay + prestigeExtraOffers(state);
+  for (let i = 0; i < count && types.length > 0; i++) {
     state.contracts.offers.push(rollOffer(state, pick(state, types)));
   }
   state.contracts.offersDay = day;

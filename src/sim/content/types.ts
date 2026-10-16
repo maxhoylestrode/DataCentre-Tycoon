@@ -1,7 +1,46 @@
 // Shapes of progression content. The content files next to this one are
 // plain data of these types; the engine that reads them is sim/progression.ts.
 
+import type { PartSlot } from '../../config';
 import type { Condition } from '../conditions';
+
+// A rack component. Each slot's parts form an upgrade path in the order
+// listed; the first part in a slot is the stock part every rack starts with.
+// income / powerDraw / heat are what the part adds over the stock part,
+// per server (multiplied by the rack's partMultiplier / powerFactor /
+// heatFactor). cost is per server too.
+export interface Part {
+  // Stable id, stored in saves. Never rename or reuse one.
+  id: string;
+  slot: PartSlot;
+  brand: string;
+  model: string;
+  // Short human-readable spec line, e.g. "64 cores, 2.45 GHz".
+  specs: string;
+  level: number;
+  cost: number;
+  income: number;
+  powerDraw: number;
+  heat: number;
+  // Cooling slot only: fraction of the rack's heat removed, 0..1.
+  heatReduction?: number;
+}
+
+// Room-wide looks bought from the Style panel. One active per slot.
+export interface RoomStyle {
+  // Stable id, stored in saves.
+  id: string;
+  slot: 'floor' | 'wall' | 'lighting';
+  name: string;
+  level: number;
+  cost: number;
+  prestige: number;
+  // Main colour (floor or wall), or light colour.
+  color: number;
+  // Lighting only: brightness multiplier and an optional accent glow colour.
+  intensity?: number;
+  accent?: number;
+}
 
 export interface Tier {
   // Stable id, never renamed.
@@ -14,9 +53,10 @@ export interface Tier {
 }
 
 export interface Unlock {
-  // For 'building': a key of CONFIG.buildings. For 'mechanic': an id from MECHANICS.
+  // For 'building': a key of CONFIG.buildings. For 'floor': a key of
+  // CONFIG.floors. For 'mechanic': an id from MECHANICS.
   id: string;
-  type: 'building' | 'mechanic';
+  type: 'building' | 'floor' | 'mechanic';
   level: number;
   // Required for mechanics. Buildings use their name from config.
   name?: string;

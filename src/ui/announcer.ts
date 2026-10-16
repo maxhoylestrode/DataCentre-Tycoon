@@ -1,6 +1,8 @@
-import { buildingDef, isBuildingKind } from '../config';
+import { buildingDef, floorDef, isBuildingKind, isFloorKind } from '../config';
 import { ACHIEVEMENTS } from '../sim/content/achievements';
 import { GOALS } from '../sim/content/goals';
+import { PARTS } from '../sim/content/parts';
+import { ROOM_STYLES } from '../sim/content/styles';
 import type { Unlock } from '../sim/content/types';
 import { levelOf, tierFor, unlocksBetween } from '../sim/progression';
 import type { ContractResult, GameState } from '../sim/state';
@@ -9,6 +11,7 @@ import type { Toasts } from './toasts';
 
 function unlockName(unlock: Unlock): string {
   if (unlock.type === 'building' && isBuildingKind(unlock.id)) return buildingDef(unlock.id).name;
+  if (unlock.type === 'floor' && isFloorKind(unlock.id)) return floorDef(unlock.id).name;
   return unlock.name ?? unlock.id;
 }
 
@@ -62,10 +65,16 @@ export class Announcer {
       const tier = tierFor(level);
       const lines = [`<div class="big">Level ${level}!</div>`];
       if (tier.id !== oldTier.id) lines.push(`<div>New tier: <b>${tier.name}</b> &middot; ${tier.description}</div>`);
+      // Parts and room styles carry their own levels.
+      const parts = PARTS.filter((p) => p.level > this.level && p.level <= level && p.cost > 0);
+      const styles = ROOM_STYLES.filter((s) => s.level > this.level && s.level <= level && s.cost > 0);
       if (unlocks.length) {
         lines.push(`<div>Unlocked: ${unlocks.map((u) => `<b>${unlockName(u)}</b>`).join(', ')}</div>`);
         for (const u of unlocks) if (u.description) lines.push(`<div class="muted">${u.description}</div>`);
-      } else {
+      }
+      if (parts.length) lines.push(`<div>New parts: ${parts.map((p) => `${p.brand} ${p.model}`).join(', ')}</div>`);
+      if (styles.length) lines.push(`<div>New styles: ${styles.map((s) => s.name).join(', ')}</div>`);
+      if (!unlocks.length && !parts.length && !styles.length) {
         lines.push('<div class="muted">No new unlocks this level. More coming soon.</div>');
       }
       this.toasts.show(lines.join(''), 'level');

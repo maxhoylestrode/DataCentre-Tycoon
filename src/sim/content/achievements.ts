@@ -53,6 +53,20 @@ export const ACHIEVEMENTS: Achievement[] = [
     reward: { xp: 300 },
   },
   {
+    id: 'showroom',
+    name: 'Showroom',
+    description: 'Reach 60 prestige',
+    condition: { type: 'prestige', min: 60 },
+    reward: { xp: 400 },
+  },
+  {
+    id: 'gpu_farm',
+    name: 'GPU farm',
+    description: 'Run 5 GPU compute racks',
+    condition: { type: 'buildingCount', kind: 'rack_gpu', min: 5 },
+    reward: { xp: 1_000 },
+  },
+  {
     id: 'millionaire',
     name: 'Millionaire',
     description: 'Earn £1,000,000 in total',

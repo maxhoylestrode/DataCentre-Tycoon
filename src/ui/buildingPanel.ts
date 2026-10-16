@@ -1,16 +1,31 @@
-import { buildingDef, CONFIG } from '../config';
-import { type BuildingStats, buildingStats, investedValue, upgradeCost } from '../sim/buildings';
+import { buildingDef, CONFIG, type PartSlot } from '../config';
+import {
+  type BuildingStats,
+  buildingStats,
+  installedPart,
+  investedValue,
+  nextPart,
+  partContribution,
+  partCost,
+  slotsOf,
+  upgradeCost,
+} from '../sim/buildings';
+import { SLOT_NAMES, TRADEMARK_NOTE } from '../sim/content/parts';
+import type { Part } from '../sim/content/types';
 import { repairCost } from '../sim/economy';
-import { isUnlocked, unlockFor, upgradeCap } from '../sim/progression';
+import { feedVents } from '../sim/floor';
+import { isUnlocked, levelOf, unlockFor, upgradeCap } from '../sim/progression';
 import { type Building, categoryOf, type GameState, tempAt } from '../sim/state';
 
 export interface BuildingPanelHandlers {
   onUpgrade(buildingId: number): void;
+  onUpgradePart(buildingId: number, slot: PartSlot): void;
   onSell(buildingId: number): void;
   onRepair(buildingId: number): void;
 }
 
 const money = (n: number): string => `£${Math.round(n).toLocaleString('en-GB')}`;
+const perMin = (n: number): string => `£${n.toFixed(2)}/min`;
 
 interface StatRow {
   label: string;
@@ -20,7 +35,7 @@ interface StatRow {
 // Which numbers matter for each kind of building.
 const ROWS: Record<string, StatRow[]> = {
   rack: [
-    { label: 'Income at full', value: (s) => `£${s.income.toFixed(2)} / min` },
+    { label: 'Income at full', value: (s) => perMin(s.income) },
     { label: 'Power draw', value: (s) => `${s.powerDraw.toFixed(1)} kW` },
     { label: 'Heat output', value: (s) => s.heat.toFixed(2) },
   ],
@@ -30,10 +45,12 @@ const ROWS: Record<string, StatRow[]> = {
     { label: 'Area', value: (s) => `${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} tiles` },
     { label: 'Power draw', value: (s) => `${s.powerDraw.toFixed(1)} kW` },
   ],
+  chiller: [{ label: 'Power draw', value: (s) => `${s.powerDraw.toFixed(1)} kW` }],
+  decor: [{ label: 'Prestige', value: (s) => `+${s.prestige}` }],
 };
 
-// Details for the building you clicked: stats now and after the next
-// upgrade, with Upgrade, Repair and Sell buttons.
+// Details for the building you clicked: stats, upgrades (part slots for
+// racks, levels for power and cooling), Repair and Sell.
 export class BuildingPanel {
   private readonly root: HTMLElement;
   private readonly body: HTMLElement;
@@ -58,6 +75,7 @@ export class BuildingPanel {
       const act = button.dataset.act;
       if (act === 'close') this.close();
       else if (act === 'upgrade') handlers.onUpgrade(id);
+      else if (act === 'part') handlers.onUpgradePart(id, button.dataset.slot as PartSlot);
       else if (act === 'repair') handlers.onRepair(id);
       else if (act === 'sell') {
         if (this.confirmSell) {
@@ -68,12 +86,7 @@ export class BuildingPanel {
         }
       }
       this.lastHtml = '';
-      button.blur();
     });
-  }
-
-  get selectedId(): number | null {
-    return this.buildingId;
   }
 
   show(buildingId: number): void {
@@ -106,13 +119,14 @@ export class BuildingPanel {
 
   private render(state: GameState, b: Building): string {
     const def = buildingDef(b.kind);
+    const category = categoryOf(b);
+    const isRack = slotsOf(b).length > 0;
+    const levelled = !isRack && def.upgrade.output > 0;
     const max = CONFIG.upgrades.maxLevel;
-    const cap = upgradeCap(state);
-    const atMax = b.upgrade >= max;
     const now = buildingStats(b);
-    const next = atMax ? null : buildingStats(b, b.upgrade + 1);
+    const next = levelled && b.upgrade < max ? buildingStats(b, b.upgrade + 1) : null;
 
-    const rows = (ROWS[categoryOf(b)] ?? [])
+    const rows = (ROWS[category] ?? [])
       .map((r) => {
         const after = next && r.value(next) !== r.value(now) ? ` <span class="up">→ ${r.value(next)}</span>` : '';
         return `<tr><td>${r.label}</td><td>${r.value(now)}${after}</td></tr>`;
@@ -124,14 +138,73 @@ export class BuildingPanel {
       : b.status === 'repairing' ? '<span class="muted">Under repair</span>'
       : '<span class="good">Working</span>';
 
+    const levelLine = levelled
+      ? ` <span class="muted">level ${b.upgrade} / ${max}</span>
+         <div class="pips">${Array.from({ length: max }, (_, i) => `<span class="${i < b.upgrade ? 'on' : ''}"></span>`).join('')}</div>`
+      : '';
+
+    const extra = category === 'chiller' ? this.chillerInfo(state, b) : '';
+
     return `
-      <h2>${def.name} <span class="muted">level ${b.upgrade} / ${max}</span></h2>
-      <div class="pips">${Array.from({ length: max }, (_, i) => `<span class="${i < b.upgrade ? 'on' : ''}"></span>`).join('')}</div>
+      <h2>${def.name}${levelLine}</h2>
       <div>${statusText} &middot; <span class="muted">${tempAt(state, b.x, b.y).toFixed(1)}°C</span></div>
       <table>${rows}</table>
-      ${this.upgradeButton(state, b, cap, atMax)}
+      ${extra}
+      ${isRack ? this.partSlots(state, b) : ''}
+      ${levelled ? this.upgradeButton(state, b, upgradeCap(state), b.upgrade >= max) : ''}
       ${b.status === 'failed' ? `<button data-act="repair" ${state.cash < repairCost(b) ? 'disabled' : ''}>Repair (${money(repairCost(b))})</button>` : ''}
-      <button data-act="sell" class="danger">${this.confirmSell ? `Click again to sell for ${money(investedValue(b) * CONFIG.economy.sellRefund)}` : 'Sell'}</button>`;
+      <button data-act="sell" class="danger">${this.confirmSell ? `Click again to sell for ${money(investedValue(b) * CONFIG.economy.sellRefund)}` : 'Sell'}</button>
+      ${isRack ? `<div class="fine">${TRADEMARK_NOTE}</div>` : ''}`;
+  }
+
+  private chillerInfo(state: GameState, b: Building): string {
+    const load = feedVents(state).load.get(b.id) ?? 0;
+    const def = buildingDef(b.kind);
+    return `<div class="muted">Feeding ${load} / ${def.chillerCapacity} floor vents within ${def.chillerRange} tiles.</div>`;
+  }
+
+  private partSlots(state: GameState, b: Building): string {
+    const unlocked = isUnlocked(state, 'upgrades');
+    const level = levelOf(state);
+    const rows = slotsOf(b).map((slot) => {
+      const part = installedPart(b, slot);
+      const upcoming = nextPart(b, slot);
+      return `
+        <div class="slot">
+          <div class="slot-head"><b>${SLOT_NAMES[slot]}</b> <span class="muted">${part ? this.partLabel(part) : ''}</span></div>
+          ${part ? `<div class="muted">${part.specs}${this.partEffect(b, part)}</div>` : ''}
+          ${this.partButton(state, b, slot, upcoming, unlocked, level)}
+        </div>`;
+    });
+    return `<div class="slots">${rows.join('')}</div>`;
+  }
+
+  private partLabel(part: Part): string {
+    return `${part.brand} ${part.model}`;
+  }
+
+  private partEffect(b: Building, part: Part): string {
+    if (part.heatReduction) return '';
+    const { income } = partContribution(b, part);
+    return income > 0 ? ` &middot; <span class="good">+${perMin(income)}</span>` : '';
+  }
+
+  private partButton(state: GameState, b: Building, slot: PartSlot, part: Part | null, unlocked: boolean, level: number): string {
+    if (!part) return '<div class="muted">Best part installed.</div>';
+    const name = this.partLabel(part);
+    if (!unlocked) return `<div class="muted">Upgrades unlock at level ${unlockFor('upgrades')?.level ?? '?'}.</div>`;
+    if (part.level > level) return `<div class="muted">Next: ${name} at level ${part.level}</div>`;
+
+    const cost = partCost(b, part);
+    const current = installedPart(b, slot);
+    const gain = part.heatReduction
+      ? `-${Math.round(part.heatReduction * 100)}% rack heat`
+      : `+${perMin(partContribution(b, part).income - (current ? partContribution(b, current).income : 0))}`;
+    const reason = b.status !== 'ok' ? 'Repair it first.' : state.cash < cost ? `Need ${money(cost)}.` : '';
+    return `
+      <button data-act="part" data-slot="${slot}" class="primary" ${reason ? 'disabled' : ''}>
+        → ${name} (${part.specs}) <b>${gain}</b> &middot; ${money(cost)}
+      </button>`;
   }
 
   private upgradeButton(state: GameState, b: Building, cap: number, atMax: boolean): string {

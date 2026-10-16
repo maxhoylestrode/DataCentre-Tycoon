@@ -74,6 +74,7 @@ describe('save and load', () => {
       status: 'ok',
       repairDoneTick: null,
       upgrade: 0,
+      parts: {},
     });
     // No copies of content definitions (names, costs) in the save.
     for (const b of save.data.buildings) {
@@ -225,8 +226,44 @@ describe('migrations', () => {
 
   it('migrates older buildings to upgrade level 0, and clamps levels above the max', () => {
     expect(load(V1_SAVE).buildings.every((b) => b.upgrade === 0)).toBe(true);
-    const text = tamper(playedGame(), (save) => (save.data.buildings[0].upgrade = 99));
-    expect(load(text).buildings[0]!.upgrade).toBe(CONFIG.upgrades.maxLevel);
+    // Building 3 in playedGame is the power unit.
+    const text = tamper(playedGame(), (save) => (save.data.buildings[2].upgrade = 99));
+    expect(load(text).buildings[2]!.upgrade).toBe(CONFIG.upgrades.maxLevel);
+  });
+
+  it('converts v4 rack upgrade levels into equivalent parts', () => {
+    const v4 = JSON.parse(V1_SAVE);
+    v4.version = 4;
+    v4.data.buildings[0].upgrade = 10;
+    v4.data.buildings[3].upgrade = 3; // power unit keeps its level
+    const state = load(JSON.stringify(v4));
+    const rack = state.buildings[0]!;
+    expect(rack.upgrade).toBe(0);
+    expect(rack.parts.cpu).toBe('cpu_epyc_7763');
+    expect(rack.parts.ram).toBe('ram_256gb_ddr4');
+    expect(rack.parts.network).toBe('net_25g_cx4');
+    expect(state.buildings[1]!.parts.cpu).toBe('cpu_xeon_e5_2620v4');
+    expect(state.buildings[3]!.upgrade).toBe(3);
+    expect(state.floor).toEqual([]);
+    expect(state.style.floor).toBe('floor_standard');
+  });
+
+  it('round-trips parts, floor tiles and room style; drops unknown ids', () => {
+    const state = playedGame();
+    state.buildings[0]!.parts = { cpu: 'cpu_epyc_7302', ram: 'gpu_t4' as never, gpu: 'gpu_a10' };
+    state.floor.push({ kind: 'floor_vent', x: 6, y: 6 });
+    state.style.owned.push('wall_navy');
+    state.style.wall = 'wall_navy';
+    const text = tamper(state, (save) => {
+      save.data.floor.push({ kind: 'floor_lava', x: 1, y: 1 });
+      save.data.style.owned.push('wall_gold');
+    });
+    const loaded = load(text);
+    // Wrong-slot part and a slot the entry rack doesn't have are dropped.
+    expect(loaded.buildings[0]!.parts).toEqual({ cpu: 'cpu_epyc_7302' });
+    expect(loaded.floor).toEqual([{ kind: 'floor_vent', x: 6, y: 6 }]);
+    expect(loaded.style.wall).toBe('wall_navy');
+    expect(loaded.style.owned).not.toContain('wall_gold');
   });
 
   it('migrates a v2 save to no contracts and a deterministic seed', () => {

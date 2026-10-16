@@ -28,12 +28,30 @@
       .hud .warnings div { margin-top: 3px; }
       .hud .bad { color: #ff7a7f; }
       .hud .warn { color: #ffb347; }
+      .toolbar-wrap {
+        position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 1;
+        display: flex; flex-direction: column; align-items: center; gap: 6px;
+        max-width: calc(100vw - 32px); width: max-content;
+      }
       .toolbar {
-        position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
         display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 8px;
         background: rgba(20, 23, 28, 0.85); border-radius: 8px; font: 13px/1.3 system-ui, sans-serif;
         max-width: calc(100vw - 32px); box-sizing: border-box;
       }
+      .flyout {
+        display: none; padding: 8px 10px; background: rgba(20, 23, 28, 0.95); border: 1px solid #3d4550;
+        border-radius: 8px; font: 13px/1.3 system-ui, sans-serif; color: #d8dee6;
+        max-width: min(760px, calc(100vw - 32px)); box-sizing: border-box;
+      }
+      .flyout.open { display: block; }
+      .flyout-title { font-weight: 600; margin-bottom: 6px; color: #fff; }
+      .flyout-items { display: flex; flex-wrap: wrap; gap: 6px; }
+      .flyout button { display: flex; flex-direction: column; align-items: flex-start; padding: 6px 10px; text-align: left; }
+      .flyout button small { color: #8a94a3; font-size: 11px; }
+      .flyout button small.bad { color: #ff7a7f; }
+      .flyout button.locked { opacity: 0.45; }
+      .flyout button.locked small { color: #c9a227; }
+      .flyout button.active { background: #2f6b50; border-color: #4cc38a; color: #fff; }
       .toolbar button { display: flex; flex-direction: column; align-items: center; padding: 5px 10px; }
       .toolbar button small { color: #8a94a3; font-size: 11px; }
       .toolbar button.active small { color: #d8f5e6; }
@@ -127,6 +145,15 @@
       .building-panel .pips { display: flex; gap: 3px; margin: 2px 0 6px; }
       .building-panel .pips span { width: 18px; height: 5px; border-radius: 2px; background: #2a3039; }
       .building-panel .pips span.on { background: #b28cff; }
+      .building-panel { max-height: calc(100vh - 220px); overflow-y: auto; bottom: 110px; width: min(340px, calc(100vw - 32px)); }
+      .building-panel .slots { margin: 6px 0; }
+      .building-panel .slot { padding: 6px 8px; margin: 4px 0; background: #22272e; border-radius: 6px; }
+      .building-panel .slot button { margin-top: 4px; font-size: 12px; text-align: left; }
+      .building-panel .fine { margin-top: 8px; font-size: 10px; color: #6b7480; }
+      .style-option { display: flex; align-items: center; gap: 10px; padding: 6px 8px; margin: 4px 0; background: #22272e; border-radius: 6px; }
+      .style-option.active { outline: 1px solid #4cc38a; }
+      .style-option .swatch { width: 26px; height: 26px; border-radius: 5px; flex: none; border: 1px solid #3d4550; }
+      .style-option .style-name { flex: 1; }
       button.danger { border-color: #7a3a3d; }
       button.danger:hover { background: #4a2a2d; }
       button {

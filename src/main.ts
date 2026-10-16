@@ -1,6 +1,7 @@
 import { CONFIG } from './config';
 import { advanceClock, createClock } from './sim/clock';
 import {
+  buyStyle,
   cancelContract,
   repairRack,
   sellBuilding,
@@ -8,12 +9,13 @@ import {
   signContract,
   togglePause,
   upgradeBuilding,
+  upgradePart,
 } from './sim/commands';
 import { createInitialState, type GameState } from './sim/state';
 import { CameraRig } from './render/camera';
 import { createGridLines, HoverHighlight, type Tile, TilePicker } from './render/grid';
 import { HeatOverlay } from './render/heatmap';
-import { BuildingLayer } from './render/models';
+import { BuildingLayer, FloorLayer } from './render/models';
 import { createScene } from './render/scene';
 import { attachInput } from './input/input';
 import { applyTool, previewTool, type Tool } from './input/tools';
@@ -25,6 +27,7 @@ import { ContractsPanel } from './ui/contracts';
 import { GoalsPanel } from './ui/goals';
 import { Hud } from './ui/hud';
 import { Menu } from './ui/menu';
+import { StylePanel } from './ui/style';
 import { Toasts } from './ui/toasts';
 import { Toolbar } from './ui/toolbar';
 
@@ -37,7 +40,7 @@ let state: GameState = loaded?.ok ? loaded.state : newGame();
 const clock = createClock();
 
 const container = document.getElementById('app') as HTMLElement;
-const { renderer, scene } = createScene(container, state.width, state.height);
+const { renderer, scene, room } = createScene(container, state.width, state.height);
 const rig = new CameraRig(container.clientWidth / container.clientHeight, state.width, state.height);
 const picker = new TilePicker(rig.camera, renderer.domElement, state.width, state.height);
 
@@ -46,7 +49,15 @@ const hover = new HoverHighlight(state.width, state.height);
 const selection = new HoverHighlight(state.width, state.height);
 const heat = new HeatOverlay(state.width, state.height);
 const buildings = new BuildingLayer();
-scene.add(createGridLines(state.width, state.height), heat.mesh, selection.mesh, hover.mesh, buildings.group);
+const floor = new FloorLayer();
+scene.add(
+  floor.group,
+  createGridLines(state.width, state.height),
+  heat.mesh,
+  selection.mesh,
+  hover.mesh,
+  buildings.group,
+);
 
 // UI state: lives here, not in the sim.
 let tool: Tool = 'rack_basic';
@@ -76,17 +87,24 @@ const withBuilding = (id: number, run: (x: number, y: number) => void): void => 
 };
 const buildingPanel = new BuildingPanel(document.body, {
   onUpgrade: (id) => withBuilding(id, (x, y) => upgradeBuilding(state, x, y)),
+  onUpgradePart: (id, slot) => withBuilding(id, (x, y) => upgradePart(state, x, y, slot)),
   onSell: (id) => withBuilding(id, (x, y) => sellBuilding(state, x, y)),
   onRepair: (id) => withBuilding(id, (x, y) => repairRack(state, x, y)),
 });
+const stylePanel = new StylePanel(document.body, { onChoose: (id) => buyStyle(state, id) });
+const toggleStyle = (): void => {
+  if (isUnlocked(state, 'room_styles')) stylePanel.toggle();
+};
 
 const startNewGame = (): void => {
   state = newGame();
   clock.accumulator = 0;
   buildings.clear();
+  floor.clear();
   tool = 'rack_basic';
   heat.visible = false;
   contracts.toggle(false);
+  stylePanel.toggle(false);
   buildingPanel.close();
   announcer.reset(state);
   persist();
@@ -151,6 +169,7 @@ const toolbar = new Toolbar(document.body, {
   onSelectTool: selectTool,
   onToggleHeat: toggleHeat,
   onToggleContracts: toggleContracts,
+  onToggleStyle: toggleStyle,
 });
 
 const updateInput = attachInput(renderer.domElement, rig, {
@@ -169,6 +188,7 @@ const updateInput = attachInput(renderer.domElement, rig, {
   onSelectTool: selectTool,
   onToggleHeat: toggleHeat,
   onToggleContracts: toggleContracts,
+  onToggleStyle: toggleStyle,
 });
 
 // Dev-only console helpers for testing (stripped from production builds).
@@ -200,12 +220,15 @@ function frame(now: number): void {
 
   const preview = hoveredTile ? previewTool(state, tool, hoveredTile.x, hoveredTile.y) : null;
   buildings.sync(state, dt);
+  floor.sync(state);
+  room.apply(state.style);
   heat.update(state);
   hover.set(preview ? hoveredTile : null, preview?.action ?? 'place');
   hud.update(state, hoveredTile, preview);
-  toolbar.update(state, tool, heat.visible, contracts.open);
+  toolbar.update(state, tool, { heat: heat.visible, contracts: contracts.open, style: stylePanel.open });
   goals.update(state);
   contracts.update(state);
+  stylePanel.update(state);
   const selected = buildingPanel.update(state);
   selection.set(selected ? { x: selected.x, y: selected.y } : null, 'inspect');
   announcer.update(state);

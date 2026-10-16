@@ -1,13 +1,24 @@
 // Player actions. Each command validates, then applies the change to state.
 // The renderer and UI never edit state directly; they call these.
 
-import { type BuildingKind, buildingDef, CONFIG, isBuildingKind, type Speed } from '../config';
+import {
+  type BuildingKind,
+  buildingDef,
+  CONFIG,
+  type FloorKind,
+  floorDef,
+  isBuildingKind,
+  isFloorKind,
+  type PartSlot,
+  type Speed,
+} from '../config';
+import { ROOM_STYLES } from './content/styles';
 import { contractBoardOpen, refreshOffers } from './contractBoard';
 import { cancelActiveContract, freeRacks } from './contracts';
 import { canAfford, repairCost } from './economy';
-import { investedValue, upgradeCost } from './buildings';
-import { awardBuildXp, checkProgress, isUnlocked, upgradeCap } from './progression';
-import { categoryOf, type GameState, getBuildingAt, isInBounds } from './state';
+import { investedValue, nextPart, partCost, slotsOf, upgradeCost } from './buildings';
+import { awardBuildXp, checkProgress, isUnlocked, levelOf, upgradeCap } from './progression';
+import { categoryOf, floorAt, type GameState, getBuildingAt, isInBounds } from './state';
 
 export type CommandResult = { ok: true } | { ok: false; reason: string };
 
@@ -29,6 +40,7 @@ export function placeBuilding(state: GameState, kind: BuildingKind, x: number, y
     status: 'ok',
     repairDoneTick: null,
     upgrade: 0,
+    parts: {},
   });
   state.nextBuildingId += 1;
   state.progress.stats.built += 1;
@@ -58,6 +70,8 @@ export function upgradeBuilding(state: GameState, x: number, y: number): Command
   if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
   const building = getBuildingAt(state, x, y);
   if (!building) return { ok: false, reason: 'empty' };
+  if (slotsOf(building).length > 0) return { ok: false, reason: 'use_parts' };
+  if (buildingDef(building.kind).upgrade.output === 0) return { ok: false, reason: 'not_upgradable' };
   if (building.status !== 'ok') return { ok: false, reason: 'not_working' };
   if (building.upgrade >= upgradeCap(state)) return { ok: false, reason: 'at_cap' };
   const cost = upgradeCost(building);
@@ -83,6 +97,76 @@ export function repairRack(state: GameState, x: number, y: number): CommandResul
   rack.status = 'repairing';
   rack.repairDoneTick = state.tick + CONFIG.economy.repairTicks;
   state.progress.stats.repairs += 1;
+  afterProgress(state);
+  return { ok: true };
+}
+
+// Swaps a rack's part in one slot for the next one along that slot's path.
+export function upgradePart(state: GameState, x: number, y: number, slot: PartSlot): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  if (!isUnlocked(state, 'upgrades')) return { ok: false, reason: 'locked' };
+  const rack = getBuildingAt(state, x, y);
+  if (!rack || !slotsOf(rack).includes(slot)) return { ok: false, reason: 'no_slot' };
+  if (rack.status !== 'ok') return { ok: false, reason: 'not_working' };
+  const part = nextPart(rack, slot);
+  if (!part) return { ok: false, reason: 'best_installed' };
+  if (part.level > levelOf(state)) return { ok: false, reason: 'part_locked' };
+  const cost = partCost(rack, part);
+  if (state.cash < cost) return { ok: false, reason: 'insufficient_funds' };
+
+  state.cash -= cost;
+  rack.parts[slot] = part.id;
+  state.progress.stats.upgrades += 1;
+  awardBuildXp(state);
+  afterProgress(state);
+  return { ok: true };
+}
+
+// Floor tiles go on their own layer, so they can sit under buildings.
+export function placeFloor(state: GameState, kind: FloorKind, x: number, y: number): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  if (!isFloorKind(kind)) return { ok: false, reason: 'unknown_kind' };
+  if (!isUnlocked(state, kind)) return { ok: false, reason: 'locked' };
+  if (!isInBounds(state, x, y)) return { ok: false, reason: 'out_of_bounds' };
+  if (floorAt(state, x, y)) return { ok: false, reason: 'occupied' };
+  const cost = floorDef(kind).cost;
+  if (state.cash < cost) return { ok: false, reason: 'insufficient_funds' };
+
+  state.cash -= cost;
+  state.floor.push({ kind, x, y });
+  afterProgress(state);
+  return { ok: true };
+}
+
+export function removeFloor(state: GameState, x: number, y: number): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  const tile = floorAt(state, x, y);
+  if (!tile) return { ok: false, reason: 'empty' };
+  state.floor = state.floor.filter((f) => f !== tile);
+  state.cash += floorDef(tile.kind).cost * CONFIG.economy.sellRefund;
+  return { ok: true };
+}
+
+// Buys a room style (once) and makes it active.
+export function buyStyle(state: GameState, styleId: string): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  if (!isUnlocked(state, 'room_styles')) return { ok: false, reason: 'locked' };
+  const style = ROOM_STYLES.find((s) => s.id === styleId);
+  if (!style) return { ok: false, reason: 'unknown_style' };
+  if (state.style.owned.includes(styleId)) return useStyle(state, styleId);
+  if (style.level > levelOf(state)) return { ok: false, reason: 'style_locked' };
+  if (state.cash < style.cost) return { ok: false, reason: 'insufficient_funds' };
+
+  state.cash -= style.cost;
+  state.style.owned.push(styleId);
+  return useStyle(state, styleId);
+}
+
+// Switches to a style already owned. Free.
+export function useStyle(state: GameState, styleId: string): CommandResult {
+  const style = ROOM_STYLES.find((s) => s.id === styleId);
+  if (!style || !state.style.owned.includes(styleId)) return { ok: false, reason: 'not_owned' };
+  state.style[style.slot] = styleId;
   afterProgress(state);
   return { ok: true };
 }

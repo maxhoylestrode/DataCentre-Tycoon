@@ -3,6 +3,7 @@ import type { ToolPreview } from '../input/tools';
 import { committedRacks } from '../sim/contracts';
 import { costsPerTick, incomePerTick, repairCost } from '../sim/economy';
 import { powerDraw, powerEfficiency, powerSupply } from '../sim/power';
+import { prestigeOf } from '../sim/prestige';
 import { levelInfo, tierFor } from '../sim/progression';
 import { type GameState, racksOf, tempAt } from '../sim/state';
 import type { Tile } from '../render/grid';
@@ -57,6 +58,7 @@ export class Hud {
   private readonly cash: HTMLElement;
   private readonly net: HTMLElement;
   private readonly clock: HTMLElement;
+  private readonly prestige: HTMLElement;
   private readonly powerText: HTMLElement;
   private readonly powerFill: HTMLElement;
   private readonly info: HTMLElement;
@@ -75,6 +77,7 @@ export class Hud {
       <div class="cash"></div>
       <div class="net"></div>
       <div class="clock"></div>
+      <div class="prestige muted"></div>
       <div class="controls"></div>
       <div class="power"><div class="power-text"></div><div class="bar"><div class="fill"></div></div></div>
       <div class="info"></div>
@@ -88,6 +91,7 @@ export class Hud {
     this.cash = q('.cash');
     this.net = q('.net');
     this.clock = q('.clock');
+    this.prestige = q('.prestige');
     this.powerText = q('.power-text');
     this.powerFill = q('.fill');
     this.info = q('.info');
@@ -131,9 +135,11 @@ export class Hud {
     const temp = hover ? tempAt(state, hover.x, hover.y) : null;
     const warningList = warnings(state);
     const level = levelInfo(state.progress.xp);
+    const prestige = prestigeOf(state);
 
     const text = [
       state.progress.xp,
+      prestige,
       money(state.cash), income.toFixed(2), costs.toFixed(2), state.tick, supply, draw,
       temp?.toFixed(1), preview?.text, state.paused, state.speed, state.bankrupt, warningList.join(),
     ].join('|');
@@ -152,6 +158,7 @@ export class Hud {
       `<span class="muted">(in £${income.toFixed(2)}, out £${costs.toFixed(2)})</span>`;
     this.net.classList.toggle('negative', net < 0);
     this.clock.innerHTML = clockText(state.tick);
+    this.prestige.textContent = prestige > 0 ? `Prestige ${prestige}` : '';
 
     const load = supply > 0 ? draw / supply : 1;
     this.powerText.innerHTML = `Power: ${draw} / ${supply} kW`;

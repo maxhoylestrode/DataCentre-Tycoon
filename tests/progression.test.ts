@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { placeBuilding, repairRack } from '../src/sim/commands';
+import { placeBuilding, placeFloor, repairRack } from '../src/sim/commands';
 import { evaluate, isMet } from '../src/sim/conditions';
 import { GOALS } from '../src/sim/content/goals';
 import { TIERS } from '../src/sim/content/tiers';
@@ -229,6 +229,31 @@ describe('conditions', () => {
     state.buildings[0]!.upgrade = 4;
     expect(evaluate(state, { type: 'highestUpgrade', min: 1 }).current).toBe(4);
     state.buildings[0]!.upgrade = 0;
+  });
+
+  it('prestige', () => {
+    const s = createInitialState(10, 10);
+    s.progress.xp = totalXpForLevel(10);
+    s.cash = 100_000;
+    placeBuilding(s, 'plant_small', 0, 0);
+    expect(evaluate(s, { type: 'prestige', min: 1 }).current).toBe(CONFIG.buildings.plant_small.prestige);
+  });
+  it('fedVents', () => {
+    const s = createInitialState(10, 10);
+    s.progress.xp = totalXpForLevel(11);
+    s.cash = 100_000;
+    placeBuilding(s, 'chiller', 5, 5);
+    placeFloor(s, 'floor_vent', 4, 4);
+    expect(evaluate(s, { type: 'fedVents', min: 1 }).current).toBe(1);
+  });
+  it('liquidCooledRacks', () => {
+    const s = createInitialState(10, 10);
+    s.progress.xp = totalXpForLevel(12);
+    s.cash = 100_000;
+    placeBuilding(s, 'rack_basic', 0, 0);
+    expect(evaluate(s, { type: 'liquidCooledRacks', min: 1 }).current).toBe(0);
+    s.buildings[0]!.parts.cooling = 'cool_rear_door';
+    expect(evaluate(s, { type: 'liquidCooledRacks', min: 1 }).current).toBe(1);
   });
 
   describe('contract conditions', () => {

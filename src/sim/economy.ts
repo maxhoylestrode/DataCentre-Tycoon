@@ -1,4 +1,4 @@
-import { type BuildingKind, buildingDef, CONFIG } from '../config';
+import { type BuildingKind, buildingDef, CONFIG, floorDef } from '../config';
 import { buildingStats, rackFill } from './buildings';
 import { allocateRacks, contractIncomePerTick, type RackAllocation } from './contracts';
 import { powerEfficiency } from './power';
@@ -32,9 +32,10 @@ export function incomePerTick(state: GameState): number {
   return walkIn + contracts;
 }
 
-// Rent plus upkeep for every building, working or not.
+// Rent plus upkeep for every building (working or not) and floor tile.
 export function costsPerTick(state: GameState): number {
-  return state.buildings.reduce<number>((sum, b) => sum + buildingStats(b).upkeep, E.rentPerTick);
+  const buildings = state.buildings.reduce<number>((sum, b) => sum + buildingStats(b).upkeep, E.rentPerTick);
+  return state.floor.reduce((sum, f) => sum + floorDef(f.kind).upkeepPerTick, buildings);
 }
 
 export function netIncomePerTick(state: GameState): number {

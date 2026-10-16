@@ -40,13 +40,54 @@ export const CONFIG = {
   // heatPerTick: added to the building's own tile while it runs.
   // coolingStrength / coolingRadius: see the heat section.
   // upgrade: added per upgrade level, as a fraction of the base value.
-  //   output = income (racks), power supply (power) or cooling strength (cooling).
-  //   powerDraw / heat are the downside, so upgraded racks need more power and cooling.
+  //   output = power supply (power) or cooling strength (cooling).
+  //   Racks don't use levels; they upgrade through parts (content/parts.ts).
+  //
+  // Racks: incomePerTick / powerDraw / heatPerTick are one server with stock
+  // parts. A rack model holds partMultiplier servers' worth of parts, so
+  // income and part prices scale by it; power and heat scale by powerFactor
+  // and heatFactor (bigger racks are more efficient per £, but still hungry).
+  // slots: which part slots the rack has (see content/parts.ts).
+  //
+  // prestige: decoration value (see the prestige section).
+  // chillerRange / chillerCapacity: how far a chiller reaches and how many
+  // floor vents it can feed.
   buildings: {
     rack_basic: {
-      name: 'Rack', category: 'rack', cost: 1000, upkeepPerTick: 0.8, incomePerTick: 2.4,
+      name: 'Entry rack', category: 'rack', cost: 1000, upkeepPerTick: 0.8, incomePerTick: 2.4,
       powerDraw: 4, powerSupply: 0, heatPerTick: 0.65, coolingStrength: 0, coolingRadius: 0,
-      upgrade: { output: 0.15, powerDraw: 0.06, heat: 0.06 },
+      upgrade: { output: 0, powerDraw: 0, heat: 0 },
+      partMultiplier: 1, powerFactor: 1, heatFactor: 1,
+      slots: ['cpu', 'ram', 'storage', 'network', 'cooling'],
+    },
+    rack_performance: {
+      name: 'Performance rack', category: 'rack', cost: 5000, upkeepPerTick: 1.8, incomePerTick: 2.4,
+      powerDraw: 4, powerSupply: 0, heatPerTick: 0.65, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 },
+      partMultiplier: 2.5, powerFactor: 2.2, heatFactor: 1.8,
+      slots: ['cpu', 'ram', 'storage', 'network', 'cooling'],
+    },
+    rack_enterprise: {
+      name: 'Enterprise rack', category: 'rack', cost: 15000, upkeepPerTick: 4, incomePerTick: 2.4,
+      powerDraw: 4, powerSupply: 0, heatPerTick: 0.65, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 },
+      partMultiplier: 5, powerFactor: 4, heatFactor: 3.2,
+      slots: ['cpu', 'ram', 'storage', 'network', 'cooling'],
+    },
+    rack_gpu: {
+      // Base includes the stock GPU (NVIDIA T4).
+      name: 'GPU compute rack', category: 'rack', cost: 40000, upkeepPerTick: 8, incomePerTick: 5.4,
+      powerDraw: 5.5, powerSupply: 0, heatPerTick: 0.95, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 },
+      partMultiplier: 6, powerFactor: 5, heatFactor: 4,
+      slots: ['cpu', 'ram', 'storage', 'network', 'gpu', 'cooling'],
+    },
+    rack_hyperscale: {
+      name: 'Hyperscale pod', category: 'rack', cost: 120000, upkeepPerTick: 15, incomePerTick: 2.4,
+      powerDraw: 4, powerSupply: 0, heatPerTick: 0.65, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 },
+      partMultiplier: 12, powerFactor: 9, heatFactor: 6.5,
+      slots: ['cpu', 'ram', 'storage', 'network', 'cooling'],
     },
     power_basic: {
       name: 'Power unit', category: 'power', cost: 1500, upkeepPerTick: 0.3, incomePerTick: 0,
@@ -60,6 +101,64 @@ export const CONFIG = {
       coolingStrength: 0.03, coolingRadius: 2,
       upgrade: { output: 0.15, powerDraw: 0, heat: 0 },
     },
+    cooling_inrow: {
+      // Strong but short range: sits in a row of racks.
+      name: 'In-row cooler', category: 'cooling', cost: 3500, upkeepPerTick: 0.8, incomePerTick: 0,
+      powerDraw: 5, powerSupply: 0, heatPerTick: 0, coolingStrength: 0.08, coolingRadius: 1,
+      upgrade: { output: 0.15, powerDraw: 0, heat: 0 },
+    },
+    chiller: {
+      // Feeds floor vents within range. Does no cooling on its own.
+      name: 'Chiller', category: 'chiller', cost: 6000, upkeepPerTick: 1, incomePerTick: 0,
+      powerDraw: 6, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 },
+      chillerRange: 4, chillerCapacity: 12,
+    },
+    plant_small: {
+      name: 'Potted plant', category: 'decor', cost: 300, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 1,
+    },
+    light_pillar: {
+      name: 'LED light pillar', category: 'decor', cost: 1200, upkeepPerTick: 0.02, incomePerTick: 0,
+      powerDraw: 0.5, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 3,
+    },
+    plant_tree: {
+      name: 'Office tree', category: 'decor', cost: 800, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 2,
+    },
+    desk_reception: {
+      name: 'Reception desk', category: 'decor', cost: 3000, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 5,
+    },
+    sign_company: {
+      name: 'Company sign', category: 'decor', cost: 5000, upkeepPerTick: 0.02, incomePerTick: 0,
+      powerDraw: 0.3, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 8,
+    },
+    server_showcase: {
+      name: 'Retro server showcase', category: 'decor', cost: 15000, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 15,
+    },
+  },
+  // Things painted on the floor layer, which can sit under buildings.
+  floors: {
+    floor_vent: {
+      // Cools only its own tile, and only while a chiller in range feeds it.
+      name: 'Floor vent', cost: 300, upkeepPerTick: 0.05, coolingStrength: 0.04,
+    },
+  },
+  prestige: {
+    // Each prestige point adds this much to contract pay, up to the cap.
+    payBonusPerPoint: 0.005,
+    maxPayBonus: 0.3,
+    // One extra contract offer per this many prestige points, up to the cap.
+    extraOfferEvery: 25,
+    maxExtraOffers: 2,
   },
   upgrades: {
     // Hard cap. The usable cap is also limited to the player's level.
@@ -138,8 +237,11 @@ export const CONFIG = {
 
 export type Speed = (typeof CONFIG.time.speeds)[number];
 export type BuildingKind = keyof typeof CONFIG.buildings;
-export type BuildingCategory = 'rack' | 'power' | 'cooling';
+export type BuildingCategory = 'rack' | 'power' | 'cooling' | 'chiller' | 'decor';
 export const BUILDING_KINDS = Object.keys(CONFIG.buildings) as BuildingKind[];
+export type FloorKind = keyof typeof CONFIG.floors;
+export const FLOOR_KINDS = Object.keys(CONFIG.floors) as FloorKind[];
+export type PartSlot = 'cpu' | 'ram' | 'storage' | 'network' | 'gpu' | 'cooling';
 
 export interface BuildingDef {
   readonly name: string;
@@ -153,6 +255,23 @@ export interface BuildingDef {
   readonly coolingStrength: number;
   readonly coolingRadius: number;
   readonly upgrade: { readonly output: number; readonly powerDraw: number; readonly heat: number };
+  // Racks only.
+  readonly partMultiplier?: number;
+  readonly powerFactor?: number;
+  readonly heatFactor?: number;
+  readonly slots?: readonly PartSlot[];
+  // Decor only.
+  readonly prestige?: number;
+  // Chillers only.
+  readonly chillerRange?: number;
+  readonly chillerCapacity?: number;
+}
+
+export interface FloorDef {
+  readonly name: string;
+  readonly cost: number;
+  readonly upkeepPerTick: number;
+  readonly coolingStrength: number;
 }
 
 // Typed lookup so every building has the same fields whatever its id.
@@ -162,4 +281,12 @@ export function buildingDef(kind: BuildingKind): BuildingDef {
 
 export function isBuildingKind(id: string): id is BuildingKind {
   return Object.hasOwn(CONFIG.buildings, id);
+}
+
+export function floorDef(kind: FloorKind): FloorDef {
+  return CONFIG.floors[kind];
+}
+
+export function isFloorKind(id: string): id is FloorKind {
+  return Object.hasOwn(CONFIG.floors, id);
 }

@@ -3,8 +3,11 @@
 // to EVALUATORS, and add one test in tests/progression.test.ts.
 
 import { isBuildingKind } from '../config';
+import { installedPart, slotsOf } from './buildings';
 import { netIncomePerTick } from './economy';
+import { feedVents } from './floor';
 import { levelInfo } from './levels';
+import { prestigeOf } from './prestige';
 import { dayOf, type GameState, racksOf } from './state';
 
 export type Condition =
@@ -23,7 +26,10 @@ export type Condition =
   | { type: 'activeContracts'; min: number }
   | { type: 'perfectContracts'; min: number }
   | { type: 'upgrades'; min: number }
-  | { type: 'highestUpgrade'; min: number };
+  | { type: 'highestUpgrade'; min: number }
+  | { type: 'prestige'; min: number }
+  | { type: 'fedVents'; min: number }
+  | { type: 'liquidCooledRacks'; min: number };
 
 export type ConditionType = Condition['type'];
 
@@ -53,6 +59,11 @@ const EVALUATORS: Evaluators = {
   perfectContracts: (s) => s.progress.stats.perfectContracts,
   upgrades: (s) => s.progress.stats.upgrades,
   highestUpgrade: (s) => s.buildings.reduce((m, b) => Math.max(m, b.upgrade), 0),
+  prestige: (s) => prestigeOf(s),
+  fedVents: (s) => feedVents(s).fed.size,
+  // Racks with any cooling part beyond stock air cooling.
+  liquidCooledRacks: (s) =>
+    s.buildings.filter((b) => slotsOf(b).includes('cooling') && (installedPart(b, 'cooling')?.heatReduction ?? 0) > 0).length,
 };
 
 export function isConditionType(type: string): type is ConditionType {

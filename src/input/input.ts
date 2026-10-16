@@ -14,6 +14,7 @@ export interface InputHandlers {
   onSelectTool(tool: Tool): void;
   onToggleHeat(): void;
   onToggleContracts(): void;
+  onToggleStyle(): void;
 }
 
 const SPEED_KEYS: Record<string, Speed> = { Digit1: 1, Digit2: 2, Digit3: 4 };
@@ -23,7 +24,7 @@ const TOOL_KEYS: Record<string, Tool> = Object.fromEntries(
 
 // Left click: use the selected tool on a tile. Drag with any button: pan.
 // Wheel: zoom. WASD / arrow keys: pan. Space: pause. 1/2/3: speed.
-// R/P/C/X: select tool. H: heat map. K: contracts.
+// R/P/C/X: select tool. H: heat map. K: contracts. L: room style.
 // Returns an update function to call every frame.
 export function attachInput(canvas: HTMLCanvasElement, rig: CameraRig, handlers: InputHandlers): (dt: number) => void {
   let press: { id: number; button: number; startX: number; startY: number; lastX: number; lastY: number; dragging: boolean } | null = null;
@@ -86,6 +87,7 @@ export function attachInput(canvas: HTMLCanvasElement, rig: CameraRig, handlers:
     if (tool) handlers.onSelectTool(tool);
     if (e.code === 'KeyH') handlers.onToggleHeat();
     if (e.code === 'KeyK') handlers.onToggleContracts();
+    if (e.code === 'KeyL') handlers.onToggleStyle();
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   window.addEventListener('blur', () => keys.clear());
