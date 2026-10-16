@@ -41,14 +41,15 @@ interface BuildingView {
 // Trim colour by upgrade level: grey, then green through blue and purple to gold.
 const TRIM_MATS = [
   0x6b7280, 0x3fbf6a, 0x2bb3a3, 0x2f8fe0, 0x4a62e8, 0x7a4ff0, 0xa346e6, 0xd13fb0, 0xe8603a, 0xf0a020, 0xffd23a,
-].map((color, i) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: i === 0 ? 0 : 0.35 }));
+].map((color, i) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: i === 0 ? 0 : 0.15 }));
 const pipGeo = new THREE.BoxGeometry(0.05, 0.03, 0.05);
 
-// A coloured band around the top of a model plus one pip per upgrade level
-// along its front edge. Returns a function that shows a given level.
+// A thin coloured band around the sides just below the top edge, plus one
+// pip per upgrade level along the front of the top. The band stays below
+// the top face so the two never share a plane (which flickers).
 function addUpgradeMarks(group: THREE.Group, topY: number, width: number, depth: number): (level: number) => void {
-  const trim = new THREE.Mesh(new THREE.BoxGeometry(width + 0.02, 0.04, depth + 0.02), TRIM_MATS[0]!);
-  trim.position.y = topY - 0.02;
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(width + 0.02, 0.035, depth + 0.02), TRIM_MATS[0]!);
+  trim.position.y = topY - 0.06;
   group.add(trim);
 
   const max = CONFIG.upgrades.maxLevel;
