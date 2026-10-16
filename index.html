@@ -2,10 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- No browser zoom: the game handles pinch-to-zoom itself. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Datacentre Tycoon</title>
+    <meta name="description" content="Build and run your own datacentre: racks, power, cooling, contracts and rooms." />
+    <meta name="theme-color" content="#14171c" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="DC Tycoon" />
     <style>
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #14171c; }
+      html, body {
+        margin: 0; height: 100%; overflow: hidden; background: #14171c;
+        overscroll-behavior: none; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
+      }
       #app { position: fixed; inset: 0; }
       #app canvas { display: block; touch-action: none; }
       .hud {
@@ -192,6 +205,7 @@
       .building-panel .slot { padding: 6px 8px; margin: 4px 0; background: #22272e; border-radius: 6px; }
       .building-panel .slot button { margin-top: 4px; font-size: 12px; text-align: left; }
       .building-panel .fine { margin-top: 8px; font-size: 10px; color: #6b7480; }
+      .building-panel .max-btn { display: block; width: 100%; margin: 8px 0 4px; padding: 7px; font-weight: 600; }
       .style-option { display: flex; align-items: center; gap: 10px; padding: 6px 8px; margin: 4px 0; background: #22272e; border-radius: 6px; }
       .style-option.active { outline: 1px solid #4cc38a; }
       .style-option .swatch { width: 26px; height: 26px; border-radius: 5px; flex: none; border: 1px solid #3d4550; }

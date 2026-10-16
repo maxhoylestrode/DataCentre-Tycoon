@@ -127,6 +127,64 @@ export function upgradePart(state: GameState, x: number, y: number, slot: PartSl
   return { ok: true };
 }
 
+export interface UpgradePlan {
+  // Each step in order: a level upgrade, or a part for a slot.
+  steps: ({ kind: 'level' } | { kind: 'part'; slot: PartSlot; partId: string })[];
+  cost: number;
+}
+
+// What "Upgrade max" would buy right now, without buying it. Levels go up
+// to the cap while cash lasts; racks repeatedly take the cheapest next part
+// across all slots, so upgrades spread evenly.
+export function planUpgradeMax(state: GameState, x: number, y: number): UpgradePlan {
+  const plan: UpgradePlan = { steps: [], cost: 0 };
+  const building = getBuildingAt(state, x, y);
+  if (!building || state.bankrupt || building.status !== 'ok' || !isUnlocked(state, 'upgrades')) return plan;
+  let cash = state.cash;
+
+  if (slotsOf(building).length === 0) {
+    if (buildingDef(building.kind).upgrade.output === 0) return plan;
+    for (let level = building.upgrade; level < upgradeCap(state); level++) {
+      const cost = upgradeCost(building, level);
+      if (cash < cost) break;
+      cash -= cost;
+      plan.cost += cost;
+      plan.steps.push({ kind: 'level' });
+    }
+    return plan;
+  }
+
+  // Work on a copy of the rack's parts so nothing changes yet.
+  const sim = { ...building, parts: { ...building.parts } };
+  const level = levelOf(state);
+  for (;;) {
+    let best: { slot: PartSlot; partId: string; cost: number } | null = null;
+    for (const slot of slotsOf(sim)) {
+      const part = nextPart(sim, slot);
+      if (!part || part.level > level) continue;
+      const cost = partCost(sim, part);
+      if (cost <= cash && (!best || cost < best.cost)) best = { slot, partId: part.id, cost };
+    }
+    if (!best) break;
+    sim.parts[best.slot] = best.partId;
+    cash -= best.cost;
+    plan.cost += best.cost;
+    plan.steps.push({ kind: 'part', slot: best.slot, partId: best.partId });
+  }
+  return plan;
+}
+
+// Buys everything planUpgradeMax plans. Returns how many upgrades were bought.
+export function upgradeMax(state: GameState, x: number, y: number): number {
+  let bought = 0;
+  for (const step of planUpgradeMax(state, x, y).steps) {
+    const result = step.kind === 'level' ? upgradeBuilding(state, x, y) : upgradePart(state, x, y, step.slot);
+    if (!result.ok) break;
+    bought++;
+  }
+  return bought;
+}
+
 // Floor tiles go on their own layer, so they can sit under buildings.
 export function placeFloor(state: GameState, kind: FloorKind, x: number, y: number): CommandResult {
   if (state.bankrupt) return { ok: false, reason: 'bankrupt' };

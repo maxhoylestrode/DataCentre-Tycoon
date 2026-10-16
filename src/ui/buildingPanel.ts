@@ -12,6 +12,7 @@ import {
   slotsOf,
   upgradeCost,
 } from '../sim/buildings';
+import { planUpgradeMax } from '../sim/commands';
 import { SLOT_NAMES, TRADEMARK_NOTE } from '../sim/content/parts';
 import type { Part } from '../sim/content/types';
 import { repairCost } from '../sim/economy';
@@ -23,6 +24,7 @@ import { kw, num } from './format';
 export interface BuildingPanelHandlers {
   onUpgrade(buildingId: number): void;
   onUpgradePart(buildingId: number, slot: PartSlot): void;
+  onUpgradeMax(buildingId: number): void;
   onSell(buildingId: number): void;
   onRepair(buildingId: number): void;
 }
@@ -79,6 +81,7 @@ export class BuildingPanel {
       if (act === 'close') this.close();
       else if (act === 'upgrade') handlers.onUpgrade(id);
       else if (act === 'part') handlers.onUpgradePart(id, button.dataset.slot as PartSlot);
+      else if (act === 'max') handlers.onUpgradeMax(id);
       else if (act === 'repair') handlers.onRepair(id);
       else if (act === 'sell') {
         if (this.confirmSell) {
@@ -156,11 +159,21 @@ export class BuildingPanel {
       <div>${statusText} &middot; <span class="muted">${tempAt(state, b.x, b.y).toFixed(1)}°C</span></div>
       <table>${rows}</table>
       ${extra}
+      ${isRack || levelled ? this.maxButton(state, b) : ''}
       ${isRack ? this.partSlots(state, b) : ''}
       ${levelled ? this.upgradeButton(state, b, upgradeCap(state), b.upgrade >= max) : ''}
       ${b.status === 'failed' ? `<button data-act="repair" ${state.cash < repairCost(b) ? 'disabled' : ''}>Repair (${money(repairCost(b))})</button>` : ''}
       <button data-act="sell" class="danger">${this.confirmSell ? `Click again to sell for ${money(investedValue(b) * CONFIG.economy.sellRefund)}` : 'Sell'}</button>
       ${isRack ? `<div class="fine">${TRADEMARK_NOTE}</div>` : ''}`;
+  }
+
+  // Buys every upgrade it can: up to the level cap, or until the money runs out.
+  private maxButton(state: GameState, b: Building): string {
+    if (!isUnlocked(state, 'upgrades')) return '';
+    const plan = planUpgradeMax(state, b.x, b.y);
+    const n = plan.steps.length;
+    if (n === 0) return `<button class="max-btn" disabled>Upgrade max: nothing more right now</button>`;
+    return `<button data-act="max" class="primary max-btn">⏫ Upgrade max &middot; ${n} upgrade${n > 1 ? 's' : ''} &middot; ${money(plan.cost)}</button>`;
   }
 
   private chillerInfo(state: GameState, b: Building): string {

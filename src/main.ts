@@ -12,6 +12,7 @@ import {
   placeWall,
   removeWall,
   upgradeBuilding,
+  upgradeMax,
   upgradePart,
 } from './sim/commands';
 import { isInteriorEdge, isRoomBoundaryEdge, wallAt } from './sim/walls';
@@ -146,6 +147,7 @@ const withBuilding = (id: number, run: (x: number, y: number) => void): void => 
 const buildingPanel = new BuildingPanel(document.body, {
   onUpgrade: (id) => withBuilding(id, (x, y) => upgradeBuilding(state, x, y)),
   onUpgradePart: (id, slot) => withBuilding(id, (x, y) => upgradePart(state, x, y, slot)),
+  onUpgradeMax: (id) => withBuilding(id, (x, y) => void upgradeMax(state, x, y)),
   onSell: (id) => withBuilding(id, (x, y) => sellBuilding(state, x, y)),
   onRepair: (id) => withBuilding(id, (x, y) => repairRack(state, x, y)),
 });
@@ -316,6 +318,16 @@ if (import.meta.env.DEV) {
       level: (n: number) => void (state.progress.xp = totalXpForLevel(n)),
       cash: (n: number) => void (state.cash += n),
     },
+  });
+}
+
+// Installable web app: the service worker caches the game so it also opens
+// offline. Production only, so it never caches the dev server.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      // Not fatal: the game works without it, just not offline.
+    });
   });
 }
 

@@ -1,0 +1,16 @@
+{
+  "name": "Datacentre Tycoon",
+  "short_name": "DC Tycoon",
+  "description": "Build and run your own datacentre: racks, power, cooling, contracts and rooms.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#14171c",
+  "theme_color": "#14171c",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

@@ -47,11 +47,28 @@ export function attachInput(canvas: HTMLCanvasElement, rig: CameraRig, handlers:
     drawing: boolean;
   } | null = null;
   const keys = new Set<string>();
+  // Touch: every finger on the canvas, and the pinch in progress (two fingers
+  // zoom by their spread and pan by their midpoint).
+  const pointers = new Map<number, { x: number; y: number }>();
+  let pinch: { dist: number; midX: number; midY: number } | null = null;
+
+  const pinchGeometry = (): { dist: number; midX: number; midY: number } => {
+    const [a, b] = [...pointers.values()];
+    return { dist: Math.hypot(a!.x - b!.x, a!.y - b!.y), midX: (a!.x + b!.x) / 2, midY: (a!.y + b!.y) / 2 };
+  };
 
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
   canvas.addEventListener('pointerdown', (e) => {
-    if (press) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      // A second finger turns the gesture into a pinch: cancel the tap or draw.
+      if (press?.drawing) handlers.onDrawEnd(0, 0, true);
+      press = null;
+      pinch = pinchGeometry();
+      return;
+    }
+    if (press || pinch) return;
     canvas.setPointerCapture(e.pointerId);
     const drawing = e.button === 0 && handlers.isDrawMode();
     press = {
@@ -62,6 +79,15 @@ export function attachInput(canvas: HTMLCanvasElement, rig: CameraRig, handlers:
   });
 
   canvas.addEventListener('pointermove', (e) => {
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch) {
+      if (pointers.size < 2) return;
+      const now = pinchGeometry();
+      if (pinch.dist > 0 && now.dist > 0) rig.zoomBy(now.dist / pinch.dist);
+      rig.panByPixels(now.midX - pinch.midX, now.midY - pinch.midY, canvas.clientHeight);
+      pinch = now;
+      return;
+    }
     if (!press || press.id !== e.pointerId) {
       handlers.onHover(e.clientX, e.clientY);
       return;
@@ -83,6 +109,12 @@ export function attachInput(canvas: HTMLCanvasElement, rig: CameraRig, handlers:
   });
 
   const endPress = (e: PointerEvent, cancelled: boolean): void => {
+    pointers.delete(e.pointerId);
+    // After a pinch, wait for every finger to lift before taps count again.
+    if (pinch) {
+      if (pointers.size === 0) pinch = null;
+      return;
+    }
     if (!press || press.id !== e.pointerId) return;
     if (press.drawing) handlers.onDrawEnd(e.clientX, e.clientY, cancelled);
     else if (!cancelled && !press.dragging && press.button === 0) handlers.onClick(e.clientX, e.clientY);
