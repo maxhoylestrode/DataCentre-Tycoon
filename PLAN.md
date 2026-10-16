@@ -171,6 +171,41 @@ The player's ideas: better racks unlocked by level, racks with real specs whose 
 3. **Underfloor cooling:** a separate floor layer (more depth, more UI), or simpler "cooled floor" buildings?
 4. **Order:** probably racks + parts first, then cooling types, then cosmetics, each playable on its own.
 
+### Backlog (requested 2026-10-17, not started)
+The user's list, grouped. Each group gets a detailed plan and its open questions answered before any code, like earlier milestones. Order is a suggestion.
+
+**A. Power, network and cooling depth**
+- **Network bandwidth:** the building has a limited uplink (like power supply vs draw). Racks use bandwidth, and network upgrades (switches, fibre uplinks, "power-ups") raise the cap. Overloaded bandwidth slows income the way brownouts do.
+  - *Ask:* bandwidth per rack fixed or tied to the network part? Is the uplink a building or a room upgrade?
+- **Upgrades draw more power:** rack parts already add some power; make upgrades noticeably hungrier (and power/cooling levels too?), so expanding needs more power units.
+  - *Ask:* how much more?
+- **Upgradable chiller:** levels that raise how many vents it feeds and/or its range.
+- **Full AC:** a room-wide air-conditioning unit that cools a whole room (bounded by walls), expensive, high level.
+- **Power multiblocks:** 4 power units in a 2×2 square merge into a multiblock producing +25% power, shown as one bigger model. Multiblocks are upgradable.
+  - *Ask:* does the bonus stack with unit levels? What happens when one unit in the block is sold?
+
+**B. Building and editing**
+- **Rotate all objects:** a rotate key/button while placing, saved per building. Mostly visual, but in-row coolers and racks could face aisles.
+- **Walls and doors replace each other:** placing a door or glass on an existing wall swaps it (paying the difference) instead of being blocked.
+- **More decoration types.**
+
+**C. Staff and build time** (expands the old Milestone 8, "Staff and random incidents")
+- **Engineers build servers:** placing a rack starts a 5–10 second build (it isn't live until finished), done by an engineer who walks to it. More engineers means more builds at once.
+- **Maintenance staff:** servers need periodic maintenance by staff; too few staff and racks degrade or fail more often, so you hire more as you grow. Wages are a running cost.
+  - *Ask:* do staff show as little people walking around? Is build time in real seconds or game minutes (it must scale with speed)?
+
+**D. Clients as people**
+- Contract clients appear as little people who walk in through a door to "outside" and queue at the reception desk.
+  - *Ask:* is a reception desk plus an outside door required to get contract offers, or just flavour? Can a queue get too long (clients leave)?
+
+**E. Content**
+- **+50 goals and achievements** spread across all tiers (data only, `sim/content/`).
+- **More decorations** (also listed under B).
+
+**F. UI and help**
+- **How-to guide:** an in-game help panel (and first-time tips) explaining power, heat, cooling, contracts, rooms, upgrades.
+- **Clean up the HUD:** redesign the money, power, time and speed area in the hotbar's style (tiles/chips, clearer power bar, compact warnings).
+
 ### Later milestones (outline only, replan before starting)
 5. ✅ (done 2026-10-16) Local save/load: versioned saves in localStorage, export/import save file, settings. Done early because progression needs persistence.
 8. Staff and random incidents (moved after hardware at the user's request)
