@@ -13,4 +13,11 @@ export const UNLOCKS: Unlock[] = [
     name: 'Heat map',
     description: 'See the temperature of every tile (H).',
   },
+  {
+    id: 'contract_board',
+    type: 'mechanic',
+    level: 6,
+    name: 'Contract board',
+    description: 'Sign customers who pay more for promised uptime (K).',
+  },
 ];

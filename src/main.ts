@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 import { advanceClock, createClock } from './sim/clock';
-import { setSpeed, togglePause } from './sim/commands';
+import { cancelContract, setSpeed, signContract, togglePause } from './sim/commands';
 import { createInitialState, type GameState } from './sim/state';
 import { CameraRig } from './render/camera';
 import { createGridLines, HoverHighlight, type Tile, TilePicker } from './render/grid';
@@ -10,17 +10,21 @@ import { createScene } from './render/scene';
 import { attachInput } from './input/input';
 import { applyTool, previewTool, type Tool } from './input/tools';
 import { exportSaveFile, loadGame, loadSettings, readSaveFile, saveGame, saveSettings } from './io/storage';
-import { isUnlocked } from './sim/progression';
+import { isUnlocked, totalXpForLevel } from './sim/progression';
 import { Announcer } from './ui/announcer';
+import { ContractsPanel } from './ui/contracts';
 import { GoalsPanel } from './ui/goals';
 import { Hud } from './ui/hud';
 import { Menu } from './ui/menu';
 import { Toasts } from './ui/toasts';
 import { Toolbar } from './ui/toolbar';
 
+// Each new game gets its own random seed; the sim itself never calls Math.random.
+const newGame = (): GameState => createInitialState(undefined, undefined, Math.floor(Math.random() * 2 ** 31));
+
 const settings = loadSettings();
 const loaded = loadGame();
-let state: GameState = loaded?.ok ? loaded.state : createInitialState();
+let state: GameState = loaded?.ok ? loaded.state : newGame();
 const clock = createClock();
 
 const container = document.getElementById('app') as HTMLElement;
@@ -47,13 +51,21 @@ const toggleHeat = (): void => {
 const toasts = new Toasts(document.body);
 const announcer = new Announcer(toasts, state);
 const goals = new GoalsPanel(document.body);
+const contracts = new ContractsPanel(document.body, {
+  onSign: (id) => signContract(state, id),
+  onCancel: (id) => cancelContract(state, id),
+});
+const toggleContracts = (): void => {
+  if (isUnlocked(state, 'contract_board')) contracts.toggle();
+};
 
 const startNewGame = (): void => {
-  state = createInitialState();
+  state = newGame();
   clock.accumulator = 0;
   buildings.clear();
   tool = 'rack_basic';
   heat.visible = false;
+  contracts.toggle(false);
   announcer.reset(state);
   persist();
 };
@@ -113,7 +125,11 @@ const hud = new Hud(document.body, {
   onSetSpeed: (speed) => setSpeed(state, speed),
   onRestart: startNewGame,
 });
-const toolbar = new Toolbar(document.body, { onSelectTool: selectTool, onToggleHeat: toggleHeat });
+const toolbar = new Toolbar(document.body, {
+  onSelectTool: selectTool,
+  onToggleHeat: toggleHeat,
+  onToggleContracts: toggleContracts,
+});
 
 const updateInput = attachInput(renderer.domElement, rig, {
   onHover: (cx, cy) => (hoveredTile = picker.pick(cx, cy)),
@@ -126,7 +142,22 @@ const updateInput = attachInput(renderer.domElement, rig, {
   onSetSpeed: (speed) => setSpeed(state, speed),
   onSelectTool: selectTool,
   onToggleHeat: toggleHeat,
+  onToggleContracts: toggleContracts,
 });
+
+// Dev-only console helpers for testing (stripped from production builds).
+// e.g. dct.level(6) to reach the contract board, dct.cash(50000).
+if (import.meta.env.DEV) {
+  Object.assign(window, {
+    dct: {
+      get state() {
+        return state;
+      },
+      level: (n: number) => void (state.progress.xp = totalXpForLevel(n)),
+      cash: (n: number) => void (state.cash += n),
+    },
+  });
+}
 
 window.addEventListener('resize', () => {
   renderer.setSize(container.clientWidth, container.clientHeight);
@@ -146,8 +177,9 @@ function frame(now: number): void {
   heat.update(state);
   hover.set(preview ? hoveredTile : null, preview?.action ?? 'place');
   hud.update(state, hoveredTile, preview);
-  toolbar.update(state, tool, heat.visible);
+  toolbar.update(state, tool, heat.visible, contracts.open);
   goals.update(state);
+  contracts.update(state);
   announcer.update(state);
   menu.update();
   renderer.render(scene, rig.camera);

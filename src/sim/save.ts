@@ -11,6 +11,11 @@ import { GOALS } from './content/goals';
 import {
   type Building,
   type BuildingStatus,
+  type Contract,
+  type ContractResult,
+  type ContractsState,
+  type ContractTerms,
+  createContractsState,
   createInitialState,
   createProgress,
   type GameState,
@@ -20,7 +25,8 @@ import {
 
 // v1: Milestone 3 game (buildings, cash, time, heat).
 // v2: adds progress (XP, goals, achievements, stats).
-export const SAVE_VERSION = 2;
+// v3: adds contracts and the RNG seed.
+export const SAVE_VERSION = 3;
 const GAME_ID = 'datacentre-tycoon';
 const MAX_GRID = 200;
 
@@ -40,6 +46,13 @@ const MIGRATIONS: Record<number, (data: Data) => Data> = {
   // Older games start at level 1 with no goals done. Goals they already
   // satisfy (e.g. "Run 3 racks") complete on the first tick after loading.
   1: (data) => ({ ...data, progress: { xp: 0, completedGoals: [], achievements: [], stats: {} } }),
+  // No contracts yet. The seed comes from the game clock so it differs
+  // between saves but the same save always migrates the same way.
+  2: (data) => ({
+    ...data,
+    contracts: { offers: [], active: [], history: [], nextId: 1, offersDay: 0 },
+    rngSeed: typeof data.tick === 'number' ? data.tick + 1 : 1,
+  }),
 };
 
 export function serialize(state: GameState, now: Date = new Date()): string {
@@ -73,6 +86,16 @@ export function serialize(state: GameState, now: Date = new Date()): string {
         achievements: [...state.progress.achievements],
         stats: { ...state.progress.stats },
       },
+      // Contract terms are the numbers rolled when the offer was made, not
+      // copies of customer type definitions.
+      contracts: {
+        offers: state.contracts.offers.map((o) => ({ ...o })),
+        active: state.contracts.active.map((c) => ({ ...c })),
+        history: state.contracts.history.map((h) => ({ ...h })),
+        nextId: state.contracts.nextId,
+        offersDay: state.contracts.offersDay,
+      },
+      rngSeed: state.rngSeed,
     },
   };
   return JSON.stringify(envelope);
@@ -137,7 +160,78 @@ function readState(data: Data): GameState {
     state.temps = temps.map((t) => Math.max(CONFIG.heat.ambient, t as number));
   }
   state.progress = readProgress(data.progress);
+  state.contracts = readContracts(data.contracts);
+  state.rngSeed = intIn(data.rngSeed, -(2 ** 31), 2 ** 31 - 1) ?? 1;
   return state;
+}
+
+// Offers and contracts carry their own rolled numbers, so they stay valid
+// even if their customer type is later removed from content.
+function readContracts(raw: unknown): ContractsState {
+  const contracts = createContractsState();
+  if (!isObject(raw)) return contracts;
+
+  const offers = Array.isArray(raw.offers) ? raw.offers : [];
+  contracts.offers = offers.map(readTerms).filter((t): t is ContractTerms => t !== null);
+
+  const active = Array.isArray(raw.active) ? raw.active : [];
+  for (const item of active) {
+    const terms = readTerms(item);
+    if (!terms || !isObject(item)) continue;
+    const startTick = finite(item.startTick);
+    const endTick = finite(item.endTick);
+    if (startTick === null || endTick === null) continue;
+    const contract: Contract = {
+      ...terms,
+      startTick,
+      endTick,
+      servedRackTicks: Math.max(0, finite(item.servedRackTicks) ?? 0),
+      promisedRackTicks: Math.max(0, finite(item.promisedRackTicks) ?? 0),
+    };
+    contracts.active.push(contract);
+  }
+
+  const history = Array.isArray(raw.history) ? raw.history : [];
+  for (const item of history) {
+    if (!isObject(item) || typeof item.name !== 'string') continue;
+    const outcome = item.outcome;
+    if (outcome !== 'completed' && outcome !== 'failed' && outcome !== 'cancelled') continue;
+    const result: ContractResult = {
+      name: item.name,
+      outcome,
+      uptime: finite(item.uptime) ?? 0,
+      cash: finite(item.cash) ?? 0,
+      xp: finite(item.xp) ?? 0,
+    };
+    contracts.history.push(result);
+  }
+
+  const maxId = Math.max(0, ...contracts.offers.map((o) => o.id), ...contracts.active.map((c) => c.id));
+  contracts.nextId = Math.max(maxId + 1, intIn(raw.nextId, 1, Number.MAX_SAFE_INTEGER) ?? 1);
+  contracts.offersDay = intIn(raw.offersDay, 0, Number.MAX_SAFE_INTEGER) ?? 0;
+  return contracts;
+}
+
+function readTerms(raw: unknown): ContractTerms | null {
+  if (!isObject(raw) || typeof raw.name !== 'string' || typeof raw.customerType !== 'string') return null;
+  const id = intIn(raw.id, 1, Number.MAX_SAFE_INTEGER);
+  const racks = intIn(raw.racks, 1, 10_000);
+  const days = intIn(raw.days, 1, 10_000);
+  const pay = finite(raw.payPerRackPerTick);
+  const sla = finite(raw.sla);
+  if (id === null || racks === null || days === null || pay === null || sla === null || sla < 0 || sla > 1) return null;
+  return {
+    id,
+    customerType: raw.customerType,
+    name: raw.name,
+    racks,
+    days,
+    payPerRackPerTick: pay,
+    sla,
+    bonus: Math.max(0, finite(raw.bonus) ?? 0),
+    penalty: Math.max(0, finite(raw.penalty) ?? 0),
+    xp: Math.max(0, finite(raw.xp) ?? 0),
+  };
 }
 
 const GOAL_IDS = new Set(GOALS.map((g) => g.id));

@@ -2,6 +2,8 @@
 // The renderer and UI never edit state directly; they call these.
 
 import { type BuildingKind, buildingDef, CONFIG, isBuildingKind, type Speed } from '../config';
+import { contractBoardOpen, refreshOffers } from './contractBoard';
+import { cancelActiveContract, freeRacks } from './contracts';
 import { canAfford, repairCost } from './economy';
 import { awardBuildXp, checkProgress, isUnlocked } from './progression';
 import { categoryOf, type GameState, getBuildingAt, isInBounds } from './state';
@@ -29,8 +31,15 @@ export function placeBuilding(state: GameState, kind: BuildingKind, x: number, y
   state.nextBuildingId += 1;
   state.progress.stats.built += 1;
   awardBuildXp(state);
-  checkProgress(state);
+  afterProgress(state);
   return { ok: true };
+}
+
+// Goals can complete and levels rise outside a tick (e.g. building while
+// paused), which may open the contract board straight away.
+function afterProgress(state: GameState): void {
+  checkProgress(state);
+  refreshOffers(state);
 }
 
 export function sellBuilding(state: GameState, x: number, y: number): CommandResult {
@@ -54,7 +63,37 @@ export function repairRack(state: GameState, x: number, y: number): CommandResul
   rack.status = 'repairing';
   rack.repairDoneTick = state.tick + CONFIG.economy.repairTicks;
   state.progress.stats.repairs += 1;
-  checkProgress(state);
+  afterProgress(state);
+  return { ok: true };
+}
+
+// Signs an offer from the board. Needs enough racks not already promised
+// to other customers; the racks don't have to be working right now.
+export function signContract(state: GameState, offerId: number): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  if (!contractBoardOpen(state)) return { ok: false, reason: 'locked' };
+  const offer = state.contracts.offers.find((o) => o.id === offerId);
+  if (!offer) return { ok: false, reason: 'no_offer' };
+  if (freeRacks(state) < offer.racks) return { ok: false, reason: 'not_enough_racks' };
+
+  state.contracts.offers = state.contracts.offers.filter((o) => o.id !== offerId);
+  state.contracts.active.push({
+    ...offer,
+    startTick: state.tick,
+    endTick: state.tick + offer.days * CONFIG.time.ticksPerDay,
+    servedRackTicks: 0,
+    promisedRackTicks: 0,
+  });
+  state.progress.stats.contractsSigned += 1;
+  afterProgress(state);
+  return { ok: true };
+}
+
+// Ends a contract early. Costs its penalty.
+export function cancelContract(state: GameState, contractId: number): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  if (!cancelActiveContract(state, contractId)) return { ok: false, reason: 'no_contract' };
+  afterProgress(state);
   return { ok: true };
 }
 

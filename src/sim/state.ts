@@ -26,6 +26,60 @@ export interface Stats {
   // Net profit so far today, and the best full day so far.
   dayProfit: number;
   bestDayProfit: number;
+  contractsSigned: number;
+  contractsCompleted: number;
+  contractsFailed: number;
+  // Completed with 100% uptime.
+  perfectContracts: number;
+  contractIncome: number;
+}
+
+// What a customer is offering. Rolled once when the offer is made, then
+// stored as plain numbers so later content changes don't alter a deal.
+export interface ContractTerms {
+  id: number;
+  // Id from content/customers.ts; only used for display.
+  customerType: string;
+  name: string;
+  racks: number;
+  days: number;
+  payPerRackPerTick: number;
+  // Promised uptime, 0..1.
+  sla: number;
+  bonus: number;
+  penalty: number;
+  xp: number;
+}
+
+export interface Contract extends ContractTerms {
+  startTick: number;
+  endTick: number;
+  // Rack-minutes actually served, and rack-minutes promised so far.
+  servedRackTicks: number;
+  promisedRackTicks: number;
+}
+
+export interface ContractResult {
+  name: string;
+  outcome: 'completed' | 'failed' | 'cancelled';
+  uptime: number;
+  // Bonus paid (positive) or penalty charged (negative).
+  cash: number;
+  xp: number;
+}
+
+export interface ContractsState {
+  offers: ContractTerms[];
+  active: Contract[];
+  // Most recent last.
+  history: ContractResult[];
+  nextId: number;
+  // Day the current offers were made; 0 means never.
+  offersDay: number;
+}
+
+export function createContractsState(): ContractsState {
+  return { offers: [], active: [], history: [], nextId: 1, offersDay: 0 };
 }
 
 export interface Progress {
@@ -51,6 +105,11 @@ export function createProgress(): Progress {
       buildXpToday: 0,
       dayProfit: 0,
       bestDayProfit: 0,
+      contractsSigned: 0,
+      contractsCompleted: 0,
+      contractsFailed: 0,
+      perfectContracts: 0,
+      contractIncome: 0,
     },
   };
 }
@@ -68,11 +127,16 @@ export interface GameState {
   paused: boolean;
   bankrupt: boolean;
   progress: Progress;
+  contracts: ContractsState;
+  // Seeded RNG state (see rng.ts).
+  rngSeed: number;
 }
 
+// The seed defaults to 1 so tests are repeatable; the game passes a random one.
 export function createInitialState(
   width: number = CONFIG.grid.width,
   height: number = CONFIG.grid.height,
+  seed = 1,
 ): GameState {
   return {
     width,
@@ -86,6 +150,8 @@ export function createInitialState(
     paused: false,
     bankrupt: false,
     progress: createProgress(),
+    contracts: createContractsState(),
+    rngSeed: seed | 0,
   };
 }
 

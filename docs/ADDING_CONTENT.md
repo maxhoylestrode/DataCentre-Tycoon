@@ -78,6 +78,12 @@ Code that implements the mechanic checks `isUnlocked(state, 'contract_board')`.
 | `day` | `min` | it is day `min` or later |
 | `repairs` | `min` | you have repaired at least `min` racks |
 | `failures` | `min` | at least `min` racks have failed |
+| `level` | `min` | you are level `min` or higher |
+| `contractsSigned` | `min` | you have signed at least `min` contracts |
+| `contractsCompleted` | `min` | at least `min` contracts ended with the uptime promise kept |
+| `contractsFailed` | `min` | at least `min` contracts ended with the promise broken |
+| `activeContracts` | `min` | at least `min` contracts are running right now |
+| `perfectContracts` | `min` | at least `min` contracts were completed at 100% uptime |
 
 **Adding a condition type** is engine work, but small: in `src/sim/conditions.ts` add it to the `Condition` union and add one evaluator (a function returning the current value) to `EVALUATORS`. TypeScript won't compile until both are there. Then add a test for it in the `conditions` block of `tests/progression.test.ts`.
 
@@ -94,6 +100,28 @@ Code that implements the mechanic checks `isUnlocked(state, 'contract_board')`.
   reward: { xp: 100 },
 },
 ```
+
+## Add a customer type
+
+`src/sim/content/customers.ts`. Each morning the contract board rolls `CONFIG.contracts.offersPerDay` offers from the types whose `minLevel` you have reached. Ranges are `[min, max]`, both inclusive.
+
+```ts
+{
+  id: 'bank',
+  name: 'Bank',
+  minLevel: 13,
+  racks: [6, 12],
+  days: [7, 14],
+  payMultiplier: [2.2, 2.8],   // x CONFIG.contracts.basePayPerRackPerTick
+  sla: [0.995, 0.999],         // promised uptime
+  bonusFraction: 0.3,          // of the contract's total pay
+  penaltyFraction: 0.6,
+  xp: 800,
+  nameSuffixes: ['Bank', 'Capital', 'Trust'],
+},
+```
+
+Offers store the numbers they were rolled with, so changing a type only affects new offers, never contracts already signed. Removing a type is safe: signed contracts still finish.
 
 ## When content runs out
 

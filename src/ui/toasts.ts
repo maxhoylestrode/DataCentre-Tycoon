@@ -9,7 +9,7 @@ export class Toasts {
     parent.appendChild(this.root);
   }
 
-  show(html: string, kind: 'level' | 'goal' | 'achievement'): void {
+  show(html: string, kind: 'level' | 'goal' | 'achievement' | 'failure'): void {
     const toast = document.createElement('div');
     toast.className = `toast ${kind}`;
     toast.innerHTML = html;

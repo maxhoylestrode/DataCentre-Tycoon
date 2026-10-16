@@ -6,6 +6,7 @@ import type { GameState } from '../sim/state';
 export interface ToolbarHandlers {
   onSelectTool(tool: Tool): void;
   onToggleHeat(): void;
+  onToggleContracts(): void;
 }
 
 function detail(tool: Tool): string {
@@ -29,6 +30,7 @@ interface ToolButton {
 export class Toolbar {
   private readonly tools = new Map<Tool, ToolButton>();
   private readonly heat: ToolButton;
+  private readonly contracts: ToolButton;
 
   constructor(parent: HTMLElement, handlers: ToolbarHandlers) {
     const root = document.createElement('div');
@@ -56,15 +58,18 @@ export class Toolbar {
     }
     this.heat = makeButton('Heat map (H)', 'overlay', 'heat_map', handlers.onToggleHeat);
     this.heat.button.classList.add('toggle');
+    this.contracts = makeButton('Contracts (K)', 'customers', 'contract_board', handlers.onToggleContracts);
   }
 
-  update(state: GameState, tool: Tool, heatVisible: boolean): void {
+  update(state: GameState, tool: Tool, heatVisible: boolean, contractsOpen: boolean): void {
     for (const [t, entry] of this.tools) {
       this.refreshLock(state, entry);
       entry.button.classList.toggle('active', t === tool);
     }
     this.refreshLock(state, this.heat);
     this.heat.button.classList.toggle('active', heatVisible);
+    this.refreshLock(state, this.contracts);
+    this.contracts.button.classList.toggle('active', contractsOpen);
   }
 
   private refreshLock(state: GameState, entry: ToolButton): void {

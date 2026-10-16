@@ -74,6 +74,15 @@ export const CONFIG = {
     // within coolingRadius (square area).
     leak: 0.01,
   },
+  contracts: {
+    // Offers on the board, replaced at the start of each game day.
+    offersPerDay: 3,
+    // Contract pay per rack per tick = this * the customer's pay multiplier.
+    // Matches a full walk-in rack so multipliers read as "x times walk-in".
+    basePayPerRackPerTick: 2.4,
+    // Past contracts remembered for the UI.
+    historyLength: 10,
+  },
   progression: {
     // XP needed to go from level L to L + 1 = xpBase * L ^ xpExponent.
     // Works at any level: there is no max level.

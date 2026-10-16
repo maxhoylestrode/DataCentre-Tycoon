@@ -1,5 +1,7 @@
 import { CONFIG } from '../config';
-import { costsPerTick, incomePerTick } from './economy';
+import { refreshOffers } from './contractBoard';
+import { finishContracts, recordService } from './contracts';
+import { costsPerTick, incomeBreakdown } from './economy';
 import { failOverheatedRacks, stepHeat } from './heat';
 import { powerEfficiency } from './power';
 import { checkProgress, endDay, recordTick } from './progression';
@@ -22,12 +24,16 @@ export function tick(state: GameState): void {
   stepHeat(state, powerEfficiency(state));
   failOverheatedRacks(state);
 
-  const income = incomePerTick(state);
-  const net = income - costsPerTick(state);
+  const income = incomeBreakdown(state);
+  const total = income.walkIn + income.contracts;
+  const net = total - costsPerTick(state);
   state.cash += net;
-  recordTick(state, income, net);
+  state.progress.stats.contractIncome += income.contracts;
+  recordService(state, income.allocation, income.efficiency);
+  recordTick(state, total, net);
 
   state.tick += 1;
+  finishContracts(state);
   if (state.tick % CONFIG.time.ticksPerDay === 0) endDay(state);
 
   if (state.cash < -CONFIG.economy.overdraftLimit) {
@@ -35,4 +41,5 @@ export function tick(state: GameState): void {
     return;
   }
   checkProgress(state);
+  refreshOffers(state);
 }

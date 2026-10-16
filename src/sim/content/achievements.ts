@@ -32,6 +32,20 @@ export const ACHIEVEMENTS: Achievement[] = [
     reward: { xp: 250 },
   },
   {
+    id: 'broken_promise',
+    name: 'Service credits',
+    description: 'Fail a contract’s uptime promise',
+    condition: { type: 'contractsFailed', min: 1 },
+    reward: { xp: 50 },
+  },
+  {
+    id: 'five_nines',
+    name: 'Five nines',
+    description: 'Complete a contract with 100% uptime',
+    condition: { type: 'perfectContracts', min: 1 },
+    reward: { xp: 200 },
+  },
+  {
     id: 'millionaire',
     name: 'Millionaire',
     description: 'Earn £1,000,000 in total',

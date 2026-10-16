@@ -38,6 +38,30 @@ export interface Goal {
   after?: string[];
 }
 
+// [min, max], both inclusive.
+export type Range = [number, number];
+
+export interface CustomerType {
+  // Stable id, stored on contracts. Never rename or reuse one.
+  id: string;
+  name: string;
+  // Offers from this customer type appear from this level.
+  minLevel: number;
+  racks: Range;
+  days: Range;
+  // Pay per rack = CONFIG.contracts.basePayPerRackPerTick * this.
+  payMultiplier: Range;
+  // Promised uptime, 0..1 (0.98 = 98%).
+  sla: Range;
+  // Bonus and penalty as fractions of the contract's total pay.
+  bonusFraction: number;
+  penaltyFraction: number;
+  // XP for completing a contract with the promise kept.
+  xp: number;
+  // Company names are a prefix from CUSTOMER_NAME_PREFIXES plus one of these.
+  nameSuffixes: string[];
+}
+
 export interface Achievement {
   // Stable id, stored in saves. Never rename or reuse one.
   id: string;

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { BUILDING_KINDS, isBuildingKind } from '../src/config';
 import { validateCondition } from '../src/sim/conditions';
 import { ACHIEVEMENTS } from '../src/sim/content/achievements';
+import { CUSTOMER_NAME_PREFIXES, CUSTOMER_TYPES } from '../src/sim/content/customers';
 import { GOALS } from '../src/sim/content/goals';
 import { TIERS } from '../src/sim/content/tiers';
 import type { Reward } from '../src/sim/content/types';
@@ -115,6 +116,38 @@ describe('content', () => {
         }
       }
       expect(GOALS.filter((g) => !done.has(g.id)).map((g) => g.id)).toEqual([]);
+    });
+  });
+
+  describe('customer types', () => {
+    const ranges = ['racks', 'days', 'payMultiplier', 'sla'] as const;
+
+    it('have unique well-formed ids and names to build company names from', () => {
+      expect(duplicates(CUSTOMER_TYPES.map((t) => t.id))).toEqual([]);
+      for (const t of CUSTOMER_TYPES) {
+        expect(t.id, t.id).toMatch(ID_PATTERN);
+        expect(t.nameSuffixes.length, t.id).toBeGreaterThan(0);
+      }
+      expect(CUSTOMER_NAME_PREFIXES.length).toBeGreaterThan(0);
+    });
+
+    it('have valid ranges (min <= max) with sensible values', () => {
+      for (const t of CUSTOMER_TYPES) {
+        for (const key of ranges) {
+          const [min, max] = t[key];
+          expect(min <= max, `${t.id}.${key}`).toBe(true);
+          expect(min > 0, `${t.id}.${key}`).toBe(true);
+        }
+        expect(Number.isInteger(t.racks[0]) && Number.isInteger(t.racks[1]), t.id).toBe(true);
+        expect(Number.isInteger(t.days[0]) && Number.isInteger(t.days[1]), t.id).toBe(true);
+        expect(t.sla[1] <= 1, t.id).toBe(true);
+        expect(t.bonusFraction >= 0 && t.penaltyFraction >= 0 && t.xp >= 0, t.id).toBe(true);
+      }
+    });
+
+    it('at least one is available as soon as the contract board unlocks', () => {
+      const boardLevel = UNLOCKS.find((u) => u.id === 'contract_board')!.level;
+      expect(CUSTOMER_TYPES.some((t) => t.minLevel <= boardLevel)).toBe(true);
     });
   });
 

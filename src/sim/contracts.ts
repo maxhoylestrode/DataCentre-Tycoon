@@ -1,0 +1,111 @@
+// Serving active contracts: which racks each contract uses, uptime, pay,
+// and settling contracts when they end. Offers and signing live in
+// contractBoard.ts and commands.ts.
+
+import { CONFIG } from '../config';
+import {
+  type Building,
+  categoryOf,
+  type Contract,
+  type ContractResult,
+  type GameState,
+  isRunning,
+  racksOf,
+} from './state';
+
+export interface RackAllocation {
+  // Working racks not used by any contract; these earn walk-in income.
+  walkIn: Building[];
+  // Working racks given to each active contract, by contract id.
+  assigned: Map<number, number>;
+}
+
+// Contracts are served oldest first. They take the newest working racks,
+// leaving the longest-running (most ramped-up) racks on walk-in income.
+export function allocateRacks(state: GameState): RackAllocation {
+  const working = state.buildings
+    .filter((b) => categoryOf(b) === 'rack' && isRunning(b))
+    .sort((a, b) => b.builtAtTick - a.builtAtTick || b.id - a.id);
+
+  const assigned = new Map<number, number>();
+  let used = 0;
+  for (const contract of state.contracts.active) {
+    const n = Math.min(contract.racks, working.length - used);
+    assigned.set(contract.id, n);
+    used += n;
+  }
+  return { walkIn: working.slice(used), assigned };
+}
+
+export function contractIncomePerTick(state: GameState, allocation: RackAllocation, efficiency: number): number {
+  return state.contracts.active.reduce(
+    (sum, c) => sum + (allocation.assigned.get(c.id) ?? 0) * efficiency * c.payPerRackPerTick,
+    0,
+  );
+}
+
+// Racks promised to active contracts.
+export function committedRacks(state: GameState): number {
+  return state.contracts.active.reduce((sum, c) => sum + c.racks, 0);
+}
+
+// Racks owned (working or not) that aren't promised to anyone.
+export function freeRacks(state: GameState): number {
+  return racksOf(state).length - committedRacks(state);
+}
+
+// 1 when nothing has been promised yet.
+export function uptimeOf(contract: Contract): number {
+  return contract.promisedRackTicks > 0 ? contract.servedRackTicks / contract.promisedRackTicks : 1;
+}
+
+// Adds one tick of service to every active contract. A rack in a brownout
+// counts as partly served.
+export function recordService(state: GameState, allocation: RackAllocation, efficiency: number): void {
+  for (const contract of state.contracts.active) {
+    contract.promisedRackTicks += contract.racks;
+    contract.servedRackTicks += (allocation.assigned.get(contract.id) ?? 0) * efficiency;
+  }
+}
+
+function settle(state: GameState, contract: Contract, outcome: ContractResult['outcome']): ContractResult {
+  const stats = state.progress.stats;
+  const uptime = uptimeOf(contract);
+  let cash = 0;
+  let xp = 0;
+
+  if (outcome === 'completed' && uptime >= contract.sla - 1e-9) {
+    cash = contract.bonus;
+    xp = contract.xp;
+    stats.contractsCompleted += 1;
+    if (uptime >= 1 - 1e-9) stats.perfectContracts += 1;
+  } else {
+    outcome = outcome === 'cancelled' ? 'cancelled' : 'failed';
+    cash = -contract.penalty;
+    if (outcome === 'failed') stats.contractsFailed += 1;
+  }
+
+  state.cash += cash;
+  state.progress.xp += xp;
+  const result: ContractResult = { name: contract.name, outcome, uptime, cash, xp };
+  const history = state.contracts.history;
+  history.push(result);
+  if (history.length > CONFIG.contracts.historyLength) history.splice(0, history.length - CONFIG.contracts.historyLength);
+  return result;
+}
+
+// Settles every contract whose time is up.
+export function finishContracts(state: GameState): void {
+  const ending = state.contracts.active.filter((c) => state.tick >= c.endTick);
+  if (ending.length === 0) return;
+  state.contracts.active = state.contracts.active.filter((c) => state.tick < c.endTick);
+  for (const contract of ending) settle(state, contract, 'completed');
+}
+
+// Ends a contract early, paying its penalty.
+export function cancelActiveContract(state: GameState, contractId: number): ContractResult | null {
+  const contract = state.contracts.active.find((c) => c.id === contractId);
+  if (!contract) return null;
+  state.contracts.active = state.contracts.active.filter((c) => c.id !== contractId);
+  return settle(state, contract, 'cancelled');
+}

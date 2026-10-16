@@ -4,6 +4,7 @@
 
 import { isBuildingKind } from '../config';
 import { netIncomePerTick } from './economy';
+import { levelInfo } from './levels';
 import { dayOf, type GameState, racksOf } from './state';
 
 export type Condition =
@@ -14,7 +15,13 @@ export type Condition =
   | { type: 'cash'; min: number }
   | { type: 'day'; min: number }
   | { type: 'repairs'; min: number }
-  | { type: 'failures'; min: number };
+  | { type: 'failures'; min: number }
+  | { type: 'level'; min: number }
+  | { type: 'contractsSigned'; min: number }
+  | { type: 'contractsCompleted'; min: number }
+  | { type: 'contractsFailed'; min: number }
+  | { type: 'activeContracts'; min: number }
+  | { type: 'perfectContracts'; min: number };
 
 export type ConditionType = Condition['type'];
 
@@ -36,6 +43,12 @@ const EVALUATORS: Evaluators = {
   day: (s) => dayOf(s),
   repairs: (s) => s.progress.stats.repairs,
   failures: (s) => s.progress.stats.failures,
+  level: (s) => levelInfo(s.progress.xp).level,
+  contractsSigned: (s) => s.progress.stats.contractsSigned,
+  contractsCompleted: (s) => s.progress.stats.contractsCompleted,
+  contractsFailed: (s) => s.progress.stats.contractsFailed,
+  activeContracts: (s) => s.contracts.active.length,
+  perfectContracts: (s) => s.progress.stats.perfectContracts,
 };
 
 export function isConditionType(type: string): type is ConditionType {

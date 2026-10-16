@@ -1,5 +1,6 @@
 import { CONFIG, type Speed } from '../config';
 import type { ToolPreview } from '../input/tools';
+import { committedRacks } from '../sim/contracts';
 import { costsPerTick, incomePerTick, repairCost } from '../sim/economy';
 import { powerDraw, powerEfficiency, powerSupply } from '../sim/power';
 import { levelInfo, tierFor } from '../sim/progression';
@@ -41,6 +42,12 @@ function warnings(state: GameState): string[] {
     out.push(`<span class="warn">${hot} rack${hot > 1 ? 's' : ''} running hot (over ${CONFIG.heat.warnTemp}°C, fail at ${CONFIG.heat.failTemp}°C).</span>`);
   }
   if (repairing > 0) out.push(`<span class="muted">${repairing} rack${repairing > 1 ? 's' : ''} under repair.</span>`);
+
+  const promised = committedRacks(state);
+  const working = racks.filter((r) => r.status === 'ok').length;
+  if (working < promised) {
+    out.push(`<span class="bad">Contracts need ${promised} working racks, you have ${working}: uptime is dropping.</span>`);
+  }
   return out;
 }
 

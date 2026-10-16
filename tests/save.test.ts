@@ -75,7 +75,11 @@ describe('save and load', () => {
       repairDoneTick: null,
     });
     // No copies of content definitions (names, costs) in the save.
-    expect(JSON.stringify(save)).not.toContain(CONFIG.buildings.rack_basic.name);
+    for (const b of save.data.buildings) {
+      expect(Object.keys(b)).not.toContain('name');
+      expect(Object.keys(b)).not.toContain('cost');
+    }
+    expect(JSON.stringify(save.data.buildings)).not.toContain(CONFIG.buildings.rack_basic.name);
   });
 
   it('drops buildings with unknown ids and keeps the rest', () => {
@@ -141,6 +145,38 @@ describe('save and load', () => {
   });
 });
 
+describe('contracts in saves', () => {
+  it('round-trips offers, active contracts, history and the RNG seed', () => {
+    const state = playedGame();
+    state.contracts.offers.push({
+      id: 7, customerType: 'startup', name: 'Pixel Labs', racks: 2, days: 3,
+      payPerRackPerTick: 4.2, sla: 0.97, bonus: 500, penalty: 800, xp: 150,
+    });
+    state.contracts.active.push({
+      id: 6, customerType: 'retired_type', name: 'Old Co', racks: 1, days: 2, payPerRackPerTick: 3,
+      sla: 0.95, bonus: 100, penalty: 200, xp: 80, startTick: 10, endTick: 2890,
+      servedRackTicks: 250, promisedRackTicks: 290,
+    });
+    state.contracts.history.push({ name: 'Done Ltd', outcome: 'completed', uptime: 1, cash: 300, xp: 80 });
+    state.contracts.nextId = 8;
+    state.rngSeed = 12345;
+
+    const loaded = load(serialize(state));
+    expect(loaded.contracts).toEqual(state.contracts);
+    expect(loaded.rngSeed).toBe(12345);
+  });
+
+  it('drops malformed contract entries', () => {
+    const text = tamper(playedGame(), (save) => {
+      save.data.contracts.offers.push({ id: 3, name: 'Broken', customerType: 'startup', racks: -1 });
+      save.data.contracts.active.push({ id: 4, name: 'No dates', customerType: 'startup', racks: 1, days: 1, payPerRackPerTick: 1, sla: 0.9 });
+    });
+    const loaded = load(text);
+    expect(loaded.contracts.offers.find((o) => o.name === 'Broken')).toBeUndefined();
+    expect(loaded.contracts.active).toHaveLength(0);
+  });
+});
+
 describe('migrations', () => {
   // A real save written by the Milestone 3 build (format v1), trimmed to a 4x3 room.
   const V1_SAVE = JSON.stringify({
@@ -184,5 +220,18 @@ describe('migrations', () => {
 
   it('re-saves a migrated game at the current version', () => {
     expect(JSON.parse(serialize(load(V1_SAVE))).version).toBe(SAVE_VERSION);
+  });
+
+  it('migrates a v2 save to no contracts and a deterministic seed', () => {
+    const v2 = JSON.parse(V1_SAVE);
+    v2.version = 2;
+    v2.data.progress = { xp: 500, completedGoals: ['first_rack'], achievements: [], stats: { built: 4 } };
+    const a = load(JSON.stringify(v2));
+    const b = load(JSON.stringify(v2));
+    expect(a.progress.xp).toBe(500);
+    expect(a.progress.stats.built).toBe(4);
+    expect(a.progress.stats.contractsSigned).toBe(0);
+    expect(a.contracts.active).toEqual([]);
+    expect(a.rngSeed).toBe(b.rngSeed);
   });
 });

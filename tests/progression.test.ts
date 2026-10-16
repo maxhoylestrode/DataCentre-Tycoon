@@ -217,4 +217,19 @@ describe('conditions', () => {
   it('day', () => expect(evaluate(state, { type: 'day', min: 3 }).current).toBe(3));
   it('repairs', () => expect(isMet(state, { type: 'repairs', min: 2 })).toBe(true));
   it('failures', () => expect(isMet(state, { type: 'failures', min: 4 })).toBe(false));
+  it('level', () => expect(evaluate(state, { type: 'level', min: 10 }).current).toBe(10));
+
+  describe('contract conditions', () => {
+    const s = createInitialState(10, 10);
+    Object.assign(s.progress.stats, { contractsSigned: 4, contractsCompleted: 3, contractsFailed: 1, perfectContracts: 2 });
+    s.contracts.active.push({
+      id: 1, customerType: 'startup', name: 'A', racks: 1, days: 1, payPerRackPerTick: 1, sla: 0.9,
+      bonus: 0, penalty: 0, xp: 0, startTick: 0, endTick: 1440, servedRackTicks: 0, promisedRackTicks: 0,
+    });
+    it('contractsSigned', () => expect(evaluate(s, { type: 'contractsSigned', min: 1 }).current).toBe(4));
+    it('contractsCompleted', () => expect(evaluate(s, { type: 'contractsCompleted', min: 1 }).current).toBe(3));
+    it('contractsFailed', () => expect(evaluate(s, { type: 'contractsFailed', min: 1 }).current).toBe(1));
+    it('activeContracts', () => expect(evaluate(s, { type: 'activeContracts', min: 1 }).current).toBe(1));
+    it('perfectContracts', () => expect(evaluate(s, { type: 'perfectContracts', min: 1 }).current).toBe(2));
+  });
 });

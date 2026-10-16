@@ -3,7 +3,7 @@ import { ACHIEVEMENTS } from '../sim/content/achievements';
 import { GOALS } from '../sim/content/goals';
 import type { Unlock } from '../sim/content/types';
 import { levelOf, tierFor, unlocksBetween } from '../sim/progression';
-import type { GameState } from '../sim/state';
+import type { ContractResult, GameState } from '../sim/state';
 import { rewardText } from './goals';
 import type { Toasts } from './toasts';
 
@@ -18,6 +18,8 @@ export class Announcer {
   private level = 1;
   private goals = 0;
   private achievements = 0;
+  // History is capped, so track the last result seen rather than a count.
+  private lastResult: ContractResult | undefined;
 
   constructor(private readonly toasts: Toasts, state: GameState) {
     this.reset(state);
@@ -28,10 +30,18 @@ export class Announcer {
     this.level = levelOf(state);
     this.goals = state.progress.completedGoals.length;
     this.achievements = state.progress.achievements.length;
+    this.lastResult = state.contracts.history.at(-1);
   }
 
   update(state: GameState): void {
     const { completedGoals, achievements } = state.progress;
+
+    const history = state.contracts.history;
+    if (history.at(-1) !== this.lastResult) {
+      const seen = this.lastResult ? history.indexOf(this.lastResult) : -1;
+      for (const r of history.slice(seen + 1)) this.announceContract(r);
+      this.lastResult = history.at(-1);
+    }
 
     for (const id of completedGoals.slice(this.goals)) {
       const goal = GOALS.find((g) => g.id === id);
@@ -61,5 +71,17 @@ export class Announcer {
       this.toasts.show(lines.join(''), 'level');
     }
     this.level = level;
+  }
+
+  private announceContract(r: ContractResult): void {
+    const uptime = `${(r.uptime * 100).toFixed(1)}% uptime`;
+    const cash = `£${Math.abs(Math.round(r.cash)).toLocaleString('en-GB')}`;
+    if (r.outcome === 'completed') {
+      this.toasts.show(`<b>Contract kept:</b> ${r.name}<br>${uptime} &middot; +${cash} bonus, +${r.xp} XP`, 'goal');
+    } else if (r.outcome === 'failed') {
+      this.toasts.show(`<b>Promise broken:</b> ${r.name}<br>${uptime} &middot; -${cash} penalty`, 'failure');
+    } else {
+      this.toasts.show(`<b>Contract cancelled:</b> ${r.name}<br>-${cash} penalty`, 'failure');
+    }
   }
 }

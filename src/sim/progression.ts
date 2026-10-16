@@ -8,45 +8,18 @@ import { GOALS } from './content/goals';
 import { TIERS } from './content/tiers';
 import type { Goal, Reward, Tier, Unlock } from './content/types';
 import { UNLOCKS } from './content/unlocks';
+import { levelInfo } from './levels';
 import { dayOf, type GameState } from './state';
+
+export { levelInfo, type LevelInfo, totalXpForLevel, xpToNext } from './levels';
 
 const P = CONFIG.progression;
 
 // Mechanics that exist in code and can be gated by an unlock.
-export const MECHANICS = ['heat_map'] as const;
-
-// XP needed to go from `level` to `level + 1`.
-export function xpToNext(level: number): number {
-  return Math.round(P.xpBase * level ** P.xpExponent);
-}
-
-export interface LevelInfo {
-  level: number;
-  // XP earned since reaching this level, and XP this level needs in total.
-  xpIntoLevel: number;
-  xpForNext: number;
-}
-
-// Works for any amount of XP: there is no max level.
-export function levelInfo(xp: number): LevelInfo {
-  let level = 1;
-  let remaining = Math.max(0, xp);
-  while (remaining >= xpToNext(level)) {
-    remaining -= xpToNext(level);
-    level += 1;
-  }
-  return { level, xpIntoLevel: remaining, xpForNext: xpToNext(level) };
-}
+export const MECHANICS = ['heat_map', 'contract_board'] as const;
 
 export function levelOf(state: GameState): number {
   return levelInfo(state.progress.xp).level;
-}
-
-// Total XP needed to reach `level` from zero.
-export function totalXpForLevel(level: number): number {
-  let total = 0;
-  for (let l = 1; l < level; l++) total += xpToNext(l);
-  return total;
 }
 
 export function tierFor(level: number): Tier {
