@@ -1,24 +1,39 @@
 // What the selected tool would do on a tile, and doing it. Pure logic over
 // sim state and commands, so hover feedback and clicks always agree.
 
-import { type BuildingKind, buildingDef, CONFIG, type FloorKind, floorDef, isFloorKind } from '../config';
+import {
+  type BuildingKind,
+  buildingDef,
+  CONFIG,
+  type FloorKind,
+  floorDef,
+  isFloorKind,
+  isWallKind,
+  type WallKind,
+} from '../config';
 import { investedValue } from '../sim/buildings';
 import { placeBuilding, placeFloor, removeFloor, repairRack, sellBuilding } from '../sim/commands';
 import { canAfford, repairCost } from '../sim/economy';
 import { isUnlocked, unlockFor } from '../sim/progression';
 import { categoryOf, floorAt, type GameState, getBuildingAt } from '../sim/state';
 
-export type Tool = BuildingKind | FloorKind | 'sell';
+export type Tool = BuildingKind | FloorKind | WallKind | 'sell';
 // inspect: clicking opens the building panel (stats, upgrades, sell).
-export type ToolAction = 'place' | 'sell' | 'repair' | 'inspect' | 'blocked';
+// draw: wall tools, which drag along grid lines instead of clicking tiles.
+export type ToolAction = 'place' | 'sell' | 'repair' | 'inspect' | 'blocked' | 'draw';
 
 // Buildings added later without a hotkey are still selectable from the toolbar.
 export const TOOL_HOTKEYS: Partial<Record<Tool, string>> = {
   rack_basic: 'R',
   power_basic: 'P',
   cooling_fan: 'C',
+  wall_basic: 'B',
   sell: 'X',
 };
+
+export function isWallTool(tool: Tool): tool is WallKind {
+  return tool !== 'sell' && isWallKind(tool);
+}
 
 export interface ToolPreview {
   action: ToolAction;
@@ -29,11 +44,13 @@ const money = (n: number): string => `£${Math.round(n).toLocaleString('en-GB')}
 
 export function toolName(tool: Tool): string {
   if (tool === 'sell') return 'Sell';
+  if (isWallTool(tool)) return CONFIG.walls[tool].name;
   return isFloorKind(tool) ? floorDef(tool).name : buildingDef(tool).name;
 }
 
 export function toolCost(tool: Tool): number {
   if (tool === 'sell') return 0;
+  if (isWallTool(tool)) return CONFIG.walls[tool].cost;
   return isFloorKind(tool) ? floorDef(tool).cost : buildingDef(tool).cost;
 }
 
@@ -52,6 +69,12 @@ export function previewTool(state: GameState, tool: Tool, x: number, y: number):
       return { action: 'sell', text: `Remove ${def.name}: +${money(def.cost * CONFIG.economy.sellRefund)}` };
     }
     return { action: 'blocked', text: 'Nothing to sell here' };
+  }
+
+  if (isWallTool(tool)) {
+    const def = CONFIG.walls[tool];
+    if (!isUnlocked(state, tool)) return { action: 'blocked', text: `${def.name} unlocks at level ${unlockFor(tool)?.level ?? '?'}` };
+    return { action: 'draw', text: `Drag along grid lines to build: ${def.name}, ${money(def.cost)} per tile` };
   }
 
   // Floor tools paint under buildings too.
@@ -89,7 +112,7 @@ export function applyTool(state: GameState, tool: Tool, x: number, y: number): T
   if (!preview) return null;
   if (preview.action === 'place') {
     if (isFloorKind(tool)) placeFloor(state, tool, x, y);
-    else if (tool !== 'sell') placeBuilding(state, tool, x, y);
+    else if (tool !== 'sell' && !isWallTool(tool)) placeBuilding(state, tool, x, y);
   } else if (preview.action === 'sell') {
     if (getBuildingAt(state, x, y)) sellBuilding(state, x, y);
     else removeFloor(state, x, y);

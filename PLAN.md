@@ -308,4 +308,8 @@ Done when: I can create an account, play on one device, log in on another and co
   - **Save v3** adds contracts and the RNG seed. A v2 save migrates with no contracts and a seed taken from its tick count.
   - **Dev helper**: `dct.level(n)` and `dct.cash(n)` in the browser console, only on the local dev server.
 - 2026-10-16: Building upgrades added (user request). User chose a trade-off for racks (more power and heat), a cap that rises with player level, and **real brand names** for the planned rack components. Hardware, cooling types and looks became Milestone 7; staff and incidents moved to Milestone 8. Panel buttons use `pointerdown`, because live re-renders would swallow `click` events.
+- 2026-10-16: Interior walls (user request).
+  - **Placement:** walls sit on tile edges (`state.walls`, each `{ kind, x, y, dir }`), drawn by left-dragging along grid lines with a wall tool (right-drag still pans). Wall (L2), Door (L2) and Glass wall (L8). Doors are closed server-room doors, so they block heat like walls.
+  - **Heat:** walls block diffusion, and cooling units only reach tiles within their radius that they can get to without crossing a wall (`sim/walls.ts`). Chiller pipes run under the floor and ignore walls.
+  - **Display:** walls are half height by default, with a "Tall walls" toggle (V) for full height. Esc cancels a drag or closes panels. Save v6.
 - 2026-10-16: Milestone 7 decisions (user): parts replace rack levels, decor gives prestige that improves contracts, underfloor cooling is a floor layer fed by chillers, everything delivered at once. Rack parts use real brand names with a trademark note in the rack panel. Save v5.

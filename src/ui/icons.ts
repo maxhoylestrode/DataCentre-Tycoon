@@ -16,6 +16,8 @@ export const ICONS = {
   contracts: svg('<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>'),
   style: svg('<path d="M18 3l3 3-9.5 9.5-3-3z"/><path d="M8.5 12.5c-2 0-3.5 1.5-3.5 3.5 0 1.5-1 2.5-2 3 3 1 7 .5 8.5-3"/>'),
   lock: svg('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
+  walls: svg('<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 9.7h18M3 14.3h18M9 5v4.7M15 5v4.7M6 9.7v4.6M12 9.7v4.6M18 9.7v4.6M9 14.3V19M15 14.3V19"/>'),
+  wallHeight: svg('<path d="M4 20h16M7 20V9M12 20V4M17 20v-8"/><path d="m10 6.5 2-2.5 2 2.5"/>'),
 } as const;
 
 export type GroupIcon = keyof typeof ICONS;
@@ -49,6 +51,9 @@ const ITEM_ICONS: Record<string, string> = {
   desk_reception: svg('<path d="M3 11h18v9H3zM3 11l2-3h14l2 3"/><rect x="9.5" y="4" width="5" height="4" rx=".5"/>'),
   sign_company: svg('<path d="M12 12v10"/><rect x="3" y="3" width="18" height="9" rx="1.5"/><path d="M7 7.5h10" stroke="#8f7cff" stroke-width="2.4"/>'),
   server_showcase: svg('<rect x="4" y="16" width="16" height="5" rx="1"/><path d="M5 16V5h14v11" stroke-dasharray="2 1.5"/><rect x="9" y="8" width="6" height="8" rx=".5"/><path d="M10.5 12h3" stroke="#ffb347"/>'),
+  wall_basic: svg('<path d="M3 14 12 9.5l9 4.5v3L12 21.5 3 17z"/><path d="M3 14v3M12 9.5v3M21 14v3M3 14l9 4.5 9-4.5M12 18.5v3"/>'),
+  wall_door: svg('<rect x="6" y="2.5" width="12" height="19" rx="1"/><rect x="8.5" y="5" width="7" height="16.5" fill="#8a6a4a" stroke="#8a6a4a" opacity=".85"/><circle cx="14" cy="13" r=".9" fill="#d9c27a" stroke="none"/>'),
+  wall_glass: svg('<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M7 15l4-6M11 16l5-7" stroke="#bfe3ff"/>'),
   sell: ICONS.sell,
 };
 

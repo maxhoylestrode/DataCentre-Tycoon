@@ -6,6 +6,8 @@ import type { Unlock } from './types';
 export const UNLOCKS: Unlock[] = [
   { id: 'rack_basic', type: 'building', level: 1 },
   { id: 'power_basic', type: 'building', level: 2 },
+  { id: 'wall_basic', type: 'wall', level: 2 },
+  { id: 'wall_door', type: 'wall', level: 2 },
   {
     id: 'upgrades',
     type: 'mechanic',
@@ -40,6 +42,7 @@ export const UNLOCKS: Unlock[] = [
   { id: 'plant_tree', type: 'building', level: 6 },
   { id: 'rack_performance', type: 'building', level: 8 },
   { id: 'desk_reception', type: 'building', level: 8 },
+  { id: 'wall_glass', type: 'wall', level: 8 },
   { id: 'cooling_inrow', type: 'building', level: 9 },
   { id: 'sign_company', type: 'building', level: 10 },
   { id: 'chiller', type: 'building', level: 11 },

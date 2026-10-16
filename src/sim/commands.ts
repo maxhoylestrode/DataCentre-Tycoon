@@ -9,9 +9,12 @@ import {
   floorDef,
   isBuildingKind,
   isFloorKind,
+  isWallKind,
   type PartSlot,
   type Speed,
+  type WallKind,
 } from '../config';
+import { isInteriorEdge, wallAt } from './walls';
 import { ROOM_STYLES } from './content/styles';
 import { contractBoardOpen, refreshOffers } from './contractBoard';
 import { cancelActiveContract, freeRacks } from './contracts';
@@ -144,6 +147,30 @@ export function removeFloor(state: GameState, x: number, y: number): CommandResu
   if (!tile) return { ok: false, reason: 'empty' };
   state.floor = state.floor.filter((f) => f !== tile);
   state.cash += floorDef(tile.kind).cost * CONFIG.economy.sellRefund;
+  return { ok: true };
+}
+
+// Builds a wall on an interior edge between two tiles.
+export function placeWall(state: GameState, kind: WallKind, x: number, y: number, dir: 'h' | 'v'): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  if (!isWallKind(kind)) return { ok: false, reason: 'unknown_kind' };
+  if (!isUnlocked(state, kind)) return { ok: false, reason: 'locked' };
+  if (!isInteriorEdge(state, x, y, dir)) return { ok: false, reason: 'out_of_bounds' };
+  if (wallAt(state, x, y, dir)) return { ok: false, reason: 'occupied' };
+  const cost = CONFIG.walls[kind].cost;
+  if (state.cash < cost) return { ok: false, reason: 'insufficient_funds' };
+
+  state.cash -= cost;
+  state.walls.push({ kind, x, y, dir });
+  return { ok: true };
+}
+
+export function removeWall(state: GameState, x: number, y: number, dir: 'h' | 'v'): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  const wall = wallAt(state, x, y, dir);
+  if (!wall) return { ok: false, reason: 'empty' };
+  state.walls = state.walls.filter((w) => w !== wall);
+  state.cash += CONFIG.walls[wall.kind].cost * CONFIG.economy.sellRefund;
   return { ok: true };
 }
 

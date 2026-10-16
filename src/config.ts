@@ -152,6 +152,20 @@ export const CONFIG = {
       name: 'Floor vent', cost: 300, upkeepPerTick: 0.05, coolingStrength: 0.04,
     },
   },
+  // Interior walls, drawn along the lines between tiles. Heat can't spread
+  // through them and cooling units only cool their own side.
+  walls: {
+    wall_basic: { name: 'Wall', cost: 100 },
+    wall_door: { name: 'Door', cost: 250 },
+    wall_glass: { name: 'Glass wall', cost: 400 },
+  },
+  wallHeights: {
+    // Interior walls are drawn low by default so racks behind them stay
+    // visible; the Walls toggle shows them at full room height.
+    low: 1.1,
+    full: 2.4,
+    thickness: 0.1,
+  },
   prestige: {
     // Each prestige point adds this much to contract pay, up to the cap.
     payBonusPerPoint: 0.005,
@@ -242,6 +256,12 @@ export const BUILDING_KINDS = Object.keys(CONFIG.buildings) as BuildingKind[];
 export type FloorKind = keyof typeof CONFIG.floors;
 export const FLOOR_KINDS = Object.keys(CONFIG.floors) as FloorKind[];
 export type PartSlot = 'cpu' | 'ram' | 'storage' | 'network' | 'gpu' | 'cooling';
+export type WallKind = keyof typeof CONFIG.walls;
+export const WALL_KINDS = Object.keys(CONFIG.walls) as WallKind[];
+
+export function isWallKind(id: string): id is WallKind {
+  return Object.hasOwn(CONFIG.walls, id);
+}
 
 export interface BuildingDef {
   readonly name: string;

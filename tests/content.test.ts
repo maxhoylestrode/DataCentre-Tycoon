@@ -2,7 +2,16 @@
 // entry fails here instead of breaking the game at runtime.
 
 import { describe, expect, it } from 'vitest';
-import { BUILDING_KINDS, buildingDef, FLOOR_KINDS, isBuildingKind, isFloorKind, type PartSlot } from '../src/config';
+import {
+  BUILDING_KINDS,
+  buildingDef,
+  FLOOR_KINDS,
+  isBuildingKind,
+  isFloorKind,
+  isWallKind,
+  type PartSlot,
+  WALL_KINDS,
+} from '../src/config';
 import { PARTS } from '../src/sim/content/parts';
 import { ROOM_STYLES } from '../src/sim/content/styles';
 import { validateCondition } from '../src/sim/conditions';
@@ -61,6 +70,7 @@ describe('content', () => {
       for (const unlock of UNLOCKS) {
         if (unlock.type === 'building') expect(isBuildingKind(unlock.id), unlock.id).toBe(true);
         else if (unlock.type === 'floor') expect(isFloorKind(unlock.id), unlock.id).toBe(true);
+        else if (unlock.type === 'wall') expect(isWallKind(unlock.id), unlock.id).toBe(true);
         else expect(MECHANICS as readonly string[], unlock.id).toContain(unlock.id);
       }
     });
@@ -69,6 +79,7 @@ describe('content', () => {
       const ids = UNLOCKS.map((u) => u.id);
       for (const kind of BUILDING_KINDS) expect(ids, kind).toContain(kind);
       for (const kind of FLOOR_KINDS) expect(ids, kind).toContain(kind);
+      for (const kind of WALL_KINDS) expect(ids, kind).toContain(kind);
       for (const mechanic of MECHANICS) expect(ids, mechanic).toContain(mechanic);
     });
 

@@ -41,6 +41,8 @@ const HOVER_COLOURS: Record<ToolAction, number> = {
   repair: 0x4f9cf0,
   inspect: 0xb28cff,
   blocked: 0x7d838c,
+  // Wall tools show a ghost wall instead of a tile highlight.
+  draw: 0x4cc38a,
 };
 
 export class HoverHighlight {
@@ -81,10 +83,18 @@ export class TilePicker {
   ) {}
 
   pick(clientX: number, clientY: number): Tile | null {
+    const grid = this.pickGrid(clientX, clientY);
+    if (!grid) return null;
+    return worldToTile(this.gridWidth, this.gridHeight, this.hit);
+  }
+
+  // The floor point under the cursor in grid coordinates (room corner at
+  // 0, 0; one unit per tile), not clamped to the room. Used to draw walls.
+  pickGrid(clientX: number, clientY: number): { gx: number; gy: number } | null {
     const rect = this.canvas.getBoundingClientRect();
     this.ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(this.ndc, this.camera);
     if (!this.raycaster.ray.intersectPlane(this.floorPlane, this.hit)) return null;
-    return worldToTile(this.gridWidth, this.gridHeight, this.hit);
+    return { gx: this.hit.x + this.gridWidth / 2, gy: this.hit.z + this.gridHeight / 2 };
   }
 }

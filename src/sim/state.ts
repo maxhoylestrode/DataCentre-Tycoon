@@ -6,6 +6,7 @@ import {
   type FloorKind,
   type PartSlot,
   type Speed,
+  type WallKind,
 } from '../config';
 
 // Only racks use 'failed' and 'repairing'; other buildings stay 'ok'.
@@ -32,6 +33,16 @@ export interface FloorTile {
   kind: FloorKind;
   x: number;
   y: number;
+}
+
+// A wall along one edge between two tiles.
+// 'h': the horizontal grid line on top of tile (x, y), between (x, y-1) and (x, y).
+// 'v': the vertical grid line left of tile (x, y), between (x-1, y) and (x, y).
+export interface WallSegment {
+  kind: WallKind;
+  x: number;
+  y: number;
+  dir: 'h' | 'v';
 }
 
 export interface StyleState {
@@ -160,6 +171,7 @@ export interface GameState {
   buildings: Building[];
   nextBuildingId: number;
   floor: FloorTile[];
+  walls: WallSegment[];
   style: StyleState;
   // Temperature of every tile in °C, indexed y * width + x.
   temps: number[];
@@ -186,6 +198,7 @@ export function createInitialState(
     buildings: [],
     nextBuildingId: 1,
     floor: [],
+    walls: [],
     style: createStyleState(),
     temps: new Array<number>(width * height).fill(CONFIG.heat.ambient),
     cash: CONFIG.economy.startingCash,

@@ -8,9 +8,14 @@ import {
   setSpeed,
   signContract,
   togglePause,
+  placeWall,
+  removeWall,
   upgradeBuilding,
   upgradePart,
 } from './sim/commands';
+import { isInteriorEdge, wallAt } from './sim/walls';
+import { type Edge, edgesBetween, nearestCorner, nearestEdge } from './input/walls';
+import { WallLayer } from './render/walls';
 import { createInitialState, type GameState } from './sim/state';
 import { CameraRig } from './render/camera';
 import { createGridLines, HoverHighlight, type Tile, TilePicker } from './render/grid';
@@ -18,7 +23,7 @@ import { HeatOverlay } from './render/heatmap';
 import { BuildingLayer, FloorLayer } from './render/models';
 import { createScene } from './render/scene';
 import { attachInput } from './input/input';
-import { applyTool, previewTool, type Tool } from './input/tools';
+import { applyTool, isWallTool, previewTool, type Tool, type ToolPreview } from './input/tools';
 import { exportSaveFile, loadGame, loadSettings, readSaveFile, saveGame, saveSettings } from './io/storage';
 import { isUnlocked, totalXpForLevel } from './sim/progression';
 import { Announcer } from './ui/announcer';
@@ -50,8 +55,10 @@ const selection = new HoverHighlight(state.width, state.height);
 const heat = new HeatOverlay(state.width, state.height);
 const buildings = new BuildingLayer();
 const floor = new FloorLayer();
+const walls = new WallLayer();
 scene.add(
   floor.group,
+  walls.group,
   createGridLines(state.width, state.height),
   heat.mesh,
   selection.mesh,
@@ -62,6 +69,47 @@ scene.add(
 // UI state: lives here, not in the sim.
 let tool: Tool = 'rack_basic';
 let hoveredTile: Tile | null = null;
+// Floor point under the cursor in grid units, for wall edges.
+let hoverGrid: { gx: number; gy: number } | null = null;
+// Corner a wall drag started from, and the corner it's at now.
+let wallDrag: { start: { x: number; y: number }; end: { x: number; y: number } } | null = null;
+
+// How close (in tiles) the cursor must be to a grid line to pick that edge.
+const EDGE_PICK = 0.3;
+const SELL_PICK = 0.2;
+
+// The wall edges a click/drag would build right now. A click (no drag)
+// builds the single edge nearest the cursor.
+function plannedWallEdges(): Edge[] {
+  if (wallDrag) {
+    const line = edgesBetween(wallDrag.start, wallDrag.end);
+    if (line.length > 0) return line;
+  }
+  if (!hoverGrid) return [];
+  const near = nearestEdge(hoverGrid.gx, hoverGrid.gy);
+  return near.distance <= EDGE_PICK ? [near.edge] : [];
+}
+
+// Which planned edges can actually be built, given cash for the whole run.
+function checkWallEdges(edges: Edge[]): { edge: Edge; ok: boolean }[] {
+  if (!isWallTool(tool)) return [];
+  const cost = CONFIG.walls[tool].cost;
+  let cash = state.cash;
+  return edges.map((edge) => {
+    const free = isInteriorEdge(state, edge.x, edge.y, edge.dir) && !wallAt(state, edge.x, edge.y, edge.dir);
+    const ok = free && isUnlocked(state, tool) && cash >= cost;
+    if (ok) cash -= cost;
+    return { edge, ok };
+  });
+}
+
+// A wall right under the cursor, for the Sell tool.
+function wallUnderCursor(): Edge | null {
+  if (!hoverGrid) return null;
+  const near = nearestEdge(hoverGrid.gx, hoverGrid.gy);
+  if (near.distance > SELL_PICK) return null;
+  return wallAt(state, near.edge.x, near.edge.y, near.edge.dir) ? near.edge : null;
+}
 // Locked tools and the locked heat map can't be selected.
 const selectTool = (t: Tool): void => {
   if (t === 'sell' || isUnlocked(state, t)) tool = t;
@@ -101,6 +149,7 @@ const startNewGame = (): void => {
   clock.accumulator = 0;
   buildings.clear();
   floor.clear();
+  walls.clear();
   tool = 'rack_basic';
   heat.visible = false;
   contracts.toggle(false);
@@ -170,12 +219,57 @@ const toolbar = new Toolbar(document.body, {
   onToggleHeat: toggleHeat,
   onToggleContracts: toggleContracts,
   onToggleStyle: toggleStyle,
+  onToggleWallHeight: () => toggleWallHeight(),
 });
 
+const toggleWallHeight = (): void => {
+  if (isUnlocked(state, 'wall_basic')) walls.tall = !walls.tall;
+};
+const closePanels = (): void => {
+  toolbar.close();
+  buildingPanel.close();
+  contracts.toggle(false);
+  stylePanel.toggle(false);
+};
+
 const updateInput = attachInput(renderer.domElement, rig, {
-  onHover: (cx, cy) => (hoveredTile = picker.pick(cx, cy)),
-  onHoverEnd: () => (hoveredTile = null),
+  onHover: (cx, cy) => {
+    hoveredTile = picker.pick(cx, cy);
+    hoverGrid = picker.pickGrid(cx, cy);
+  },
+  onHoverEnd: () => {
+    hoveredTile = null;
+    hoverGrid = null;
+  },
+  isDrawMode: () => isWallTool(tool) && isUnlocked(state, tool),
+  onDrawStart: (cx, cy) => {
+    const grid = picker.pickGrid(cx, cy);
+    if (!grid) return;
+    const corner = nearestCorner(grid.gx, grid.gy);
+    wallDrag = { start: corner, end: corner };
+  },
+  onDrawMove: (cx, cy) => {
+    const grid = picker.pickGrid(cx, cy);
+    if (wallDrag && grid) wallDrag.end = nearestCorner(grid.gx, grid.gy);
+  },
+  onDrawEnd: (_cx, _cy, cancelled) => {
+    if (!cancelled && isWallTool(tool)) {
+      for (const { edge, ok } of checkWallEdges(plannedWallEdges())) {
+        if (ok) placeWall(state, tool, edge.x, edge.y, edge.dir);
+      }
+    }
+    wallDrag = null;
+  },
+  onToggleWallHeight: toggleWallHeight,
+  onEscape: closePanels,
   onClick: (cx, cy) => {
+    if (tool === 'sell') {
+      const wall = wallUnderCursor();
+      if (wall) {
+        removeWall(state, wall.x, wall.y, wall.dir);
+        return;
+      }
+    }
     const tile = picker.pick(cx, cy);
     if (!tile) return;
     const action = applyTool(state, tool, tile.x, tile.y);
@@ -218,14 +312,40 @@ function frame(now: number): void {
   updateInput(dt);
   advanceClock(clock, state, dt);
 
-  const preview = hoveredTile ? previewTool(state, tool, hoveredTile.x, hoveredTile.y) : null;
+  let preview: ToolPreview | null = hoveredTile ? previewTool(state, tool, hoveredTile.x, hoveredTile.y) : null;
+
+  // Walls work on edges, so they get their own preview: a ghost wall and a
+  // cost summary instead of a tile highlight.
+  let ghosts: { edge: Edge; ok: boolean }[] = [];
+  const sellWall = tool === 'sell' ? wallUnderCursor() : null;
+  if (sellWall) {
+    const kind = wallAt(state, sellWall.x, sellWall.y, sellWall.dir)!.kind;
+    const refund = CONFIG.walls[kind].cost * CONFIG.economy.sellRefund;
+    preview = { action: 'draw', text: `Remove ${CONFIG.walls[kind].name}: +£${refund}` };
+    ghosts = [{ edge: sellWall, ok: false }];
+  } else if (isWallTool(tool) && isUnlocked(state, tool)) {
+    ghosts = checkWallEdges(plannedWallEdges());
+    const buildable = ghosts.filter((g) => g.ok).length;
+    if (wallDrag && ghosts.length > 0) {
+      const def = CONFIG.walls[tool];
+      preview = { action: 'draw', text: `${buildable} × ${def.name}: £${(buildable * def.cost).toLocaleString('en-GB')}` };
+    }
+  }
+  walls.showGhost(ghosts, state);
+
   buildings.sync(state, dt);
   floor.sync(state);
+  walls.sync(state);
   room.apply(state.style);
   heat.update(state);
-  hover.set(preview ? hoveredTile : null, preview?.action ?? 'place');
+  hover.set(preview && preview.action !== 'draw' ? hoveredTile : null, preview?.action ?? 'place');
   hud.update(state, hoveredTile, preview);
-  toolbar.update(state, tool, { heat: heat.visible, contracts: contracts.open, style: stylePanel.open });
+  toolbar.update(state, tool, {
+    heat: heat.visible,
+    contracts: contracts.open,
+    style: stylePanel.open,
+    tallWalls: walls.tall,
+  });
   goals.update(state);
   contracts.update(state);
   stylePanel.update(state);

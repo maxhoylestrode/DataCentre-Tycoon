@@ -1,5 +1,5 @@
-import { BUILDING_KINDS, buildingDef, CONFIG, FLOOR_KINDS, isFloorKind } from '../config';
-import { type Tool, TOOL_HOTKEYS, toolCost, toolName } from '../input/tools';
+import { BUILDING_KINDS, buildingDef, CONFIG, FLOOR_KINDS, isFloorKind, WALL_KINDS } from '../config';
+import { isWallTool, type Tool, TOOL_HOTKEYS, toolCost, toolName } from '../input/tools';
 import { buildingStats } from '../sim/buildings';
 import { isUnlocked, unlockFor } from '../sim/progression';
 import type { GameState } from '../sim/state';
@@ -11,6 +11,7 @@ export interface ToolbarHandlers {
   onToggleHeat(): void;
   onToggleContracts(): void;
   onToggleStyle(): void;
+  onToggleWallHeight(): void;
 }
 
 interface Group {
@@ -29,6 +30,7 @@ const GROUPS: Group[] = [
   { id: 'power', label: 'Power', tools: byCategory('power'), hotkey: TOOL_HOTKEYS.power_basic },
   { id: 'cooling', label: 'Cooling', tools: [...byCategory('cooling', 'chiller'), ...FLOOR_KINDS], hotkey: TOOL_HOTKEYS.cooling_fan },
   { id: 'decor', label: 'Decor', tools: byCategory('decor') },
+  { id: 'walls', label: 'Walls', tools: [...WALL_KINDS], hotkey: TOOL_HOTKEYS.wall_basic },
   { id: 'sell', label: 'Sell', tools: ['sell'], hotkey: TOOL_HOTKEYS.sell },
 ];
 
@@ -50,6 +52,7 @@ const money = (n: number): string => `£${n.toLocaleString('en-GB')}`;
 function stat(tool: Tool): string {
   if (tool === 'sell') return `${CONFIG.economy.sellRefund * 100}% refund`;
   if (isFloorKind(tool)) return 'Under racks · needs chiller';
+  if (isWallTool(tool)) return tool === 'wall_door' ? 'Per tile · blocks heat' : 'Per tile · drag to draw · blocks heat';
   const def = buildingDef(tool);
   const s = buildingStats({
     id: 0, kind: tool, x: 0, y: 0, builtAtTick: 0, status: 'ok', repairDoneTick: null, upgrade: 0, parts: {},
@@ -117,6 +120,7 @@ export class Toolbar {
       { id: 'heat', label: 'Heat', hotkey: 'H', unlockId: 'heat_map', onClick: handlers.onToggleHeat },
       { id: 'contracts', label: 'Contracts', hotkey: 'K', unlockId: 'contract_board', onClick: handlers.onToggleContracts },
       { id: 'style', label: 'Style', hotkey: 'L', unlockId: 'room_styles', onClick: handlers.onToggleStyle },
+      { id: 'wallHeight', label: 'Tall walls', hotkey: 'V', unlockId: 'wall_basic', onClick: handlers.onToggleWallHeight },
     ];
     for (const toggle of toggles) {
       this.toggleButtons.push({ button: button(toggle.id, toggle.label, toggle.hotkey, toggle.onClick), toggle });
@@ -139,7 +143,11 @@ export class Toolbar {
     this.openGroup = null;
   }
 
-  update(state: GameState, tool: Tool, open: { heat: boolean; contracts: boolean; style: boolean }): void {
+  update(
+    state: GameState,
+    tool: Tool,
+    open: { heat: boolean; contracts: boolean; style: boolean; tallWalls: boolean },
+  ): void {
     for (const group of GROUPS) {
       const b = this.groupButtons.get(group.id)!;
       b.classList.toggle('active', group.tools.includes(tool));
@@ -147,7 +155,7 @@ export class Toolbar {
       // Grey a group out only if nothing in it is unlocked yet.
       b.classList.toggle('locked', !group.tools.some((t) => t === 'sell' || isUnlocked(state, t)));
     }
-    const states = [open.heat, open.contracts, open.style];
+    const states = [open.heat, open.contracts, open.style, open.tallWalls];
     this.toggleButtons.forEach(({ button, toggle }, i) => {
       const locked = !isUnlocked(state, toggle.unlockId);
       button.classList.toggle('locked', locked);

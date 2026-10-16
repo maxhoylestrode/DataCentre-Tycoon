@@ -147,6 +147,10 @@ Add it to `CONFIG.buildings` with `category: 'decor'` and a `prestige` value, an
 { id: 'wall_glass', slot: 'wall', name: 'Glass partition', level: 24, cost: 30000, prestige: 12, color: 0x9fb8c8 },
 ```
 
+## Add a wall type
+
+Add it to `CONFIG.walls` (`name`, `cost`) and an unlock entry with `type: 'wall'`. It appears in the Walls menu automatically. For a new look, add a branch in `buildSegment` in `src/render/walls.ts` and an icon in `src/ui/icons.ts`. Every wall type blocks heat.
+
 ## Add a customer type
 
 `src/sim/content/customers.ts`. Each morning the contract board rolls `CONFIG.contracts.offersPerDay` offers from the types whose `minLevel` you have reached. Ranges are `[min, max]`, both inclusive.

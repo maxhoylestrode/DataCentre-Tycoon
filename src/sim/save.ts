@@ -5,7 +5,8 @@
 // To change the format: bump SAVE_VERSION, add a migration from the previous
 // version to MIGRATIONS, and update readState. Never edit an old migration.
 
-import { buildingDef, CONFIG, isBuildingKind, isFloorKind, type Speed } from '../config';
+import { buildingDef, CONFIG, isBuildingKind, isFloorKind, isWallKind, type Speed } from '../config';
+import { isInteriorEdge } from './walls';
 import { ACHIEVEMENTS } from './content/achievements';
 import { GOALS } from './content/goals';
 import { PARTS } from './content/parts';
@@ -26,6 +27,7 @@ import {
   type Progress,
   type Stats,
   type StyleState,
+  type WallSegment,
 } from './state';
 
 // v1: Milestone 3 game (buildings, cash, time, heat).
@@ -33,7 +35,8 @@ import {
 // v3: adds contracts and the RNG seed.
 // v4: adds building upgrade levels.
 // v5: racks upgrade through parts instead of levels; adds the floor layer and room style.
-export const SAVE_VERSION = 5;
+// v6: adds interior walls.
+export const SAVE_VERSION = 6;
 
 // Part ids as they were when v5 was introduced. Hard-coded so this migration
 // never changes if the parts catalogue does later.
@@ -100,6 +103,7 @@ const MIGRATIONS: Record<number, (data: Data) => Data> = {
     floor: [],
     style: null,
   }),
+  5: (data) => ({ ...data, walls: [] }),
 };
 
 export function serialize(state: GameState, now: Date = new Date()): string {
@@ -128,6 +132,7 @@ export function serialize(state: GameState, now: Date = new Date()): string {
         parts: { ...b.parts },
       })),
       floor: state.floor.map((f) => ({ kind: f.kind, x: f.x, y: f.y })),
+      walls: state.walls.map((w) => ({ kind: w.kind, x: w.x, y: w.y, dir: w.dir })),
       style: { ...state.style, owned: [...state.style.owned] },
       // Rounded to keep saves small; nobody can see the third decimal.
       temps: state.temps.map((t) => Math.round(t * 100) / 100),
@@ -211,6 +216,7 @@ function readState(data: Data): GameState {
     state.temps = temps.map((t) => Math.max(CONFIG.heat.ambient, t as number));
   }
   state.floor = readFloor(data.floor, width, height);
+  state.walls = readWalls(data.walls, state);
   state.style = readStyle(data.style);
   state.progress = readProgress(data.progress);
   state.contracts = readContracts(data.contracts);
@@ -300,6 +306,25 @@ function readFloor(raw: unknown, width: number, height: number): FloorTile[] {
     tiles.push({ kind: item.kind, x, y });
   }
   return tiles;
+}
+
+// Unknown wall kinds, edges outside the room and duplicates are dropped.
+function readWalls(raw: unknown, state: GameState): WallSegment[] {
+  const walls: WallSegment[] = [];
+  const seen = new Set<string>();
+  for (const item of Array.isArray(raw) ? raw : []) {
+    if (!isObject(item) || typeof item.kind !== 'string' || !isWallKind(item.kind)) continue;
+    const dir = item.dir;
+    if (dir !== 'h' && dir !== 'v') continue;
+    const x = finite(item.x);
+    const y = finite(item.y);
+    if (x === null || y === null || !isInteriorEdge(state, x, y, dir)) continue;
+    const key = `${x},${y},${dir}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    walls.push({ kind: item.kind, x, y, dir });
+  }
+  return walls;
 }
 
 // Unknown style ids are dropped; an active style that isn't valid or owned

@@ -54,9 +54,10 @@ export interface Tier {
 
 export interface Unlock {
   // For 'building': a key of CONFIG.buildings. For 'floor': a key of
-  // CONFIG.floors. For 'mechanic': an id from MECHANICS.
+  // CONFIG.floors. For 'wall': a key of CONFIG.walls. For 'mechanic': an
+  // id from MECHANICS.
   id: string;
-  type: 'building' | 'floor' | 'mechanic';
+  type: 'building' | 'floor' | 'wall' | 'mechanic';
   level: number;
   // Required for mechanics. Buildings use their name from config.
   name?: string;
