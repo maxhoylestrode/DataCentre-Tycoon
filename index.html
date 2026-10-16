@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Datacentre Tycoon</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #14171c; }
+      #app { position: fixed; inset: 0; }
+      #app canvas { display: block; touch-action: none; }
+      .hud {
+        position: fixed; top: 12px; left: 12px; padding: 10px 14px;
+        background: rgba(20, 23, 28, 0.85); color: #d8dee6; border-radius: 6px;
+        font: 13px/1.5 system-ui, sans-serif; pointer-events: none; user-select: none;
+      }
+      .hud h1 { margin: 0 0 4px; font-size: 15px; color: #fff; }
+      .hud .muted { color: #8a94a3; }
+      .hud .cash { font-size: 16px; }
+      .hud .negative { color: #ff7a7f; }
+      .hud .controls { display: flex; gap: 4px; margin: 6px 0; pointer-events: auto; }
+      .hud .info { min-height: 1.5em; color: #b6c2d1; }
+      .hud { max-width: min(340px, calc(100vw - 56px)); }
+      .hud .power { margin: 4px 0; }
+      .hud .bar { height: 6px; background: #2a3039; border-radius: 3px; overflow: hidden; margin-top: 2px; }
+      .hud .bar .fill { height: 100%; background: #4cc38a; transition: width 0.2s; }
+      .hud .bar .fill.high { background: #ffd23a; }
+      .hud .bar .fill.over { background: #ff5a5f; }
+      .hud .warnings div { margin-top: 3px; }
+      .hud .bad { color: #ff7a7f; }
+      .hud .warn { color: #ffb347; }
+      .toolbar {
+        position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+        display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 8px;
+        background: rgba(20, 23, 28, 0.85); border-radius: 8px; font: 13px/1.3 system-ui, sans-serif;
+        max-width: calc(100vw - 32px); box-sizing: border-box;
+      }
+      .toolbar button { display: flex; flex-direction: column; align-items: center; padding: 5px 10px; }
+      .toolbar button small { color: #8a94a3; font-size: 11px; }
+      .toolbar button.active small { color: #d8f5e6; }
+      .toolbar button.toggle { margin-left: 8px; }
+      .menu-toggle { position: fixed; top: 12px; right: 12px; font: 13px system-ui, sans-serif; padding: 6px 12px; }
+      .menu {
+        position: fixed; top: 48px; right: 12px; width: min(300px, calc(100vw - 32px)); box-sizing: border-box;
+        display: none; padding: 12px 14px; background: rgba(20, 23, 28, 0.95); border-radius: 8px;
+        color: #d8dee6; font: 13px/1.5 system-ui, sans-serif;
+      }
+      .menu.open { display: block; }
+      .menu h2 { margin: 0 0 4px; font-size: 15px; color: #fff; }
+      .menu .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+      .menu .muted { color: #8a94a3; }
+      .menu .import-confirm { display: none; padding: 8px; background: #2a2330; border-radius: 6px; }
+      .menu .import-confirm.visible { display: block; }
+      .menu .message { min-height: 1.2em; color: #9fe0bd; }
+      .menu .message.error { color: #ff7a7f; }
+      .toolbar button.locked { opacity: 0.45; cursor: not-allowed; }
+      .toolbar button.locked small { color: #c9a227; }
+      .hud .bar.xp .xp-fill { height: 100%; background: #8f7cff; transition: width 0.3s; }
+      .hud .level { margin-bottom: 4px; }
+      .goals {
+        position: fixed; top: 48px; right: 12px; width: min(260px, calc(100vw - 32px)); box-sizing: border-box;
+        background: rgba(20, 23, 28, 0.85); border-radius: 8px; color: #d8dee6; font: 13px/1.4 system-ui, sans-serif;
+      }
+      .goals-header { width: 100%; text-align: left; background: transparent; border: 0; padding: 8px 12px; font-weight: 600; }
+      .goals-header::after { content: ' ▾'; color: #8a94a3; }
+      .goals.collapsed .goals-header::after { content: ' ▸'; }
+      .goals.collapsed .goals-list { display: none; }
+      .goals-list { padding: 0 12px 10px; }
+      .goals .goal { margin-bottom: 8px; }
+      .goals .muted { color: #8a94a3; font-size: 12px; }
+      .goals .bar { height: 5px; background: #2a3039; border-radius: 3px; overflow: hidden; margin: 3px 0; }
+      .goals .bar .fill { height: 100%; background: #8f7cff; }
+      .menu { z-index: 2; }
+      .toasts {
+        position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 3;
+        display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none;
+        width: min(380px, calc(100vw - 32px));
+      }
+      .toast {
+        pointer-events: auto; cursor: pointer; padding: 8px 14px; border-radius: 8px; text-align: center;
+        background: rgba(28, 32, 39, 0.96); color: #d8dee6; font: 13px/1.5 system-ui, sans-serif;
+        border: 1px solid #3d4550; transition: opacity 0.5s; box-sizing: border-box; width: 100%;
+      }
+      .toast.fade { opacity: 0; }
+      .toast.goal { border-color: #4cc38a; }
+      .toast.achievement { border-color: #ffd23a; }
+      .toast.level { border-color: #8f7cff; padding: 14px 18px; }
+      .toast .big { font-size: 20px; font-weight: 700; color: #fff; }
+      .toast .muted { color: #8a94a3; }
+      button.danger { border-color: #7a3a3d; }
+      button.danger:hover { background: #4a2a2d; }
+      button {
+        font: inherit; color: #d8dee6; background: #2a3039; border: 1px solid #3d4550;
+        border-radius: 4px; padding: 3px 10px; cursor: pointer;
+      }
+      button:hover { background: #343c47; }
+      button.active { background: #2f6b50; border-color: #4cc38a; color: #fff; }
+      .bankrupt {
+        position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+        background: rgba(10, 12, 15, 0.6); font: 14px/1.5 system-ui, sans-serif; color: #d8dee6;
+      }
+      .bankrupt.visible { display: flex; }
+      .bankrupt .panel { background: #1c2027; padding: 20px 28px; border-radius: 8px; text-align: center; max-width: 320px; }
+      .bankrupt h2 { margin: 0 0 8px; color: #ff7a7f; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
