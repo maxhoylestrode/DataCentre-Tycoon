@@ -10,6 +10,7 @@ import {
   isFloorKind,
   isWallKind,
   type WallKind,
+  type ZoneKind,
 } from '../config';
 import { investedValue } from '../sim/buildings';
 import { placeBuilding, placeFloor, removeFloor, repairRack, sellBuilding } from '../sim/commands';
@@ -18,9 +19,13 @@ import { isOwnedTile, lotAt, nextLotPrice, purchasableLots } from '../sim/lots';
 import { isUnlocked, unlockFor } from '../sim/progression';
 import { categoryOf, floorAt, type GameState, getBuildingAt } from '../sim/state';
 
-export type Tool = BuildingKind | FloorKind | WallKind | 'sell';
+// Zone tools paint a dragged rectangle of tiles; zone_clear erases zones.
+export type ZoneTool = 'zone_server' | 'zone_staff' | 'zone_storage' | 'zone_clear';
+export const ZONE_TOOLS: ZoneTool[] = ['zone_server', 'zone_staff', 'zone_storage', 'zone_clear'];
+
+export type Tool = BuildingKind | FloorKind | WallKind | ZoneTool | 'sell';
 // inspect: clicking opens the building panel (stats, upgrades, sell).
-// draw: wall tools, which drag along grid lines instead of clicking tiles.
+// draw: wall and zone tools, which drag instead of clicking tiles.
 export type ToolAction = 'place' | 'sell' | 'repair' | 'inspect' | 'blocked' | 'draw';
 
 // Buildings added later without a hotkey are still selectable from the toolbar.
@@ -28,6 +33,7 @@ export const TOOL_HOTKEYS: Partial<Record<Tool, string>> = {
   rack_basic: 'R',
   power_basic: 'P',
   cooling_fan: 'C',
+  zone_server: 'Z',
   wall_basic: 'B',
   sell: 'X',
 };
@@ -35,6 +41,22 @@ export const TOOL_HOTKEYS: Partial<Record<Tool, string>> = {
 export function isWallTool(tool: Tool): tool is WallKind {
   return tool !== 'sell' && isWallKind(tool);
 }
+
+export function isZoneTool(tool: Tool): tool is ZoneTool {
+  return (ZONE_TOOLS as string[]).includes(tool);
+}
+
+// The zone a zone tool paints (null erases).
+export function zoneOfTool(tool: ZoneTool): ZoneKind | null {
+  return tool === 'zone_clear' ? null : (tool.slice(5) as ZoneKind);
+}
+
+const ZONE_NAMES: Record<ZoneTool, string> = {
+  zone_server: 'Server room',
+  zone_staff: 'Staff room',
+  zone_storage: 'Storage room',
+  zone_clear: 'Clear zone',
+};
 
 export interface ToolPreview {
   action: ToolAction;
@@ -45,12 +67,13 @@ const money = (n: number): string => `£${Math.round(n).toLocaleString('en-GB')}
 
 export function toolName(tool: Tool): string {
   if (tool === 'sell') return 'Sell';
+  if (isZoneTool(tool)) return ZONE_NAMES[tool];
   if (isWallTool(tool)) return CONFIG.walls[tool].name;
   return isFloorKind(tool) ? floorDef(tool).name : buildingDef(tool).name;
 }
 
 export function toolCost(tool: Tool): number {
-  if (tool === 'sell') return 0;
+  if (tool === 'sell' || isZoneTool(tool)) return 0;
   if (isWallTool(tool)) return CONFIG.walls[tool].cost;
   return isFloorKind(tool) ? floorDef(tool).cost : buildingDef(tool).cost;
 }
@@ -82,7 +105,13 @@ export function previewTool(state: GameState, tool: Tool, x: number, y: number):
   if (isWallTool(tool)) {
     const def = CONFIG.walls[tool];
     if (!isUnlocked(state, tool)) return { action: 'blocked', text: `${def.name} unlocks at level ${unlockFor(tool)?.level ?? '?'}` };
-    return { action: 'draw', text: `Drag along grid lines to build: ${def.name}, ${money(def.cost)} per tile` };
+    const where = tool === 'door_outside' ? 'Click an outside wall to add a front door' : 'Drag along grid lines to build';
+    return { action: 'draw', text: `${where}: ${def.name}, ${money(def.cost)} per tile. Placing on an existing wall swaps it` };
+  }
+
+  if (isZoneTool(tool)) {
+    if (!isUnlocked(state, 'zones')) return { action: 'blocked', text: `Zones unlock at level ${unlockFor('zones')?.level ?? '?'}` };
+    return { action: 'draw', text: `Drag to paint: ${ZONE_NAMES[tool]} (free)` };
   }
 
   // Floor tools paint under buildings too.
@@ -114,13 +143,14 @@ export function previewTool(state: GameState, tool: Tool, x: number, y: number):
   return { action: 'place', text: `Build ${def.name}: ${money(def.cost)}` };
 }
 
-// Returns what the click did, so the caller can open the building panel on 'inspect'.
-export function applyTool(state: GameState, tool: Tool, x: number, y: number): ToolAction | null {
+// Returns what the click did, so the caller can open the building panel on
+// 'inspect'. rot is the facing for new buildings.
+export function applyTool(state: GameState, tool: Tool, x: number, y: number, rot = 0): ToolAction | null {
   const preview = previewTool(state, tool, x, y);
   if (!preview) return null;
   if (preview.action === 'place') {
     if (isFloorKind(tool)) placeFloor(state, tool, x, y);
-    else if (tool !== 'sell' && !isWallTool(tool)) placeBuilding(state, tool, x, y);
+    else if (tool !== 'sell' && !isWallTool(tool) && !isZoneTool(tool)) placeBuilding(state, tool, x, y, rot);
   } else if (preview.action === 'sell') {
     if (getBuildingAt(state, x, y)) sellBuilding(state, x, y);
     else removeFloor(state, x, y);

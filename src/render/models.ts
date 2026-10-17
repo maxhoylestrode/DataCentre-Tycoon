@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { type BuildingKind, CONFIG } from '../config';
-import { partTierTotal } from '../sim/buildings';
+import { buildTicks, partTierTotal } from '../sim/buildings';
 import { rackFill } from '../sim/economy';
 import { feedVents } from '../sim/floor';
-import { powerEfficiency } from '../sim/power';
+import { powerEfficiency, powerMultiblocks } from '../sim/power';
 import { type Building, type GameState, tempAt } from '../sim/state';
 import { tileToWorld } from './grid';
 
@@ -326,8 +326,171 @@ const createServerShowcase = staticView((g) => {
   g.add(lights);
 });
 
+// Big wall-mounted-style AC cabinet with a wide fan grille and blue status strip.
+function createRoomAcView(): BuildingView {
+  const group = new THREE.Group();
+  group.add(box(0.9, 1.4, 0.7, whiteMat));
+  const grille = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.04, 20), fanMat);
+  grille.rotation.x = Math.PI / 2;
+  grille.position.set(0, 0.85, 0.36);
+  group.add(grille);
+  const fan = spinningFan(0.28, 0);
+  fan.rotation.x = Math.PI / 2;
+  fan.position.set(0, 0.85, 0.385);
+  group.add(fan);
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.05, 0.02), glow(0x4fb3ff, 0.9));
+  strip.position.set(0, 0.3, 0.36);
+  group.add(strip);
+  const showUpgrade = addUpgradeMarks(group, 1.4, 0.9, 0.7);
+  return {
+    group,
+    update(state, building, dt) {
+      showUpgrade(building.upgrade);
+      fan.rotation.y += fanSpeed(state, dt);
+    },
+  };
+}
+
+const wood = mat(0xb08a5a);
+const metal = mat(0x9aa3ad, { metalness: 0.5, roughness: 0.4 });
+
+const createBreakTable = staticView((g) => {
+  g.add(cylinder(0.32, 0.04, wood, 0.55, 20));
+  g.add(cylinder(0.05, 0.53, metal, 0.27, 8));
+  for (const [x, z] of [[-0.38, 0], [0.38, 0], [0, -0.38], [0, 0.38]] as const) {
+    const stool = cylinder(0.1, 0.32, mat(0x4aa8ff), 0.16, 10);
+    stool.position.set(x, 0.16, z);
+    g.add(stool);
+  }
+});
+
+const createCoffeeMachine = staticView((g) => {
+  g.add(box(0.6, 0.7, 0.45, mat(0x30353d)));
+  const body = box(0.44, 0.5, 0.4, mat(0x1d2127), 0.95);
+  g.add(body);
+  const light = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.01), glow(0xff6a3a, 1));
+  light.position.set(0, 1.05, 0.205);
+  g.add(light);
+  const cup = cylinder(0.04, 0.08, whiteMat, 0.74, 8);
+  cup.position.z = 0.12;
+  g.add(cup);
+});
+
+const createLockers = staticView((g) => {
+  for (let i = 0; i < 3; i++) {
+    const door = box(0.27, 1.6, 0.4, mat([0x4a62e8, 0x3fbf6a, 0xe8603a][i]!, { metalness: 0.3 }));
+    door.position.set(-0.28 + i * 0.28, 0.8, 0);
+    g.add(door);
+    const vent = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.01), darkMat);
+    vent.position.set(-0.28 + i * 0.28, 1.35, 0.205);
+    g.add(vent);
+  }
+});
+
+const createShelving = staticView((g) => {
+  for (const x of [-0.4, 0.4]) {
+    const post = box(0.04, 1.7, 0.4, metal);
+    post.position.x = x;
+    g.add(post);
+  }
+  const boxColours = [0xc9a227, 0x6b7280, 0x4aa8ff, 0xb08a5a];
+  for (let s = 0; s < 4; s++) {
+    g.add(box(0.84, 0.03, 0.42, metal, 0.15 + s * 0.45));
+    for (let i = 0; i < 3; i++) {
+      const crate = box(0.2, 0.22, 0.3, mat(boxColours[(s + i) % 4]!), 0.28 + s * 0.45);
+      crate.position.x = -0.26 + i * 0.26;
+      g.add(crate);
+    }
+  }
+});
+
+const createWaterCooler = staticView((g) => {
+  g.add(box(0.32, 0.9, 0.32, whiteMat));
+  const bottle = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.13, 0.13, 0.4, 12),
+    mat(0x7fc8ff, { transparent: true, opacity: 0.6, roughness: 0.1 }),
+  );
+  bottle.position.y = 1.1;
+  g.add(bottle);
+});
+
+const createSofa = staticView((g) => {
+  const fabric = mat(0x5a4b8a, { roughness: 0.9 });
+  g.add(box(0.9, 0.3, 0.55, fabric, 0.2));
+  const back = box(0.9, 0.45, 0.15, fabric, 0.5);
+  back.position.z = -0.2;
+  g.add(back);
+  for (const x of [-0.42, 0.42]) {
+    const arm = box(0.08, 0.38, 0.55, fabric, 0.3);
+    arm.position.x = x;
+    g.add(arm);
+  }
+});
+
+const createArcade = staticView((g) => {
+  g.add(box(0.55, 1.7, 0.6, mat(0x2a1f4a)));
+  const screen = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.34, 0.02), glow(0x3fcf6a, 0.9));
+  screen.position.set(0, 1.25, 0.3);
+  screen.rotation.x = -0.25;
+  g.add(screen);
+  const marquee = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.02), glow(0xff5ab8, 1));
+  marquee.position.set(0, 1.6, 0.3);
+  g.add(marquee);
+  const panel = box(0.5, 0.06, 0.25, mat(0x161226), 0.95);
+  panel.position.z = 0.3;
+  g.add(panel);
+});
+
+const createNeonSign = staticView((g) => {
+  g.add(box(0.08, 1.0, 0.08, darkMat));
+  g.add(box(0.95, 0.42, 0.05, mat(0x10131a), 1.2));
+  const lit = glow(0x2bd4c4, 1.6);
+  for (let i = 0; i < 6; i++) {
+    const letter = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.22, 0.02), lit);
+    letter.position.set(-0.36 + i * 0.145, 1.2, 0.03);
+    g.add(letter);
+  }
+});
+
+const createAquarium = staticView((g) => {
+  g.add(box(0.9, 0.5, 0.45, mat(0x2a2f36)));
+  const water = box(0.86, 0.6, 0.4, mat(0x2f9be0, { transparent: true, opacity: 0.45, roughness: 0.05 }), 0.82);
+  water.castShadow = false;
+  g.add(water);
+  for (const [x, y, c] of [[-0.2, 0.75, 0xff9a3a], [0.15, 0.9, 0xffd23a], [0.25, 0.7, 0xff5a5f]] as const) {
+    const fish = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), mat(c));
+    fish.scale.set(1.6, 1, 0.6);
+    fish.position.set(x, y, 0);
+    g.add(fish);
+  }
+});
+
+const createTrophyCase = staticView((g) => {
+  g.add(box(0.8, 0.4, 0.5, mat(0x3a2a1e)));
+  const glass = box(0.76, 1.1, 0.46, mat(0xdff0ff, { transparent: true, opacity: 0.2, roughness: 0.05 }), 0.95);
+  glass.castShadow = false;
+  g.add(glass);
+  const gold = mat(0xffd23a, { metalness: 0.8, roughness: 0.25 });
+  for (const [x, y] of [[-0.2, 0.55], [0.2, 0.55], [0, 1.0]] as const) {
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.04, 0.18, 10), gold);
+    cup.position.set(x, y, 0);
+    g.add(cup);
+  }
+});
+
 // Every building id has a model. TypeScript enforces that new ids get one.
 const FACTORIES: Record<BuildingKind, () => BuildingView> = {
+  cooling_ac: createRoomAcView,
+  break_table: createBreakTable,
+  coffee_machine: createCoffeeMachine,
+  lockers: createLockers,
+  shelving: createShelving,
+  water_cooler: createWaterCooler,
+  sofa: createSofa,
+  arcade_cabinet: createArcade,
+  neon_sign: createNeonSign,
+  aquarium: createAquarium,
+  trophy_case: createTrophyCase,
   rack_basic: () => createRackView(RACK_LOOKS.rack_basic!),
   rack_performance: () => createRackView(RACK_LOOKS.rack_performance!),
   rack_enterprise: () => createRackView(RACK_LOOKS.rack_enterprise!),
@@ -345,10 +508,34 @@ const FACTORIES: Record<BuildingKind, () => BuildingView> = {
   server_showcase: createServerShowcase,
 };
 
+const scaffoldMat = new THREE.LineBasicMaterial({ color: 0xffb347 });
+const progressBgMat = new THREE.MeshBasicMaterial({ color: 0x1b2028 });
+const progressMat = new THREE.MeshBasicMaterial({ color: 0xffb347 });
+
+// Orange scaffolding and a progress bar shown while a building is under
+// construction; the model itself rises out of the floor as work goes on.
+function createScaffold(): { group: THREE.Group; bar: THREE.Mesh } {
+  const group = new THREE.Group();
+  const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(0.96, 1.9, 0.96)), scaffoldMat);
+  frame.position.y = 0.95;
+  group.add(frame);
+  const bg = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.08, 0.04), progressBgMat);
+  bg.position.y = 2.15;
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.08, 0.05), progressMat);
+  bar.position.y = 2.15;
+  group.add(bg, bar);
+  return { group, bar };
+}
+
+interface PlacedView extends BuildingView {
+  model: THREE.Group;
+  scaffold: { group: THREE.Group; bar: THREE.Mesh } | null;
+}
+
 // Keeps one view per building in GameState. Reads state, never writes it.
 export class BuildingLayer {
   readonly group = new THREE.Group();
-  private readonly views = new Map<number, BuildingView>();
+  private readonly views = new Map<number, PlacedView>();
 
   sync(state: GameState, dt: number): void {
     const alive = new Set<number>();
@@ -356,10 +543,31 @@ export class BuildingLayer {
       alive.add(building.id);
       let view = this.views.get(building.id);
       if (!view) {
-        view = FACTORIES[building.kind]();
-        view.group.position.copy(tileToWorld(state.width, state.height, building.x, building.y));
+        const inner = FACTORIES[building.kind]();
+        const holder = new THREE.Group();
+        holder.add(inner.group);
+        holder.position.copy(tileToWorld(state.width, state.height, building.x, building.y));
+        view = { group: holder, model: inner.group, update: inner.update, scaffold: null };
         this.views.set(building.id, view);
-        this.group.add(view.group);
+        this.group.add(holder);
+      }
+      // rot 0 faces +z (towards the camera); each step turns a quarter clockwise from above.
+      view.model.rotation.y = (building.rot * Math.PI) / 2;
+
+      if (building.status === 'building') {
+        if (!view.scaffold) {
+          view.scaffold = createScaffold();
+          view.group.add(view.scaffold.group);
+        }
+        const total = buildTicks(building.kind);
+        const progress = total > 0 ? 1 - building.buildRemaining / total : 1;
+        view.model.scale.y = 0.08 + 0.92 * progress;
+        view.scaffold.bar.scale.x = Math.max(0.001, progress);
+        view.scaffold.bar.position.x = -0.4 * (1 - progress);
+      } else if (view.scaffold) {
+        view.group.remove(view.scaffold.group);
+        view.scaffold = null;
+        view.model.scale.y = 1;
       }
       view.update(state, building, dt);
     }
@@ -374,6 +582,38 @@ export class BuildingLayer {
   clear(): void {
     for (const view of this.views.values()) this.group.remove(view.group);
     this.views.clear();
+  }
+}
+
+const blockFrameMat = new THREE.MeshStandardMaterial({ color: 0x2a2f36, metalness: 0.4, roughness: 0.5 });
+const blockGlowMat = new THREE.MeshStandardMaterial({ color: 0xffd23a, emissive: 0xffd23a, emissiveIntensity: 0.8 });
+
+// A shared frame with a glowing strip around each 2×2 power multiblock.
+export class MultiblockLayer {
+  readonly group = new THREE.Group();
+  private key = '';
+
+  sync(state: GameState): void {
+    const corners = powerMultiblocks(state).corners;
+    const key = corners.map((c) => `${c.x},${c.y}`).join(';');
+    if (key === this.key) return;
+    this.key = key;
+    this.group.clear();
+    for (const c of corners) {
+      const a = tileToWorld(state.width, state.height, c.x, c.y);
+      const centre = new THREE.Vector3(a.x + 0.5, 0, a.z + 0.5);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(1.98, 0.06, 1.98), blockFrameMat);
+      base.position.set(centre.x, 0.03, centre.z);
+      base.receiveShadow = true;
+      const ring = new THREE.Mesh(new THREE.BoxGeometry(2.02, 0.04, 2.02), blockGlowMat);
+      ring.position.set(centre.x, 0.065, centre.z);
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.05, 1.9), blockFrameMat);
+      roof.position.set(centre.x, 1.1, centre.z);
+      roof.castShadow = true;
+      const roofGlow = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.03, 1.92), blockGlowMat);
+      roofGlow.position.set(centre.x, 1.075, centre.z);
+      this.group.add(base, ring, roof, roofGlow);
+    }
   }
 }
 

@@ -17,6 +17,7 @@ const glassMat = new THREE.MeshStandardMaterial({
 });
 const glassFrameMat = new THREE.MeshStandardMaterial({ color: 0xaab4bf, metalness: 0.6, roughness: 0.3 });
 const knobMat = new THREE.MeshStandardMaterial({ color: 0xd9c27a, metalness: 0.8, roughness: 0.3 });
+const entranceMat = new THREE.MeshStandardMaterial({ color: 0x4cc38a, emissive: 0x4cc38a, emissiveIntensity: 1 });
 const ghostOk = new THREE.MeshBasicMaterial({ color: 0x4cc38a, transparent: true, opacity: 0.55, depthWrite: false });
 const ghostBad = new THREE.MeshBasicMaterial({ color: 0xe0565b, transparent: true, opacity: 0.55, depthWrite: false });
 
@@ -46,6 +47,21 @@ function buildSegment(kind: WallKind, height: number): THREE.Group {
     const bottom = edgeBox(glassFrameMat, 0.06, T);
     bottom.position.y = 0.03;
     group.add(top, bottom);
+  } else if (kind === 'door_outside') {
+    // Front door: full height, glass double doors in a dark frame, with a
+    // green "entrance" light above.
+    const h = full;
+    group.add(edgeBox(doorFrameMat, h, T * 0.8));
+    for (const side of [-0.21, 0.21]) {
+      const leaf = new THREE.Mesh(unitBox, glassMat);
+      leaf.scale.set(0.4, 2.0, T * 1.3);
+      leaf.position.set(side, 1.0, 0);
+      group.add(leaf);
+    }
+    const sign = new THREE.Mesh(unitBox, entranceMat);
+    sign.scale.set(0.5, 0.12, T * 1.6);
+    sign.position.y = 2.18;
+    group.add(sign);
   } else {
     // A door: wooden leaf in a dark frame, with a brass knob.
     const doorHeight = Math.min(height, 2.05);

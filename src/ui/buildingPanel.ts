@@ -7,11 +7,20 @@ import {
   nextPart,
   partContribution,
   partCost,
+  ageFactor,
+  buildTicks,
+  chillerCapacity,
+  chillerRange,
+  isOverdue,
+  rackBandwidth,
   rackCores,
   rackTier,
+  refurbishCost,
   slotsOf,
   upgradeCost,
 } from '../sim/buildings';
+import { formatMbps } from '../sim/network';
+import { powerMultiblocks } from '../sim/power';
 import { planUpgradeMax } from '../sim/commands';
 import { SLOT_NAMES, TRADEMARK_NOTE } from '../sim/content/parts';
 import type { Part } from '../sim/content/types';
@@ -27,6 +36,8 @@ export interface BuildingPanelHandlers {
   onUpgradeMax(buildingId: number): void;
   onSell(buildingId: number): void;
   onRepair(buildingId: number): void;
+  onRotate(buildingId: number): void;
+  onRefurbish(buildingId: number): void;
 }
 
 const money = (n: number): string => `£${Math.round(n).toLocaleString('en-GB')}`;
@@ -47,11 +58,12 @@ const ROWS: Record<string, StatRow[]> = {
   power: [{ label: 'Power supply', value: (s) => kw(s.powerSupply) }],
   cooling: [
     { label: 'Cooling power', value: (s) => num(s.coolingStrength * 100) },
-    { label: 'Area', value: (s) => `${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} tiles` },
+    { label: 'Area', value: (s) => (s.coolingRadius > 20 ? 'Whole room' : `${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} tiles`) },
     { label: 'Power draw', value: (s) => kw(s.powerDraw) },
   ],
   chiller: [{ label: 'Power draw', value: (s) => kw(s.powerDraw) }],
   decor: [{ label: 'Prestige', value: (s) => `+${s.prestige}` }],
+  furniture: [],
 };
 
 // Details for the building you clicked: stats, upgrades (part slots for
@@ -83,6 +95,8 @@ export class BuildingPanel {
       else if (act === 'part') handlers.onUpgradePart(id, button.dataset.slot as PartSlot);
       else if (act === 'max') handlers.onUpgradeMax(id);
       else if (act === 'repair') handlers.onRepair(id);
+      else if (act === 'rotate') handlers.onRotate(id);
+      else if (act === 'refurbish') handlers.onRefurbish(id);
       else if (act === 'sell') {
         if (this.confirmSell) {
           handlers.onSell(id);
@@ -141,7 +155,8 @@ export class BuildingPanel {
 
     const statusText =
       b.status === 'failed' ? '<span class="bad">Failed</span>'
-      : b.status === 'repairing' ? '<span class="muted">Under repair</span>'
+      : b.status === 'repairing' ? `<span class="muted">${b.repairDoneTick === null ? 'Waiting for an engineer to repair' : 'Under repair'}</span>`
+      : b.status === 'building' ? `<span class="warn">Under construction · ${Math.round((1 - b.buildRemaining / buildTicks(b.kind)) * 100)}%</span>`
       : '<span class="good">Working</span>';
 
     const levelLine = levelled
@@ -151,8 +166,12 @@ export class BuildingPanel {
 
     const extra =
       category === 'chiller' ? this.chillerInfo(state, b)
-      : isRack ? `<div class="muted">${rackCores(b)} CPU cores &middot; ${def.name} (tier ${rackTier(b)}): what contract requirements check</div>`
-      : '';
+      : isRack ? this.rackInfo(state, b)
+      : b.kind === 'power_basic' && powerMultiblocks(state).members.has(b.id)
+        ? `<div class="good">Part of a power multiblock: +${CONFIG.multiblock.bonus * 100}% output.</div>`
+        : b.kind === 'power_basic' ? '<div class="muted">Tip: four power units in a 2×2 square produce 25% more.</div>'
+        : def.zone ? `<div class="muted">Works on a ${def.zone} room zone (Zones menu).</div>`
+        : '';
 
     return `
       <h2>${def.name}${levelLine}</h2>
@@ -163,6 +182,7 @@ export class BuildingPanel {
       ${isRack ? this.partSlots(state, b) : ''}
       ${levelled ? this.upgradeButton(state, b, upgradeCap(state), b.upgrade >= max) : ''}
       ${b.status === 'failed' ? `<button data-act="repair" ${state.cash < repairCost(b) ? 'disabled' : ''}>Repair (${money(repairCost(b))})</button>` : ''}
+      <button data-act="rotate" title="Rotate (Q while placing)">⟳ Rotate</button>
       <button data-act="sell" class="danger">${this.confirmSell ? `Click again to sell for ${money(investedValue(b) * CONFIG.economy.sellRefund)}` : 'Sell'}</button>
       ${isRack ? `<div class="fine">${TRADEMARK_NOTE}</div>` : ''}`;
   }
@@ -178,8 +198,31 @@ export class BuildingPanel {
 
   private chillerInfo(state: GameState, b: Building): string {
     const load = feedVents(state).load.get(b.id) ?? 0;
-    const def = buildingDef(b.kind);
-    return `<div class="muted">Feeding ${load} / ${def.chillerCapacity} floor vents within ${def.chillerRange} tiles.</div>`;
+    return `<div class="muted">Feeding ${load} / ${chillerCapacity(b)} floor vents within ${chillerRange(b)} tiles. Upgrades feed more.</div>`;
+  }
+
+  // Specs, hardware age (with Refurbish) and servicing.
+  private rackInfo(state: GameState, b: Building): string {
+    const lines = [`<div class="muted">${rackCores(b)} CPU cores &middot; tier ${rackTier(b)} &middot; ${formatMbps(rackBandwidth(b))} bandwidth</div>`];
+    const age = ageFactor(state, b);
+    const days = Math.floor((state.tick - b.refreshedAtTick) / CONFIG.time.ticksPerDay);
+    if (b.status === 'ok') {
+      const cost = refurbishCost(b);
+      const ageClass = age < 0.8 ? 'bad' : age < 0.95 ? 'warn' : 'good';
+      lines.push(
+        `<div class="rack-row"><span>Hardware age <b class="${ageClass}">${days} days · earning ${Math.round(age * 100)}%</b></span>` +
+          (age < 1 ? `<button data-act="refurbish" ${state.cash < cost ? 'disabled' : ''}>Refurbish ${money(cost)}</button>` : '') +
+          '</div>',
+      );
+    }
+    if (state.staffSim && b.status === 'ok') {
+      const since = (state.tick - b.lastServicedTick) / CONFIG.time.ticksPerDay;
+      const overdue = isOverdue(state, b);
+      lines.push(
+        `<div class="rack-row"><span>Serviced <b class="${overdue ? 'bad' : 'good'}">${since.toFixed(1)} days ago${overdue ? ' · overdue, earning less' : ''}</b></span></div>`,
+      );
+    }
+    return lines.join('');
   }
 
   private partSlots(state: GameState, b: Building): string {

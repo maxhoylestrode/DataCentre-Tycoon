@@ -9,9 +9,11 @@ const { storageKey, settingsKey } = CONFIG.save;
 
 export interface Settings {
   autosave: boolean;
+  // Whether the how-to guide has been shown once already.
+  seenGuide: boolean;
 }
 
-const DEFAULT_SETTINGS: Settings = { autosave: true };
+const DEFAULT_SETTINGS: Settings = { autosave: true, seenGuide: false };
 
 // localStorage can throw (private mode, storage full, blocked site data).
 function read(key: string): string | null {
@@ -50,7 +52,10 @@ export function loadSettings(): Settings {
   if (!text) return { ...DEFAULT_SETTINGS };
   try {
     const parsed = JSON.parse(text) as Partial<Settings>;
-    return { autosave: typeof parsed.autosave === 'boolean' ? parsed.autosave : DEFAULT_SETTINGS.autosave };
+    return {
+      autosave: typeof parsed.autosave === 'boolean' ? parsed.autosave : DEFAULT_SETTINGS.autosave,
+      seenGuide: parsed.seenGuide === true,
+    };
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

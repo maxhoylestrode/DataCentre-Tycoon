@@ -21,26 +21,79 @@
       }
       #app { position: fixed; inset: 0; }
       #app canvas { display: block; touch-action: none; }
+      /* HUD: a frosted card matching the hotbar. Only its controls take clicks. */
       .hud {
-        position: fixed; top: 12px; left: 12px; padding: 10px 14px;
-        background: rgba(20, 23, 28, 0.85); color: #d8dee6; border-radius: 6px;
-        font: 13px/1.5 system-ui, sans-serif; pointer-events: none; user-select: none;
+        position: fixed; top: 12px; left: 12px; width: min(300px, calc(100vw - 24px)); box-sizing: border-box;
+        padding: 10px 12px; background: rgba(22, 26, 32, 0.88); border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 14px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4); color: #d8dee6; font: 12.5px/1.45 system-ui, sans-serif;
+        pointer-events: none; user-select: none;
       }
-      .hud h1 { margin: 0 0 4px; font-size: 15px; color: #fff; }
+      .hud .interactive, .hud button { pointer-events: auto; }
       .hud .muted { color: #8a94a3; }
-      .hud .cash { font-size: 16px; }
-      .hud .negative { color: #ff7a7f; }
-      .hud .controls { display: flex; gap: 4px; margin: 6px 0; pointer-events: auto; }
-      .hud .info { min-height: 1.5em; color: #b6c2d1; }
-      .hud { max-width: min(340px, calc(100vw - 56px)); }
-      .hud .power { margin: 4px 0; }
-      .hud .bar { height: 6px; background: #2a3039; border-radius: 3px; overflow: hidden; margin-top: 2px; }
+      .hud .good { color: #7fe0a8; }
+      .hud .bad, .hud .negative { color: #ff7a7f; }
+      .hud .warn { color: #ffb347; }
+      .hud-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+      .hud-title { font-weight: 700; color: #fff; font-size: 13px; }
+      .hud-level { font-size: 11.5px; color: #c3b8ff; white-space: nowrap; }
+      .hud .bar { height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 3px; overflow: hidden; margin-top: 3px; }
       .hud .bar .fill { height: 100%; background: #4cc38a; transition: width 0.2s; }
       .hud .bar .fill.high { background: #ffd23a; }
       .hud .bar .fill.over { background: #ff5a5f; }
-      .hud .warnings div { margin-top: 3px; }
-      .hud .bad { color: #ff7a7f; }
-      .hud .warn { color: #ffb347; }
+      .hud .bar.xp { height: 4px; margin: 4px 0 8px; }
+      .hud .bar.xp .xp-fill { height: 100%; background: linear-gradient(90deg, #7a4ff0, #b28cff); transition: width 0.3s; }
+      .hud-money { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+      .hud-cash { font-size: 24px; font-weight: 800; color: #fff; letter-spacing: -0.02em; line-height: 1.1; }
+      .hud-net { position: relative; cursor: help; text-align: right; }
+      .hud-net-value { font-size: 14px; font-weight: 700; }
+      .hud-net-value small { font-weight: 400; color: #8a94a3; }
+      .hud-breakdown {
+        display: none; position: absolute; top: calc(100% + 6px); right: -6px; z-index: 5; min-width: 170px; padding: 8px 10px;
+        background: rgba(16, 19, 24, 0.97); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; text-align: left;
+      }
+      .hud-breakdown div { display: flex; justify-content: space-between; gap: 12px; }
+      .hud-net:hover .hud-breakdown, .hud-net:focus .hud-breakdown { display: block; }
+      .hud-time { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 6px; }
+      .hud-clock { color: #b6c2d1; }
+      .hud-speed { display: flex; background: rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 2px; }
+      .hud-speed button { border: 0; background: transparent; padding: 2px 8px; font-size: 11.5px; border-radius: 6px; color: #b6c2d1; }
+      .hud-speed button.active { background: var(--hb-accent, #4aa8ff); color: #fff; }
+      .hud-meter { display: flex; align-items: center; gap: 8px; width: 100%; margin: 4px 0; padding: 0; background: transparent; border: 0; text-align: left; font: inherit; color: inherit; }
+      button.hud-meter { cursor: pointer; border-radius: 6px; }
+      button.hud-meter:hover { background: rgba(255, 255, 255, 0.05); }
+      .hud-meter-icon svg { width: 16px; height: 16px; color: #8a94a3; display: block; }
+      .hud-meter-body { flex: 1; }
+      .hud-meter-label { display: flex; justify-content: space-between; font-size: 11.5px; }
+      .hud-meter-label span { color: #8a94a3; }
+      .hud-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+      .hud-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); color: #c9d2dc; }
+      .hud-chip svg { width: 12px; height: 12px; }
+      .hud-chip.warn { background: rgba(255, 179, 71, 0.15); color: #ffc87a; }
+      .hud-info { min-height: 1.4em; margin-top: 6px; color: #b6c2d1; font-size: 12px; }
+      .hud-warnings { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+      .hud-warn { font-size: 11.5px; padding: 3px 8px; border-radius: 7px; border-left: 3px solid; }
+      .hud-warn.bad { background: rgba(255, 90, 95, 0.12); border-color: #ff5a5f; color: #ffb0b3; }
+      .hud-warn.warn { background: rgba(255, 179, 71, 0.12); border-color: #ffb347; color: #ffd5a0; }
+      .hud-warn.info { background: rgba(74, 168, 255, 0.1); border-color: #4aa8ff; color: #b8dcff; }
+      /* Guide */
+      .guide-panel { width: min(720px, calc(100vw - 24px)); }
+      .guide-layout { display: flex; gap: 14px; }
+      .guide-layout nav { display: flex; flex-direction: column; gap: 3px; min-width: 150px; }
+      .guide-layout nav button { text-align: left; background: transparent; border: 0; padding: 6px 10px; border-radius: 8px; color: #b6c2d1; }
+      .guide-layout nav button.active { background: rgba(74, 168, 255, 0.16); color: #fff; }
+      .guide-layout article { flex: 1; min-width: 0; line-height: 1.55; }
+      .guide-layout article h3 { margin-top: 2px; text-transform: none; letter-spacing: 0; font-size: 16px; color: #fff; }
+      .guide-layout article .tip { padding: 7px 10px; border-radius: 8px; background: rgba(74, 168, 255, 0.1); color: #b8dcff; }
+      .guide-layout table.keys td { padding: 3px 12px 3px 0; }
+      .guide-layout table.keys td:first-child { color: #fff; font-weight: 600; white-space: nowrap; }
+      @media (max-width: 600px) { .guide-layout { flex-direction: column; } .guide-layout nav { flex-direction: row; flex-wrap: wrap; } }
+      .network-panel .net-current { background: rgba(74, 168, 255, 0.08); border-radius: 8px; }
+      .network-panel .ct-hist button { margin-left: auto; }
+      .staff-panel .ct-hist button { margin-left: auto; }
+      .building-panel .rack-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 3px 0; font-size: 12px; }
+      .building-panel .rack-row button { font-size: 11.5px; margin: 0; }
+      .building-panel .warn { color: #ffb347; }
       /* Hotbar, in the style of Cities: Skylines 2: a frosted dark bar of icon
          buttons, with a panel of item cards rising above it. */
       :root { --hb-bg: rgba(22, 26, 32, 0.88); --hb-edge: rgba(255, 255, 255, 0.07); --hb-accent: #4aa8ff; }

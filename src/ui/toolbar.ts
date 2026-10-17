@@ -1,5 +1,5 @@
 import { BUILDING_KINDS, buildingDef, CONFIG, FLOOR_KINDS, isFloorKind, WALL_KINDS } from '../config';
-import { isWallTool, type Tool, TOOL_HOTKEYS, toolCost, toolName } from '../input/tools';
+import { isWallTool, isZoneTool, type Tool, TOOL_HOTKEYS, toolCost, toolName, ZONE_TOOLS } from '../input/tools';
 import { buildingStats } from '../sim/buildings';
 import { isUnlocked, unlockFor } from '../sim/progression';
 import type { GameState } from '../sim/state';
@@ -12,6 +12,8 @@ export interface ToolbarHandlers {
   onToggleContracts(): void;
   onToggleStyle(): void;
   onToggleWallHeight(): void;
+  onToggleStaff(): void;
+  onToggleGuide(): void;
 }
 
 interface Group {
@@ -30,6 +32,7 @@ const GROUPS: Group[] = [
   { id: 'power', label: 'Power', tools: byCategory('power'), hotkey: TOOL_HOTKEYS.power_basic },
   { id: 'cooling', label: 'Cooling', tools: [...byCategory('cooling', 'chiller'), ...FLOOR_KINDS], hotkey: TOOL_HOTKEYS.cooling_fan },
   { id: 'decor', label: 'Decor', tools: byCategory('decor') },
+  { id: 'zones', label: 'Zones', tools: [...ZONE_TOOLS, ...byCategory('furniture')], hotkey: TOOL_HOTKEYS.zone_server },
   { id: 'walls', label: 'Walls', tools: [...WALL_KINDS], hotkey: TOOL_HOTKEYS.wall_basic },
   { id: 'sell', label: 'Sell', tools: ['sell'], hotkey: TOOL_HOTKEYS.sell },
 ];
@@ -52,22 +55,52 @@ const money = (n: number): string => `£${n.toLocaleString('en-GB')}`;
 function stat(tool: Tool): string {
   if (tool === 'sell') return `${CONFIG.economy.sellRefund * 100}% refund`;
   if (isFloorKind(tool)) return 'Under racks · needs chiller';
-  if (isWallTool(tool)) return tool === 'wall_door' ? 'Per tile · blocks heat' : 'Per tile · drag to draw · blocks heat';
+  if (isZoneTool(tool)) return ZONE_HINTS[tool] ?? '';
+  if (isWallTool(tool)) {
+    if (tool === 'door_outside') return 'Outside walls · clients & staff enter';
+    return tool === 'wall_door' ? 'Per tile · people walk through' : 'Per tile · drag to draw · blocks heat';
+  }
   const def = buildingDef(tool);
   const s = buildingStats({
     id: 0, kind: tool, x: 0, y: 0, builtAtTick: 0, status: 'ok', repairDoneTick: null, upgrade: 0, parts: {},
+    rot: 0, refreshedAtTick: 0, lastServicedTick: 0, buildRemaining: 0,
   });
   switch (def.category) {
     case 'rack': return `£${s.income.toFixed(1)}/min · ${kw(s.powerDraw)}`;
-    case 'power': return `+${kw(s.powerSupply)}`;
-    case 'cooling': return `${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} area · ${kw(s.powerDraw)}`;
+    case 'power': return `+${kw(s.powerSupply)} · 2×2 = +${CONFIG.multiblock.bonus * 100}%`;
+    case 'cooling': return s.coolingRadius > 20 ? `Whole room · ${kw(s.powerDraw)}` : `${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} area · ${kw(s.powerDraw)}`;
     case 'chiller': return `Feeds ${def.chillerCapacity} vents · ${def.chillerRange} tiles`;
     case 'decor': return `+${s.prestige} prestige`;
+    case 'furniture': return FURNITURE_HINTS[tool] ?? '';
   }
 }
 
-const unlockLevel = (tool: Tool): number | null =>
-  tool === 'sell' ? null : (unlockFor(tool)?.level ?? null);
+const ZONE_HINTS: Record<string, string> = {
+  zone_server: 'Racks here earn +5%',
+  zone_staff: 'Needs coffee + break tables',
+  zone_storage: 'Needs shelving · faster builds',
+  zone_clear: 'Erase zones',
+};
+
+const FURNITURE_HINTS: Record<string, string> = {
+  break_table: 'Staff room · houses 4 staff',
+  coffee_machine: 'Staff room · required',
+  lockers: 'Staff room · +1 prestige',
+  shelving: 'Storage room · faster builds',
+};
+
+// The unlock id gating a tool: zone tools share the "zones" mechanic.
+const unlockIdOf = (tool: Tool): string | null => (tool === 'sell' ? null : isZoneTool(tool) ? 'zones' : tool);
+
+export function toolUnlocked(state: GameState, tool: Tool): boolean {
+  const id = unlockIdOf(tool);
+  return id === null || isUnlocked(state, id);
+}
+
+const unlockLevel = (tool: Tool): number | null => {
+  const id = unlockIdOf(tool);
+  return id === null ? null : (unlockFor(id)?.level ?? null);
+};
 
 export class Toolbar {
   private readonly groupButtons = new Map<string, HTMLButtonElement>();
@@ -119,8 +152,10 @@ export class Toolbar {
     const toggles: Toggle[] = [
       { id: 'heat', label: 'Heat', hotkey: 'H', unlockId: 'heat_map', onClick: handlers.onToggleHeat },
       { id: 'contracts', label: 'Contracts', hotkey: 'K', unlockId: 'contract_board', onClick: handlers.onToggleContracts },
+      { id: 'staff', label: 'Staff', hotkey: 'T', unlockId: 'rack_basic', onClick: handlers.onToggleStaff },
       { id: 'style', label: 'Style', hotkey: 'L', unlockId: 'room_styles', onClick: handlers.onToggleStyle },
       { id: 'wallHeight', label: 'Tall walls', hotkey: 'V', unlockId: 'wall_basic', onClick: handlers.onToggleWallHeight },
+      { id: 'guide', label: 'Guide', hotkey: 'G', unlockId: 'rack_basic', onClick: handlers.onToggleGuide },
     ];
     for (const toggle of toggles) {
       this.toggleButtons.push({ button: button(toggle.id, toggle.label, toggle.hotkey, toggle.onClick), toggle });
@@ -146,16 +181,16 @@ export class Toolbar {
   update(
     state: GameState,
     tool: Tool,
-    open: { heat: boolean; contracts: boolean; style: boolean; tallWalls: boolean },
+    open: { heat: boolean; contracts: boolean; staff: boolean; style: boolean; tallWalls: boolean; guide: boolean },
   ): void {
     for (const group of GROUPS) {
       const b = this.groupButtons.get(group.id)!;
       b.classList.toggle('active', group.tools.includes(tool));
       b.classList.toggle('open', this.openGroup === group.id);
       // Grey a group out only if nothing in it is unlocked yet.
-      b.classList.toggle('locked', !group.tools.some((t) => t === 'sell' || isUnlocked(state, t)));
+      b.classList.toggle('locked', !group.tools.some((t) => toolUnlocked(state, t)));
     }
-    const states = [open.heat, open.contracts, open.style, open.tallWalls];
+    const states = [open.heat, open.contracts, open.staff, open.style, open.tallWalls, open.guide];
     this.toggleButtons.forEach(({ button, toggle }, i) => {
       const locked = !isUnlocked(state, toggle.unlockId);
       button.classList.toggle('locked', locked);
@@ -174,7 +209,7 @@ export class Toolbar {
       return;
     }
     const cards = group.tools.map((t) => {
-      const locked = t !== 'sell' && !isUnlocked(state, t);
+      const locked = !toolUnlocked(state, t);
       const cost = toolCost(t);
       const short = !locked && state.cash < cost;
       return `

@@ -3,6 +3,7 @@ import { CUSTOMER_TYPES } from '../sim/content/customers';
 import type { ContractRequirement } from '../sim/content/types';
 import { canTakeOffer, committedRacks, freeRacks, qualifyingRacks, uptimeOf } from '../sim/contracts';
 import { incomeBreakdown } from '../sim/economy';
+import { receptionProblem } from '../sim/people';
 import { type Contract, type ContractTerms, type GameState, isRunning, racksOf } from '../sim/state';
 import { ICONS } from './icons';
 
@@ -188,10 +189,14 @@ export class ContractsPanel {
 
   private offerList(state: GameState): string {
     const offers = state.contracts.offers;
+    const problem = receptionProblem(state);
     const cards = offers.map((o) => {
       const type = customerType(o.customerType);
-      const canSign = !state.bankrupt && canTakeOffer(state, o);
-      const why = o.requirement ? 'Not enough suitable racks free' : `Needs ${o.racks} free rack${o.racks > 1 ? 's' : ''}`;
+      const here = !state.staffSim || o.arrived === true;
+      const canSign = here && !state.bankrupt && canTakeOffer(state, o);
+      const why = !here
+        ? problem ? 'Client can’t reach reception' : 'Client walking to reception…'
+        : o.requirement ? 'Not enough suitable racks free' : `Needs ${o.racks} free rack${o.racks > 1 ? 's' : ''}`;
       return `
         <div class="ct-card offer" style="--ct-color:${hex(type?.color ?? 0x8a94a3)}">
           ${this.cardHead(o)}
@@ -201,7 +206,8 @@ export class ContractsPanel {
         </div>`;
     });
     return (
-      `<h3>Offers <span class="ct-count">${offers.length}</span><span class="muted ct-note">new offers every morning</span></h3>` +
+      `<h3>Offers <span class="ct-count">${offers.length}</span><span class="muted ct-note">new clients every morning</span></h3>` +
+      (problem ? `<div class="ct-alert">${problem}</div>` : '') +
       (cards.length ? `<div class="ct-grid">${cards.join('')}</div>` : '<div class="ct-empty">No offers left today.</div>')
     );
   }
