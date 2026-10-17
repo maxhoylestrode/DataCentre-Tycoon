@@ -15,25 +15,28 @@ import { incomeBreakdown } from './economy';
 import { networkEfficiency } from './network';
 import { staffSpeedFactor } from './people';
 import { powerEfficiency } from './power';
+import { isAway, recordJob, signingBonusOf, workSpeedOf } from './staff';
 import type { Contract, ContractTerms, GameState, StaffMember } from './state';
 
 const S = CONFIG.staff.sales;
 
-const count = (state: GameState, role: StaffMember['role']): number => state.staff.filter((m) => m.role === role).length;
-
 // Account managers standing at their desk, ready to talk to clients.
 export function managersAtDesks(state: GameState): StaffMember[] {
-  return state.staff.filter((m) => m.role === 'account_manager' && m.task?.kind === 'desk' && m.path.length === 0);
+  return state.staff.filter((m) => m.role === 'account_manager' && !isAway(m) && m.task?.kind === 'desk' && m.path.length === 0);
 }
+
+// Sales reps at work (not away training).
+const reps = (state: GameState): StaffMember[] => state.staff.filter((m) => m.role === 'sales_rep' && !isAway(m));
 
 // Extra clients a day from sales reps.
 export function salesExtraOffers(state: GameState): number {
-  return Math.min(S.maxExtraOffers, count(state, 'sales_rep') * S.offersPerRep);
+  return Math.min(S.maxExtraOffers, reps(state).length * S.offersPerRep);
 }
 
-// Extra pay sales reps negotiate on new offers (0.06 = +6%).
+// Extra pay sales reps negotiate on new offers (0.06 = +6%); experienced reps get more.
 export function salesPayBonus(state: GameState): number {
-  return Math.min(S.maxPayBonus, count(state, 'sales_rep') * S.payPerRep);
+  const total = reps(state).reduce((sum, m) => sum + S.payPerRep * (1 + CONFIG.staffGrowth.speedPerLevel * (m.level - 1)), 0);
+  return Math.min(S.maxPayBonus, total);
 }
 
 // Average uptime over the last few game hours, or right now if there's no history.
@@ -86,9 +89,8 @@ export function stepSales(state: GameState): void {
   const managers = managersAtDesks(state);
   if (managers.length === 0) return;
   const talking = new Set(managers.flatMap((m) => (m.task!.offerId !== undefined ? [m.task!.offerId] : [])));
-  const rate = staffSpeedFactor(state);
-
   for (const m of managers) {
+    const rate = staffSpeedFactor(state) * workSpeedOf(state, m);
     const task = m.task!;
     let offer = task.offerId !== undefined ? state.contracts.offers.find((o) => o.id === task.offerId) : undefined;
     if (task.offerId !== undefined && !offer) delete task.offerId; // signed by the player, or gone home
@@ -104,10 +106,15 @@ export function stepSales(state: GameState): void {
     task.workLeft -= rate;
     if (task.workLeft > 0) continue;
     delete task.offerId;
+    recordJob(m);
     const review = reviewOffer(state, offer);
     if (review.recommend && state.contracts.autoSign && signContract(state, offer.id).ok) {
       const signed = state.contracts.active.find((c) => c.id === offer.id);
-      if (signed) signed.signedByStaff = true;
+      if (signed) {
+        signed.signedByStaff = true;
+        // Charmers and negotiators get a better rate.
+        signed.payPerRackPerTick = Math.round(signed.payPerRackPerTick * (1 + signingBonusOf(m)) * 100) / 100;
+      }
       state.progress.stats.staffSigned += 1;
       continue;
     }

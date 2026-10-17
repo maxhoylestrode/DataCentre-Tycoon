@@ -3,6 +3,7 @@ import { buildingStats } from './buildings';
 import { researchBonus } from './research';
 import { activeEffect } from './events';
 import { upsBackupKw } from './safety';
+import { batteryFlow, electricityRate, moveBatteryCharge } from './daynight';
 import { categoryOf, type GameState, isRunning } from './state';
 
 // Four power sources of the same kind in a full 2×2 square form a
@@ -54,11 +55,40 @@ export function backupPower(state: GameState): number {
   return state.buildings.reduce((sum, b) => sum + (isRunning(b) ? upsBackupKw(b) : 0), 0);
 }
 
+// Share of grid-fed supply lost right now: a blackout is a deeper power cut.
+function gridLossShare(state: GameState): number {
+  if (activeEffect(state, 'blackout')) return CONFIG.lateEvents.blackoutLoss;
+  if (activeEffect(state, 'power_cut')) return CONFIG.events.powerCutLoss;
+  return 0;
+}
+
+// kW of grid supply a power cut takes, before batteries.
+export function gridLost(state: GameState): number {
+  return supplyBySource(state).grid * gridLossShare(state);
+}
+
+// kW the batteries are covering in a power cut (only while they have charge).
+export function backupCovering(state: GameState): number {
+  if (state.battery.charge <= 0) return 0;
+  return Math.min(gridLost(state), backupPower(state));
+}
+
 // kW lost right now to a power cut, after UPS batteries cover what they can.
 export function powerCutLoss(state: GameState): number {
-  if (!activeEffect(state, 'power_cut')) return 0;
-  const lost = supplyBySource(state).grid * CONFIG.events.powerCutLoss;
-  return Math.max(0, lost - backupPower(state));
+  return Math.max(0, gridLost(state) - backupCovering(state));
+}
+
+// Runs every tick: batteries drain while covering a power cut, and otherwise
+// charge at night and discharge at the peak (day/night, live world only).
+export function stepBattery(state: GameState): void {
+  const backup = backupPower(state);
+  const covering = backupCovering(state);
+  if (covering > 0) {
+    if (state.liveWorld) moveBatteryCharge(state, backup, -covering);
+    return;
+  }
+  const flow = batteryFlow(state, backup, powerDraw(state));
+  moveBatteryCharge(state, backup, flow.chargeKw - flow.dischargeKw);
 }
 
 export function powerSupply(state: GameState): number {
@@ -81,10 +111,14 @@ export function powerEfficiency(state: GameState): number {
 
 // The electricity bill per tick for what's actually drawn (capped by supply),
 // using marginal price bands. Renewable output is used first and is free.
+// Batteries charging add to the bill; discharging takes off it. In a live
+// world the price follows the time of day.
 export function electricityCost(state: GameState): number {
-  const used = Math.min(powerDraw(state), powerSupply(state));
-  const billable = Math.max(0, used - supplyBySource(state).renewable);
-  return electricityFor(billable) * (1 - researchBonus(state, 'electricityDiscount'));
+  const draw = powerDraw(state);
+  const used = Math.min(draw, powerSupply(state));
+  const flow = backupCovering(state) > 0 ? { chargeKw: 0, dischargeKw: 0 } : batteryFlow(state, backupPower(state), draw);
+  const billable = Math.max(0, used - supplyBySource(state).renewable + flow.chargeKw - flow.dischargeKw);
+  return electricityFor(billable) * electricityRate(state) * (1 - researchBonus(state, 'electricityDiscount'));
 }
 
 export function electricityFor(kw: number): number {

@@ -8,6 +8,8 @@ import { isUnlocked, levelOf } from './progression';
 import { dismissClient, spawnClients } from './people';
 import { prestigeExtraOffers, prestigePayBonus } from './prestige';
 import { pick, randomInt, randomRange } from './rng';
+import { lateSteps } from './pressure';
+import { reputationOffers, reputationPay } from './reputation';
 import { salesExtraOffers, salesPayBonus } from './sales';
 import { type ContractTerms, dayOf, type GameState, racksOf } from './state';
 
@@ -42,15 +44,19 @@ export function volumeDiscount(state: GameState): number {
 }
 
 export function rollOffer(state: GameState, type: CustomerType): ContractTerms {
-  const racks = randomInt(state, type.racks[0], type.racks[1]);
+  // Late in a live world, clients want more racks, stricter uptime, bigger penalties.
+  const late = lateSteps(state);
+  const P = CONFIG.pressure;
+  const racks = Math.round(randomInt(state, type.racks[0], type.racks[1]) * (1 + late * P.lateRacksStep));
   const days = randomInt(state, type.days[0], type.days[1]);
   const prestige = 1 + prestigePayBonus(state) + salesPayBonus(state);
   const payPerRackPerTick = roundTo(
-    CONFIG.contracts.basePayPerRackPerTick * rollRange(state, type.payMultiplier) * prestige * volumeDiscount(state),
+    CONFIG.contracts.basePayPerRackPerTick * rollRange(state, type.payMultiplier) * prestige * volumeDiscount(state) * reputationPay(state),
     0.01,
   );
   // SLA in 0.5% steps so it reads cleanly (95%, 97.5%...).
-  const sla = Math.min(1, roundTo(rollRange(state, type.sla), 0.005));
+  const rolledSla = roundTo(rollRange(state, type.sla), 0.005);
+  const sla = late > 0 ? Math.min(0.999, roundTo(rolledSla + late * P.lateSlaStep, 0.005)) : Math.min(1, rolledSla);
   const totalPay = racks * days * CONFIG.time.ticksPerDay * payPerRackPerTick;
 
   const terms: ContractTerms = {
@@ -62,7 +68,7 @@ export function rollOffer(state: GameState, type: CustomerType): ContractTerms {
     payPerRackPerTick,
     sla,
     bonus: roundTo(totalPay * type.bonusFraction, 50),
-    penalty: roundTo(totalPay * type.penaltyFraction, 50),
+    penalty: roundTo(totalPay * type.penaltyFraction * (1 + late * P.latePenaltyStep), 50),
     xp: type.xp,
     ...(type.requirement ? { requirement: { ...type.requirement } } : {}),
   };
@@ -81,7 +87,10 @@ export function refreshOffers(state: GameState): void {
   // Yesterday's clients who didn't sign go home.
   for (const old of state.contracts.offers) dismissClient(state, old.id, false);
   state.contracts.offers = [];
-  const count = CONFIG.contracts.offersPerDay + prestigeExtraOffers(state) + salesExtraOffers(state);
+  const count = Math.max(
+    1,
+    CONFIG.contracts.offersPerDay + prestigeExtraOffers(state) + salesExtraOffers(state) + reputationOffers(state),
+  );
   for (let i = 0; i < count && types.length > 0; i++) {
     // With people simulated, an offer can only be signed once its client
     // has walked in and reached reception.

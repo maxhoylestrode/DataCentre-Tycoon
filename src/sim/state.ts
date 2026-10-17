@@ -3,6 +3,7 @@ import {
   type BuildingKind,
   buildingDef,
   CONFIG,
+  type Difficulty,
   type FloorKind,
   type PartSlot,
   type Speed,
@@ -55,6 +56,10 @@ export interface StaffTask {
   offerId?: number;
 }
 
+// Staff traits and specialisms (sim/staff.ts has what each does).
+export type StaffTrait = 'speedy' | 'tinkerer' | 'careful' | 'night_owl' | 'early_bird' | 'workaholic' | 'lazy' | 'charmer';
+export type Specialism = 'electrician' | 'repair_specialist' | 'senior_tech' | 'negotiator';
+
 export interface StaffMember {
   id: number;
   role: StaffRole;
@@ -66,6 +71,23 @@ export interface StaffMember {
   // Remaining waypoints (tile coordinates) to walk through.
   path: [number, number][];
   task: StaffTask | null;
+  name: string;
+  // 1 to 5; rises with jobs done and training.
+  level: number;
+  jobs: number;
+  trait: StaffTrait | null;
+  specialism: Specialism | null;
+  // Away training until this tick (null when not training).
+  trainingUntil: number | null;
+}
+
+// Someone you could hire today (sim/staff.ts).
+export interface Candidate {
+  id: number;
+  role: StaffRole;
+  name: string;
+  level: number;
+  trait: StaffTrait | null;
 }
 
 export interface Client {
@@ -147,6 +169,12 @@ export interface Stats {
   clientsServed: number;
   // Contracts account managers signed.
   staffSigned: number;
+  // Corporation tax paid in total, so far today, and for the whole of yesterday.
+  taxPaid: number;
+  taxToday: number;
+  lastTax: number;
+  overheadPaid: number;
+  ransomsPaid: number;
 }
 
 // What a customer is offering. Rolled once when the offer is made, then
@@ -241,6 +269,11 @@ export function createProgress(): Progress {
       refurbishes: 0,
       clientsServed: 0,
       staffSigned: 0,
+      taxPaid: 0,
+      taxToday: 0,
+      lastTax: 0,
+      overheadPaid: 0,
+      ransomsPaid: 0,
     },
   };
 }
@@ -252,7 +285,10 @@ export interface ResearchState {
   current: { id: string; remaining: number } | null;
 }
 
-export type EventKind = 'power_cut' | 'heatwave' | 'fire' | 'ddos' | 'rush_order' | 'press_visit';
+export type EventKind =
+  | 'power_cut' | 'heatwave' | 'fire' | 'ddos' | 'rush_order' | 'press_visit'
+  // Late game (live world, from pressure.lateFromLevel).
+  | 'blackout' | 'ransomware' | 'big_fire';
 
 export interface ActiveEvent {
   kind: EventKind;
@@ -285,11 +321,12 @@ export interface LegacyState {
 // Money is per tick; uptime and efficiencies are 0..1; temperatures in °C.
 export const HISTORY_FIELDS = [
   // Averaged over the hour.
-  'income', 'walkIn', 'contracts', 'costs', 'rent', 'upkeep', 'electricity', 'network', 'wages',
+  'income', 'walkIn', 'contracts', 'costs', 'rent', 'upkeep', 'electricity', 'network', 'wages', 'overhead', 'tax',
   'uptime', 'powerEff', 'networkEff', 'powerDraw', 'powerSupply', 'bandwidth', 'lineCapacity', 'avgTemp', 'maxTemp',
+  'demand', 'electricityRate', 'batteryCharge',
   // Taken at the end of the hour.
   'cash', 'racks', 'racksRunning', 'racksFailed', 'racksContracted', 'buildings', 'staff', 'engineers',
-  'technicians', 'activeContracts', 'clientsWaiting', 'prestige', 'level', 'xp', 'researchDone', 'market',
+  'technicians', 'activeContracts', 'clientsWaiting', 'prestige', 'level', 'xp', 'researchDone', 'market', 'reputation',
 ] as const;
 export type HistoryField = (typeof HISTORY_FIELDS)[number];
 
@@ -345,11 +382,31 @@ export interface GameState {
   events: EventsState;
   legacy: LegacyState;
   history: HistoryState;
+  // The live world: day and night, reputation, overhead, tax, hardware end of
+  // life and late-game threats. On in real games; engine tests leave it off
+  // so the systems they test stay predictable.
+  liveWorld: boolean;
+  difficulty: Difficulty;
+  // 0–100; 50 is neutral (sim/reputation.ts).
+  reputation: number;
+  // UPS batteries' shared charge, 0–1, and what they do with it (sim/daynight.ts).
+  battery: { charge: number; mode: BatteryMode };
+  // Today's hiring candidates and the day they were picked (sim/staff.ts).
+  candidates: Candidate[];
+  candidatesDay: number;
+  nextCandidateId: number;
 }
+
+// 'save': charge at night, discharge at the evening peak to cut the bill.
+// 'reserve': stay full for power cuts.
+export type BatteryMode = 'save' | 'reserve';
 
 export interface NewGameOptions {
   // See GameState.staffSim.
   staffSim?: boolean;
+  // See GameState.liveWorld.
+  liveWorld?: boolean;
+  difficulty?: Difficulty;
   // Legacy carried over from a sold company.
   legacy?: LegacyState;
 }
@@ -385,7 +442,7 @@ export function createInitialState(
     uplink: UPLINKS[0]!.id,
     zones: [],
     // Every game starts with the founder: a free engineer in the first room.
-    staff: staffSim ? [{ id: 1, role: 'engineer', founder: true, x: 1, y: 1, path: [], task: null }] : [],
+    staff: staffSim ? [createFounder()] : [],
     nextStaffId: 2,
     clients: [],
     nextClientId: 1,
@@ -395,6 +452,20 @@ export function createInitialState(
     events: { active: [], history: [] },
     legacy,
     history: createHistoryState(),
+    liveWorld: options.liveWorld ?? false,
+    difficulty: options.difficulty ?? 'normal',
+    reputation: CONFIG.reputation.start,
+    battery: { charge: 1, mode: 'save' },
+    candidates: [],
+    candidatesDay: 0,
+    nextCandidateId: 1,
+  };
+}
+
+export function createFounder(): StaffMember {
+  return {
+    id: 1, role: 'engineer', founder: true, x: 1, y: 1, path: [], task: null,
+    name: 'You', level: 1, jobs: 0, trait: null, specialism: null, trainingUntil: null,
   };
 }
 

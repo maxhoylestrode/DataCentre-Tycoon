@@ -4,7 +4,12 @@ import { allocateRacks, contractIncomePerTick, type RackAllocation } from './con
 import { roomsOwned } from './lots';
 import { networkEfficiency, uplinkOf } from './network';
 import { electricityCost, powerEfficiency } from './power';
+import { demandFactor } from './daynight';
+import { contractsLocked } from './events';
+import { overheadPerTick } from './pressure';
+import { reputationDemand } from './reputation';
 import { researchBonus } from './research';
+import { wageOf } from './staff';
 import type { Building, GameState } from './state';
 import { inServerZone } from './zones';
 
@@ -21,6 +26,8 @@ export interface IncomeBreakdown {
   allocation: RackAllocation;
   // Power × network efficiency: how much of the racks' work actually gets done.
   efficiency: number;
+  // The same for contracts: 0 while ransomware has them locked.
+  contractEfficiency: number;
   // Market saturation factor applied to walk-in income (1 = no saturation).
   market: number;
 }
@@ -54,10 +61,15 @@ export function incomeBreakdown(state: GameState): IncomeBreakdown {
   const market = marketFactor(allocation.walkIn.length, researchBonus(state, 'marketRacks'));
   const legacy = legacyIncomeFactor(state);
   const walkInBoost = 1 + researchBonus(state, 'walkInIncome');
+  // Live world: customers come and go with the time of day and your reputation.
+  const demand = demandFactor(state) * reputationDemand(state);
   const walkIn =
-    allocation.walkIn.reduce((sum, b) => sum + walkInRackIncome(state, b, efficiency), 0) * market * walkInBoost * legacy;
-  const contracts = contractIncomePerTick(state, allocation, efficiency) * (1 + researchBonus(state, 'contractPay')) * legacy;
-  return { walkIn, contracts, allocation, efficiency, market };
+    allocation.walkIn.reduce((sum, b) => sum + walkInRackIncome(state, b, efficiency), 0) * market * walkInBoost * legacy * demand;
+  // Ransomware locks contract systems: nothing is served or paid.
+  const contractEfficiency = contractsLocked(state) ? 0 : efficiency;
+  const contracts =
+    contractIncomePerTick(state, allocation, contractEfficiency) * (1 + researchBonus(state, 'contractPay')) * legacy;
+  return { walkIn, contracts, allocation, efficiency, contractEfficiency, market };
 }
 
 export function incomePerTick(state: GameState): number {
@@ -71,11 +83,13 @@ export interface CostBreakdown {
   electricity: number;
   network: number;
   wages: number;
+  // Facility overhead (live world, big companies).
+  overhead: number;
   total: number;
 }
 
 export function wagesPerTick(state: GameState): number {
-  return state.staff.reduce((sum, s) => sum + (s.founder ? 0 : CONFIG.staff.roles[s.role].wagePerTick), 0);
+  return state.staff.reduce((sum, s) => sum + wageOf(s), 0);
 }
 
 export function costBreakdown(state: GameState): CostBreakdown {
@@ -89,7 +103,8 @@ export function costBreakdown(state: GameState): CostBreakdown {
   const electricity = electricityCost(state);
   const network = uplinkOf(state).rentalPerTick;
   const wages = wagesPerTick(state);
-  return { rent, upkeep, electricity, network, wages, total: rent + upkeep + electricity + network + wages };
+  const overhead = overheadPerTick(state);
+  return { rent, upkeep, electricity, network, wages, overhead, total: rent + upkeep + electricity + network + wages + overhead };
 }
 
 // Rent for every room, upkeep for every building and floor tile, the

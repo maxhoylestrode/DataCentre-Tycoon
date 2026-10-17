@@ -7,8 +7,11 @@ import { failOverheatedRacks, stepHeat } from './heat';
 import { recordHistory } from './history';
 import { stepResearch } from './research';
 import { stepClients, stepStaff } from './people';
-import { powerEfficiency } from './power';
+import { powerEfficiency, stepBattery } from './power';
+import { chargeTax, closeTaxDay, stepEndOfLife } from './pressure';
+import { stepReputation } from './reputation';
 import { stepSales } from './sales';
+import { refreshCandidates, stepTraining } from './staff';
 import { checkProgress, endDay, recordTick } from './progression';
 import type { GameState } from './state';
 
@@ -27,11 +30,13 @@ export function tick(state: GameState): void {
   if (state.bankrupt) return;
 
   completeRepairs(state);
+  stepTraining(state);
   stepStaff(state);
   stepClients(state);
   stepSales(state);
   stepHeat(state, powerEfficiency(state));
   failOverheatedRacks(state);
+  stepEndOfLife(state);
 
   const income = incomeBreakdown(state);
   const total = income.walkIn + income.contracts;
@@ -39,15 +44,23 @@ export function tick(state: GameState): void {
   const net = total - costs.total;
   state.cash += net;
   state.progress.stats.contractIncome += income.contracts;
-  recordService(state, income.allocation, income.efficiency);
+  state.progress.stats.overheadPaid += costs.overhead;
+  stepBattery(state);
+  recordService(state, income.allocation, income.contractEfficiency);
   recordTick(state, total, net);
-  recordHistory(state, income, costs);
+  const tax = chargeTax(state);
+  recordHistory(state, income, costs, tax);
+  stepReputation(state, income.efficiency);
   stepResearch(state);
   stepEvents(state, total);
 
   state.tick += 1;
   finishContracts(state);
-  if (state.tick % CONFIG.time.ticksPerDay === 0) endDay(state);
+  if (state.tick % CONFIG.time.ticksPerDay === 0) {
+    closeTaxDay(state);
+    endDay(state);
+  }
+  refreshCandidates(state);
 
   // Below the overdraft limit you have a grace period to recover (sell
   // something, cancel a contract); still below at the end of it, you're bankrupt.

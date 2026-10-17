@@ -3,6 +3,7 @@
 import { rackBandwidth } from './buildings';
 import { UPLINKS } from './content/uplinks';
 import type { Uplink } from './content/types';
+import { demandFactor, peakDemandFactor } from './daynight';
 import { ddosFactor } from './events';
 import { researchBonus } from './research';
 import { categoryOf, type GameState, isRunning } from './state';
@@ -22,7 +23,13 @@ export function bandwidthDemand(state: GameState): number {
     (sum, b) => sum + (categoryOf(b) === 'rack' && isRunning(b) ? rackBandwidth(b) : 0),
     0,
   );
-  return raw * (1 - researchBonus(state, 'bandwidthSaving'));
+  // Traffic follows the time of day (live world): the evening peak is the test.
+  return raw * (1 - researchBonus(state, 'bandwidthSaving')) * demandFactor(state);
+}
+
+// Mbps racks will want at the evening peak (the same as now without a live world).
+export function peakBandwidthDemand(state: GameState): number {
+  return (bandwidthDemand(state) / demandFactor(state)) * peakDemandFactor(state);
 }
 
 // Mbps the line delivers right now (less during a cyber attack).

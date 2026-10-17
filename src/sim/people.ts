@@ -19,6 +19,7 @@ import {
   type StaffTask,
 } from './state';
 import { researchBonus } from './research';
+import { isAway, jobSpeedOf, recordJob, serviceLengthOf, walkSpeedOf, workSpeedOf } from './staff';
 import { hasStorage, staffCapacity } from './zones';
 
 const S = CONFIG.staff;
@@ -95,7 +96,8 @@ export function deskFront(desk: Building): Tile {
   return [desk.x + [0, 1, 0, -1][desk.rot % 4]!, desk.y + [1, 0, -1, 0][desk.rot % 4]!];
 }
 
-function finish(state: GameState, task: StaffTask, b: Building): void {
+function finish(state: GameState, member: StaffMember, task: StaffTask, b: Building): void {
+  recordJob(member);
   if (task.kind === 'build') {
     b.status = 'ok';
     b.buildRemaining = 0;
@@ -107,7 +109,9 @@ function finish(state: GameState, task: StaffTask, b: Building): void {
     b.status = 'ok';
     b.repairDoneTick = null;
   } else {
-    b.lastServicedTick = state.tick;
+    // A longer-lasting service counts as serviced a little in the future.
+    const extra = (serviceLengthOf(member) - 1) * CONFIG.maintenance.intervalTicks;
+    b.lastServicedTick = state.tick + Math.round(extra);
     state.progress.stats.services += 1;
   }
 }
@@ -151,12 +155,17 @@ function idle(grid: WalkGrid, state: GameState, member: StaffMember): void {
 export function stepStaff(state: GameState): void {
   if (!state.staffSim || state.staff.length === 0) return;
   const grid = walkGrid(state);
-  const speed = S.walkSpeed * staffSpeedFactor(state);
-  const workRate = staffSpeedFactor(state);
-  const engineerRate = workRate / (hasStorage(state) ? 1 : S.noStorageSlowdown);
+  const tired = staffSpeedFactor(state);
+  // Workaholics aren't slowed by full staff rooms.
+  const teamRate = (m: StaffMember): number =>
+    m.trait === 'workaholic' ? 1 + researchBonus(state, 'staffSpeed') : tired;
+  const storage = hasStorage(state) ? 1 : 1 / S.noStorageSlowdown;
   const taken = new Set(state.staff.flatMap((s) => (s.task ? [s.task.buildingId] : [])));
 
   for (const member of state.staff) {
+    // Away training: not in the building.
+    if (isAway(member)) continue;
+    const speed = S.walkSpeed * teamRate(member) * walkSpeedOf(state, member);
     if (member.task) {
       const b = stillNeeded(state, member.task);
       if (!b) {
@@ -179,10 +188,12 @@ export function stepStaff(state: GameState): void {
     // On site: work.
     const task = member.task!;
     const b = stillNeeded(state, task)!;
-    task.workLeft -= member.role === 'engineer' ? engineerRate : workRate;
+    const kind = task.kind as 'build' | 'repair' | 'service';
+    const rate = teamRate(member) * workSpeedOf(state, member) * jobSpeedOf(member, kind, b);
+    task.workLeft -= member.role === 'engineer' ? rate * storage : rate;
     if (task.kind === 'build') b.buildRemaining = Math.max(0, task.workLeft);
     if (task.workLeft <= 0) {
-      finish(state, task, b);
+      finish(state, member, task, b);
       member.task = null;
     }
   }

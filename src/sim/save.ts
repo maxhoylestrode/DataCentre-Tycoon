@@ -8,6 +8,8 @@
 import {
   buildingDef,
   CONFIG,
+  type Difficulty,
+  DIFFICULTIES,
   isBuildingKind,
   isFloorKind,
   isWallKind,
@@ -55,7 +57,12 @@ import {
   type Stats,
   type StyleState,
   type WallSegment,
+  type Candidate,
+  createFounder,
+  type Specialism,
+  type StaffTrait,
 } from './state';
+import { levelFromJobs, nameFor, SPECIALISMS, traitFor, TRAITS } from './staff';
 
 // v1: Milestone 3 game (buildings, cash, time, heat).
 // v2: adds progress (XP, goals, achievements, stats).
@@ -66,7 +73,8 @@ import {
 // v7: adds rooms (owned lots); the map grows to fit every lot.
 // v8: staff, clients, zones, internet line, building rotation, ageing, maintenance and construction.
 // v9: research, random events, legacy (company sales) and stats history.
-export const SAVE_VERSION = 9;
+// v10: the live world (difficulty, reputation, batteries) and staff names, levels and traits.
+export const SAVE_VERSION = 10;
 
 // Part ids as they were when v5 was introduced. Hard-coded so this migration
 // never changes if the parts catalogue does later.
@@ -153,6 +161,26 @@ const MIGRATIONS: Record<number, (data: Data) => Data> = {
   },
   // Nothing researched, no events yet, no legacy, empty history.
   8: (data) => ({ ...data, research: null, events: null, legacy: null, history: null }),
+  // Real games join the live world at Normal difficulty with neutral
+  // reputation. Staff get names and levels when read. Racks get at least two
+  // weeks before hardware end of life, so an old save isn't hit all at once.
+  9: (data) => {
+    const live = data.staffSim === true;
+    const tick = typeof data.tick === 'number' ? data.tick : 0;
+    const latest = tick - (CONFIG.pressure.endOfLifeDays - 14) * CONFIG.time.ticksPerDay;
+    return {
+      ...data,
+      liveWorld: live,
+      difficulty: 'normal',
+      reputation: CONFIG.reputation.start,
+      battery: null,
+      buildings: Array.isArray(data.buildings) && live
+        ? data.buildings.map((b: unknown) =>
+            isObject(b) && typeof b.refreshedAtTick === 'number' ? { ...b, refreshedAtTick: Math.max(b.refreshedAtTick, latest) } : b,
+          )
+        : data.buildings,
+    };
+  },
 };
 
 export function serialize(state: GameState, now: Date = new Date()): string {
@@ -222,6 +250,13 @@ export function serialize(state: GameState, now: Date = new Date()): string {
       events: { active: state.events.active.map((e) => ({ ...e })), history: state.events.history.map((e) => ({ ...e })) },
       legacy: { ...state.legacy },
       overdrawnSince: state.overdrawnSince,
+      liveWorld: state.liveWorld,
+      difficulty: state.difficulty,
+      reputation: Math.round(state.reputation * 100) / 100,
+      battery: { ...state.battery },
+      candidates: state.candidates.map((c) => ({ ...c })),
+      candidatesDay: state.candidatesDay,
+      nextCandidateId: state.nextCandidateId,
       history: {
         // Rounded: the graphs don't need more.
         samples: state.history.samples.map((s) => {
@@ -312,10 +347,12 @@ function readState(data: Data): GameState {
   state.staffSim = data.staffSim === true;
   state.uplink = typeof data.uplink === 'string' && UPLINKS.some((u) => u.id === data.uplink) ? data.uplink : UPLINKS[0]!.id;
   state.zones = readZones(data.zones, state);
+  // Read before staff: unnamed staff from older saves are named from it.
+  state.rngSeed = intIn(data.rngSeed, -(2 ** 31), 2 ** 31 - 1) ?? 1;
   state.staff = readStaff(data.staff, state);
   // A people-simulated game always has its founder.
   if (state.staffSim && !state.staff.some((s) => s.founder)) {
-    state.staff.unshift({ id: 0, role: 'engineer', founder: true, x: 1, y: 1, path: [], task: null });
+    state.staff.unshift({ ...createFounder(), id: 0 });
   }
   state.nextStaffId = Math.max(
     state.staff.reduce((m, s) => Math.max(m, s.id), 0) + 1,
@@ -326,7 +363,6 @@ function readState(data: Data): GameState {
   state.style = readStyle(data.style);
   state.progress = readProgress(data.progress);
   state.contracts = readContracts(data.contracts);
-  state.rngSeed = intIn(data.rngSeed, -(2 ** 31), 2 ** 31 - 1) ?? 1;
   state.clients = readClients(data.clients, state);
   state.nextClientId = Math.max(
     state.clients.reduce((m, c) => Math.max(m, c.id), 0) + 1,
@@ -340,11 +376,42 @@ function readState(data: Data): GameState {
   state.legacy = readLegacy(data.legacy);
   state.overdrawnSince = intIn(data.overdrawnSince, 0, Number.MAX_SAFE_INTEGER);
   state.history = readHistory(data.history);
+  state.liveWorld = data.liveWorld === true;
+  state.difficulty = DIFFICULTIES.includes(data.difficulty as Difficulty) ? (data.difficulty as Difficulty) : 'normal';
+  state.reputation = clamp(finite(data.reputation) ?? CONFIG.reputation.start, 0, 100);
+  const battery = isObject(data.battery) ? data.battery : {};
+  state.battery = { charge: clamp(finite(battery.charge) ?? 1, 0, 1), mode: battery.mode === 'reserve' ? 'reserve' : 'save' };
+  state.candidates = readCandidates(data.candidates);
+  state.candidatesDay = intIn(data.candidatesDay, 0, Number.MAX_SAFE_INTEGER) ?? 0;
+  state.nextCandidateId = Math.max(
+    state.candidates.reduce((m, c) => Math.max(m, c.id), 0) + 1,
+    intIn(data.nextCandidateId, 1, Number.MAX_SAFE_INTEGER) ?? 1,
+  );
   return state;
 }
 
+const TRAIT_IDS = Object.keys(TRAITS) as StaffTrait[];
+const SPECIALISM_IDS = Object.keys(SPECIALISMS) as Specialism[];
+const readTrait = (raw: unknown): StaffTrait | null => (TRAIT_IDS.includes(raw as StaffTrait) ? (raw as StaffTrait) : null);
+
+function readCandidates(raw: unknown): Candidate[] {
+  const out: Candidate[] = [];
+  for (const item of Array.isArray(raw) ? raw : []) {
+    if (!isObject(item) || typeof item.role !== 'string' || !Object.hasOwn(CONFIG.staff.roles, item.role)) continue;
+    const id = intIn(item.id, 1, Number.MAX_SAFE_INTEGER);
+    if (id === null || typeof item.name !== 'string') continue;
+    out.push({
+      id, role: item.role as StaffRole, name: item.name.slice(0, 40),
+      level: intIn(item.level, 1, CONFIG.staffGrowth.levelJobs.length) ?? 1, trait: readTrait(item.trait),
+    });
+  }
+  return out;
+}
+
 const RESEARCH_IDS = new Set(RESEARCH.map((r) => r.id));
-const EVENT_KINDS: EventKind[] = ['power_cut', 'heatwave', 'fire', 'ddos', 'rush_order', 'press_visit'];
+const EVENT_KINDS: EventKind[] = [
+  'power_cut', 'heatwave', 'fire', 'ddos', 'rush_order', 'press_visit', 'blackout', 'ransomware', 'big_fire',
+];
 
 function readResearch(raw: unknown): ResearchState {
   if (!isObject(raw)) return { done: [], current: null };
@@ -439,14 +506,25 @@ function readStaff(raw: unknown, state: GameState): StaffMember[] {
       t && TASK_KINDS.includes(t.kind as StaffTaskKind) && intIn(t.buildingId, 1, Number.MAX_SAFE_INTEGER) !== null
         ? { kind: t.kind as StaffTaskKind, buildingId: t.buildingId as number, workLeft: Math.max(0, finite(t.workLeft) ?? 0) }
         : null;
+    const role = item.role as StaffRole;
+    const founder = item.founder === true;
+    const jobs = intIn(item.jobs, 0, Number.MAX_SAFE_INTEGER) ?? 0;
+    const maxLevel = CONFIG.staffGrowth.levelJobs.length;
+    // Staff from saves before v10 get a name and a trait from their id.
     staff.push({
       id,
-      role: item.role as StaffRole,
-      founder: item.founder === true,
+      role,
+      founder,
       x: clamp(finite(item.x) ?? 1, 0, state.width - 1),
       y: clamp(finite(item.y) ?? 1, 0, state.height - 1),
       path: [],
       task,
+      name: typeof item.name === 'string' ? item.name.slice(0, 40) : founder ? 'You' : nameFor(state.rngSeed, id),
+      level: Math.max(levelFromJobs(jobs), intIn(item.level, 1, maxLevel) ?? 1),
+      jobs,
+      trait: 'trait' in item ? readTrait(item.trait) : founder ? null : traitFor(role, state.rngSeed, id),
+      specialism: SPECIALISM_IDS.includes(item.specialism as Specialism) ? (item.specialism as Specialism) : null,
+      trainingUntil: intIn(item.trainingUntil, 0, Number.MAX_SAFE_INTEGER),
     });
   }
   return staff;

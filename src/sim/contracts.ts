@@ -4,6 +4,7 @@
 
 import { CONFIG } from '../config';
 import { buildingStats, meetsRequirement, rackFill } from './buildings';
+import { adjustReputation } from './reputation';
 import {
   type Building,
   categoryOf,
@@ -121,6 +122,8 @@ function settle(state: GameState, contract: Contract, outcome: ContractResult['o
 
   state.cash += cash;
   state.progress.xp += xp;
+  const R = CONFIG.reputation;
+  adjustReputation(state, outcome === 'completed' ? R.contractKept : outcome === 'failed' ? R.contractBroken : R.contractCancelled);
   const result: ContractResult = { name: contract.name, outcome, uptime, cash, xp };
   const history = state.contracts.history;
   history.push(result);

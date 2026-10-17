@@ -180,6 +180,118 @@ export const CONFIG = {
     // Past events remembered for the UI.
     historyLength: 12,
   },
+  // --- The live world (state.liveWorld: on in real games, off in engine tests) ---
+  // Difficulty multipliers for the pressure systems below.
+  difficulty: {
+    relaxed: { name: 'Relaxed', costs: 0.75, tax: 0.6, incidents: 0.6, reputationLoss: 0.6 },
+    normal: { name: 'Normal', costs: 1, tax: 1, incidents: 1, reputationLoss: 1 },
+    tough: { name: 'Tough', costs: 1.3, tax: 1.25, incidents: 1.5, reputationLoss: 1.5 },
+  },
+  // Reputation, 0–100 (sim/reputation.ts). 50 is neutral.
+  reputation: {
+    start: 50,
+    // Each game hour it moves this share of the way to its target.
+    driftPerHour: 0.06,
+    // Target = base + uptime part + prestige part - failures part - heat part.
+    base: 50,
+    // Uptime 100% adds uptimeRange; uptimeFloor and below subtracts it.
+    uptimeFloor: 0.9,
+    uptimeRange: 30,
+    prestigePer: 0.12,
+    prestigeMax: 15,
+    // Share of racks failed or overheating, times this, comes off.
+    failedWeight: 60,
+    hotWeight: 25,
+    // Instant changes.
+    contractKept: 3,
+    contractBroken: -8,
+    contractCancelled: -4,
+    fire: -5,
+    // Walk-in demand runs from minDemand (0) to maxDemand (100); 1 at 50.
+    minDemand: 0.7,
+    maxDemand: 1.3,
+    // Contract pay: ±payRange at 100 / 0.
+    payRange: 0.15,
+    // One more offer a day at or above `extraOfferAt`; one fewer below `fewerOfferAt`.
+    extraOfferAt: 75,
+    fewerOfferAt: 25,
+  },
+  // Costs that grow faster than the company (sim/pressure.ts).
+  pressure: {
+    // Facility overhead per rack per tick beyond overheadFreeRacks, times
+    // (racks / overheadFreeRacks) ^ overheadExponent.
+    overheadFreeRacks: 30,
+    overheadPerRack: 0.35,
+    overheadExponent: 0.5,
+    // Corporation tax on each day's profit, marginal bands in £ per day.
+    taxBands: [
+      { above: 0, rate: 0 },
+      { above: 10_000, rate: 0.2 },
+      { above: 100_000, rate: 0.35 },
+      { above: 500_000, rate: 0.45 },
+    ],
+    // Racks this many days past their last CPU change or refurbish start failing...
+    endOfLifeDays: 60,
+    // ...with this chance per game hour for every day past it, capped.
+    endOfLifeFailPerDay: 0.0004,
+    endOfLifeFailMax: 0.03,
+    // Late-game clients (from lateFromLevel): per 10 levels past it, uptime
+    // promises rise by lateSlaStep, sizes grow by lateRacksStep and
+    // penalties by latePenaltyStep, up to lateMaxSteps.
+    lateFromLevel: 20,
+    lateSlaStep: 0.01,
+    lateRacksStep: 0.5,
+    latePenaltyStep: 1,
+    lateMaxSteps: 1.5,
+  },
+  // Late-game incidents (from pressure.lateFromLevel).
+  lateEvents: {
+    weights: { blackout: 2, ransomware: 2, big_fire: 1 },
+    // A long, deep power cut.
+    blackoutLoss: 0.9,
+    blackoutTicks: [720, 1800],
+    // Ransomware: contracts aren't served until it passes or you pay. Firewalls
+    // blocking at least `ransomwareShield` of an attack stop it entirely.
+    ransomwareTicks: [360, 720],
+    ransomwareShield: 0.75,
+    // The ransom: this many minutes of income.
+    ransomMinutes: 180,
+    // A big fire reaches racks this many tiles away, unless suppression covers them.
+    bigFireRadius: 2,
+  },
+  // Day and night (sim/daynight.ts). Hourly walk-in demand, normalised to
+  // average 1 at runtime: quiet before dawn, busiest in the evening.
+  dayNight: {
+    demand: [0.72, 0.66, 0.62, 0.6, 0.6, 0.63, 0.7, 0.8, 0.9, 0.96, 1, 1.03, 1.05, 1.05, 1.05, 1.08, 1.13, 1.2, 1.28, 1.34, 1.36, 1.3, 1.12, 0.9],
+    // Electricity price multipliers: cheap at night, dear at the evening peak.
+    nightRate: 0.6,
+    nightHours: [0, 7],
+    peakRate: 1.6,
+    peakHours: [17, 21],
+    // Ambient temperature swing (°C): warmest at tempPeakHour.
+    tempSwing: 2,
+    tempPeakHour: 15,
+    // UPS batteries hold batteryHours of their backup kW, and charge at this
+    // share of capacity per hour at night.
+    batteryHours: 4,
+    batteryChargePerHour: 0.25,
+  },
+  // Staff levels, traits and training (sim/staff.ts).
+  staffGrowth: {
+    // Jobs done to reach each level (index = level - 1).
+    levelJobs: [0, 8, 20, 40, 70],
+    // Each level past 1: this much faster, and this much higher wage.
+    speedPerLevel: 0.08,
+    wagePerLevel: 0.1,
+    // Candidates: a higher level costs this much more to hire per level.
+    feePerLevel: 0.6,
+    candidatesPerRole: 3,
+    // Training: away for trainingTicks; costs hire fee × level × trainingCost.
+    trainingTicks: 360,
+    trainingCost: 0.8,
+    // Specialisms from this level.
+    specialismLevel: 3,
+  },
   // Upgradable safety buildings (sim/safety.ts).
   safety: {
     // Each UPS level multiplies its backup kW by this (40 kW → ~800 kW at level 10).
@@ -654,6 +766,8 @@ export type BuildingCategory = 'rack' | 'power' | 'cooling' | 'chiller' | 'decor
 export type ZoneKind = 'server' | 'staff' | 'storage';
 export const ZONE_KINDS: ZoneKind[] = ['server', 'staff', 'storage'];
 export type StaffRole = keyof typeof CONFIG.staff.roles;
+export type Difficulty = keyof typeof CONFIG.difficulty;
+export const DIFFICULTIES = Object.keys(CONFIG.difficulty) as Difficulty[];
 export const BUILDING_KINDS = Object.keys(CONFIG.buildings) as BuildingKind[];
 export type FloorKind = keyof typeof CONFIG.floors;
 export const FLOOR_KINDS = Object.keys(CONFIG.floors) as FloorKind[];

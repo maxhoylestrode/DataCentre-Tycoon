@@ -1,4 +1,4 @@
-import { CONFIG, isFloorKind } from './config';
+import { CONFIG, type Difficulty, isFloorKind } from './config';
 import { advanceClock, createClock } from './sim/clock';
 import {
   buyLot,
@@ -79,7 +79,8 @@ import { Toolbar, toolUnlocked } from './ui/toolbar';
 const randomSeed = (): number => Math.floor(Math.random() * 2 ** 31);
 // Each new game gets its own random seed (the sim itself never calls
 // Math.random) and simulated staff and clients.
-const newGame = (): GameState => createInitialState(undefined, undefined, randomSeed(), { staffSim: true });
+const newGame = (difficulty: Difficulty = 'normal'): GameState =>
+  createInitialState(undefined, undefined, randomSeed(), { staffSim: true, liveWorld: true, difficulty });
 
 const settings = loadSettings();
 const loaded = loadGame();
@@ -503,7 +504,7 @@ if (!settings.seenGuide) {
 }
 
 // Swaps in a new game (fresh, or the next one after selling the company).
-function startNewGame(next: GameState = newGame()): void {
+function startNewGame(next: GameState = newGame(state.difficulty)): void {
   state = next;
   clock.accumulator = 0;
   buildings.clear();

@@ -5,6 +5,8 @@ import {
   type BuildingKind,
   buildingDef,
   CONFIG,
+  type Difficulty,
+  DIFFICULTIES,
   type FloorKind,
   floorDef,
   isBuildingKind,
@@ -27,7 +29,9 @@ import { cancelActiveContract, canTakeOffer } from './contracts';
 import { canAfford, repairCost } from './economy';
 import { buildTicks, investedValue, nextPart, partCost, refurbishCost, slotsOf, upgradeCost } from './buildings';
 import { awardBuildXp, checkProgress, isUnlocked, levelOf, upgradeCap } from './progression';
-import { categoryOf, floorAt, type GameState, getBuildingAt, isInBounds } from './state';
+import { type BatteryMode, categoryOf, floorAt, type GameState, getBuildingAt, isInBounds, type Specialism } from './state';
+import { ransomCost } from './events';
+import { hireFeeOf, hirableRoles, isAway, nameFor, newMember, specialismsFor, trainingCost } from './staff';
 
 export type CommandResult = { ok: true } | { ok: false; reason: string };
 
@@ -457,9 +461,75 @@ export function hireStaff(state: GameState, role: StaffRole): CommandResult {
   if (state.cash < def.hireFee) return { ok: false, reason: 'insufficient_funds' };
   state.cash -= def.hireFee;
   const [x, y] = entrance(state);
-  state.staff.push({ id: state.nextStaffId++, role, founder: false, x, y, path: [], task: null });
+  // A plain level 1 hire with no trait (the Staff panel hires candidates instead).
+  const id = state.nextStaffId;
+  state.staff.push(newMember(state, { role, name: nameFor(state.rngSeed, id), level: 1, trait: null }, x, y));
   state.progress.stats.staffHired += 1;
   afterProgress(state);
+  return { ok: true };
+}
+
+// Hires one of today's candidates (sim/staff.ts).
+export function hireCandidate(state: GameState, candidateId: number): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  if (!state.staffSim) return { ok: false, reason: 'no_staff' };
+  const c = state.candidates.find((x) => x.id === candidateId);
+  if (!c) return { ok: false, reason: 'no_candidate' };
+  if (!hirableRoles(state).includes(c.role)) return { ok: false, reason: 'locked' };
+  const fee = hireFeeOf(c);
+  if (state.cash < fee) return { ok: false, reason: 'insufficient_funds' };
+  state.cash -= fee;
+  const [x, y] = entrance(state);
+  state.staff.push(newMember(state, c, x, y));
+  state.candidates = state.candidates.filter((x) => x !== c);
+  state.progress.stats.staffHired += 1;
+  afterProgress(state);
+  return { ok: true };
+}
+
+// Sends someone on a course: away for a while, back a level higher, or with a
+// specialism if one is given (from CONFIG.staffGrowth.specialismLevel).
+export function trainStaff(state: GameState, staffId: number, specialism?: Specialism): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  const m = state.staff.find((s) => s.id === staffId);
+  if (!m) return { ok: false, reason: 'no_staff' };
+  if (isAway(m)) return { ok: false, reason: 'away' };
+  if (specialism ? !specialismsFor(m).includes(specialism) : m.level >= CONFIG.staffGrowth.levelJobs.length) {
+    return { ok: false, reason: 'cannot_train' };
+  }
+  const cost = trainingCost(m);
+  if (state.cash < cost) return { ok: false, reason: 'insufficient_funds' };
+  state.cash -= cost;
+  if (specialism) m.specialism = specialism;
+  else {
+    m.level += 1;
+    m.jobs = Math.max(m.jobs, CONFIG.staffGrowth.levelJobs[m.level - 1] ?? m.jobs);
+  }
+  m.trainingUntil = state.tick + CONFIG.staffGrowth.trainingTicks;
+  m.task = null;
+  m.path = [];
+  return { ok: true };
+}
+
+export function setDifficulty(state: GameState, difficulty: Difficulty): CommandResult {
+  if (!DIFFICULTIES.includes(difficulty)) return { ok: false, reason: 'unknown' };
+  state.difficulty = difficulty;
+  return { ok: true };
+}
+
+export function setBatteryMode(state: GameState, mode: BatteryMode): CommandResult {
+  state.battery.mode = mode;
+  return { ok: true };
+}
+
+// Pays off a ransomware attack: contracts are served again straight away.
+export function payRansom(state: GameState, incomePerTick: number): CommandResult {
+  const cost = ransomCost(state, incomePerTick);
+  if (cost === null) return { ok: false, reason: 'no_attack' };
+  if (state.cash < cost) return { ok: false, reason: 'insufficient_funds' };
+  state.cash -= cost;
+  state.progress.stats.ransomsPaid += cost;
+  state.events.active = state.events.active.filter((e) => e.kind !== 'ransomware');
   return { ok: true };
 }
 

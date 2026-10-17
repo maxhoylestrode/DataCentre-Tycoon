@@ -7,7 +7,9 @@ import { CONFIG } from '../config';
 import type { CostBreakdown, IncomeBreakdown } from './economy';
 import { bandwidthDemand, lineCapacity, networkEfficiency } from './network';
 import { powerDraw, powerEfficiency, powerSupply } from './power';
+import { demandFactor, electricityRate } from './daynight';
 import { prestigeOf } from './prestige';
+import { reputationDemand } from './reputation';
 import { levelOf } from './progression';
 import { type GameState, type HistoryField, type HistorySample, isRunning, racksOf, tempAt } from './state';
 
@@ -18,7 +20,7 @@ function add(sums: Partial<Record<HistoryField, number>>, field: HistoryField, v
   sums[field] = (sums[field] ?? 0) + value;
 }
 
-export function recordHistory(state: GameState, income: IncomeBreakdown, costs: CostBreakdown): void {
+export function recordHistory(state: GameState, income: IncomeBreakdown, costs: CostBreakdown, tax = 0): void {
   const acc = state.history.acc;
   const s = acc.sums;
   acc.ticks += 1;
@@ -31,7 +33,12 @@ export function recordHistory(state: GameState, income: IncomeBreakdown, costs: 
   add(s, 'electricity', costs.electricity);
   add(s, 'network', costs.network);
   add(s, 'wages', costs.wages);
+  add(s, 'overhead', costs.overhead);
+  add(s, 'tax', tax);
   add(s, 'uptime', income.efficiency);
+  add(s, 'demand', demandFactor(state) * reputationDemand(state));
+  add(s, 'electricityRate', electricityRate(state));
+  add(s, 'batteryCharge', state.battery.charge);
 
   if (acc.ticks % SLOW_EVERY === 1) {
     add(s, 'powerDraw', powerDraw(state) * SLOW_EVERY);
@@ -76,6 +83,7 @@ export function recordHistory(state: GameState, income: IncomeBreakdown, costs: 
     xp: state.progress.xp,
     researchDone: state.research.done.length,
     market: income.market,
+    reputation: state.reputation,
   } satisfies Partial<Record<HistoryField, number>>);
 
   state.history.samples.push(sample);

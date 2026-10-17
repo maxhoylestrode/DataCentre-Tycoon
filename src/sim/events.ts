@@ -10,8 +10,10 @@
 
 import { buildingDef, CONFIG } from '../config';
 import { UPLINKS } from './content/uplinks';
+import { dayTempOffset } from './daynight';
 import { prestigeOf } from './prestige';
-import { isUnlocked } from './progression';
+import { isUnlocked, levelOf } from './progression';
+import { adjustReputation } from './reputation';
 import { researchBonus } from './research';
 import { nextRandom, pick, randomInt } from './rng';
 import { attackBlocked } from './safety';
@@ -26,14 +28,33 @@ export const EVENT_NAMES: Record<EventKind, string> = {
   ddos: 'Cyber attack',
   rush_order: 'Rush job',
   press_visit: 'Press visit',
+  blackout: 'Blackout',
+  ransomware: 'Ransomware',
+  big_fire: 'Major fire',
 };
+
+// Whether ransomware has contract systems locked.
+export function contractsLocked(state: GameState): boolean {
+  return activeEffect(state, 'ransomware') !== undefined;
+}
+
+// Late-game incidents happen in a live world from pressure.lateFromLevel.
+export function lateIncidents(state: GameState): boolean {
+  return state.liveWorld && levelOf(state) >= CONFIG.pressure.lateFromLevel;
+}
+
+// The ransom to end a ransomware attack now (null when there isn't one).
+export function ransomCost(state: GameState, incomePerTick: number): number | null {
+  if (!activeEffect(state, 'ransomware')) return null;
+  return Math.round(Math.max(2000, incomePerTick * CONFIG.lateEvents.ransomMinutes) / 50) * 50;
+}
 
 export function activeEffect(state: GameState, kind: EventKind) {
   return state.events.active.find((e) => e.kind === kind && state.tick < e.endTick);
 }
 
 export function ambientTemp(state: GameState): number {
-  return CONFIG.heat.ambient + (activeEffect(state, 'heatwave') ? E.heatwaveBoost : 0);
+  return CONFIG.heat.ambient + (activeEffect(state, 'heatwave') ? E.heatwaveBoost : 0) + dayTempOffset(state);
 }
 
 // Size of a cyber attack in Mbps: a share of your line, so attacks grow with it.
@@ -56,7 +77,8 @@ export function ddosFactor(state: GameState): number {
 // Chance of an event today.
 export function eventChancePerDay(state: GameState): number {
   const raw = Math.min(E.maxChancePerDay, E.chancePerDay + racksOf(state).length * E.chancePerRack);
-  return raw * (1 - researchBonus(state, 'eventChance'));
+  const difficulty = state.liveWorld ? CONFIG.difficulty[state.difficulty].incidents : 1;
+  return Math.min(1, raw * difficulty) * (1 - researchBonus(state, 'eventChance'));
 }
 
 // Whether a fire at this tile would be put out.
@@ -102,7 +124,8 @@ export function triggerEvent(state: GameState, kind: EventKind, incomePerTick = 
       const t = startTimed(state, kind, E.ddosTicks);
       return record(state, kind, `Cyber attack on your network for ${hours(t)}. Firewalls block part of it.`, false);
     }
-    case 'fire': {
+    case 'fire':
+    case 'big_fire': {
       // The hottest running rack is most at risk.
       const racks = racksOf(state).filter(isRunning).sort((a, b) => tempAt(state, b.x, b.y) - tempAt(state, a.x, a.y));
       const origin = racks.slice(0, 5).length ? pick(state, racks.slice(0, 5)) : undefined;
@@ -110,14 +133,32 @@ export function triggerEvent(state: GameState, kind: EventKind, incomePerTick = 
       if (isProtectedFromFire(state, origin.x, origin.y)) {
         return record(state, kind, 'A fire started in a rack, but the fire suppression put it out.', true);
       }
+      // A normal fire takes a couple of neighbours; a major one everything
+      // nearby that suppression doesn't cover.
+      const big = kind === 'big_fire';
+      const reach = big ? CONFIG.lateEvents.bigFireRadius : 1;
       const near = racks
-        .filter((r) => r !== origin && Math.abs(r.x - origin.x) <= 1 && Math.abs(r.y - origin.y) <= 1)
-        .slice(0, E.fireSpread);
+        .filter((r) => r !== origin && Math.abs(r.x - origin.x) <= reach && Math.abs(r.y - origin.y) <= reach)
+        .filter((r) => !big || !isProtectedFromFire(state, r.x, r.y))
+        .slice(0, big ? Infinity : E.fireSpread);
       for (const r of [origin, ...near]) {
         r.status = 'failed';
         state.progress.stats.failures += 1;
       }
-      return record(state, kind, `Fire! ${1 + near.length} rack${near.length ? 's' : ''} burned out. Fire suppression would have stopped it.`, false);
+      adjustReputation(state, CONFIG.reputation.fire * (big ? 2 : 1));
+      const n = 1 + near.length;
+      return record(state, kind, `${big ? 'Major fire' : 'Fire'}! ${n} rack${n > 1 ? 's' : ''} burned out. Fire suppression would have stopped it.`, false);
+    }
+    case 'blackout': {
+      const t = startTimed(state, kind, CONFIG.lateEvents.blackoutTicks);
+      return record(state, kind, `Blackout: the grid is almost completely down for ${hours(t)}. Batteries and on-site generators are all you have.`, false);
+    }
+    case 'ransomware': {
+      if (ddosBlocked(state) >= CONFIG.lateEvents.ransomwareShield) {
+        return record(state, kind, 'Your firewalls stopped a ransomware attack.', true);
+      }
+      const t = startTimed(state, kind, CONFIG.lateEvents.ransomwareTicks);
+      return record(state, kind, `Ransomware! Contract systems are locked for ${hours(t)}: contracts aren't being served. Pay the ransom (Contracts panel) or wait it out.`, false);
     }
     case 'rush_order': {
       const pay = Math.round(Math.max(500, incomePerTick * E.rushOrderMinutes));
@@ -141,7 +182,10 @@ export function stepEvents(state: GameState, incomePerTick: number): EventRecord
   if (!isUnlocked(state, 'events') || state.tick % 60 !== 0 || state.tick === 0) return null;
   const hourly = eventChancePerDay(state) / 24;
   if (nextRandom(state) >= hourly) return null;
-  const weights = Object.entries(E.weights) as [EventKind, number][];
+  const weights = [
+    ...Object.entries(E.weights),
+    ...(lateIncidents(state) ? Object.entries(CONFIG.lateEvents.weights) : []),
+  ] as [EventKind, number][];
   const total = weights.reduce((s, [, w]) => s + w, 0);
   let roll = nextRandom(state) * total;
   for (const [kind, w] of weights) {

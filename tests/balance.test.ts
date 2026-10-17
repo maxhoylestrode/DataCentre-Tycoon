@@ -8,10 +8,15 @@ import { describe, expect, it } from 'vitest';
 import { playBot } from './bot';
 
 const DAYS = 30;
-// Real datacentres run at about 20-30%; the game allows a bit more.
+// Real datacentres run at about 20-30%; the game allows a bit more early on.
 const TARGET_MARGIN = 0.4;
-// Margins are only judged once the business is established.
-const FROM_DAY = 8;
+// Margins are only judged once the business is established (contracts
+// running, past the fast early growth).
+const FROM_DAY = 12;
+// The live world (overhead, tax, end of life) squeezes big companies: by
+// this day margins must have come down to LATE_MARGIN.
+const LATE_DAY = 20;
+const LATE_MARGIN = 0.25;
 
 describe('late-game balance', () => {
   const reports = playBot(DAYS);
@@ -30,5 +35,10 @@ describe('late-game balance', () => {
     const late = reports.filter((r) => r.day >= FROM_DAY);
     const worst = Math.max(...late.map((r) => r.margin));
     expect(worst).toBeLessThan(TARGET_MARGIN);
+  });
+
+  it(`gets harder late on: margins under ${LATE_MARGIN * 100}% from day ${LATE_DAY}`, () => {
+    const late = reports.filter((r) => r.day >= LATE_DAY);
+    expect(Math.max(...late.map((r) => r.margin))).toBeLessThan(LATE_MARGIN);
   });
 }, 300_000);

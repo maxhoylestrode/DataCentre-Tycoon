@@ -28,6 +28,8 @@ export function sellCompany(state: GameState, seed: number): GameState | null {
   if (!canSellCompany(state)) return null;
   return createInitialState(state.width, state.height, seed, {
     staffSim: state.staffSim,
+    liveWorld: state.liveWorld,
+    difficulty: state.difficulty,
     legacy: { points: state.legacy.points + legacyPointsFor(state), sales: state.legacy.sales + 1 },
   });
 }

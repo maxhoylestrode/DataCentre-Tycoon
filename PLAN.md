@@ -316,6 +316,33 @@ Done when: I can create an account, play on one device, log in on another and co
 
 (Claude Code: add dated entries here when a decision changes the plan.)
 
+- 2026-10-17: Milestone 9: a harder mid and late game, day/night, and staff with traits (user: "add all of that"). Save v10.
+  - **Live world:** everything below is gated on `state.liveWorld`. It's on in real games and in old saves that simulate people, and off in engine tests, the same pattern as `staffSim`.
+  - **Difficulty** (Relaxed / Normal / Tough): picked in the menu, changeable any time. It scales the new costs, tax, incidents and reputation losses.
+  - **Reputation** (0–100, starts at 50, which is neutral):
+    - Drifts hourly towards a target set by uptime, overheating, failed racks and prestige. Contract results and fires move it straight away.
+    - Scales walk-in demand (0.7× to 1.3×), contract pay, and how many offers arrive.
+  - **Facility overhead:** past 25 racks, a per-rack running cost that grows faster than your size.
+  - **Corporation tax:** charged at midnight on the day's profit, with marginal bands.
+  - **Hardware end of life:** racks past 60 days since their last CPU change or refurbish start to fail, more often the older they get.
+  - **Late-game threats** (from level 20):
+    - Blackouts: long, deep power cuts.
+    - Ransomware: contracts stop being served until you pay or it passes; strong firewalls stop it.
+    - Big fires.
+    - Stricter, bigger clients with bigger penalties.
+  - **Day/night:**
+    - Walk-in demand and bandwidth follow a daily curve that averages 1.
+    - Electricity costs 0.6× at night and 1.6× at the evening peak.
+    - UPS batteries store charge: in "save money" mode they charge at night and discharge at peak; "reserve" mode keeps them full for outages. Power cuts drain the charge.
+    - Ambient temperature swings ±2°C through the day.
+    - The lighting changes through the day (with a menu option to turn this off).
+  - **Staff:**
+    - Names, levels 1–5 (gained from jobs; each level is faster but has a higher wage) and a trait.
+    - The traits are speedy, tinkerer, careful, night owl, early bird, workaholic, lazy and charmer.
+    - Hiring picks from three daily candidates per role.
+    - Training raises a level, or from level 3 gives a specialism (electrician, repair specialist, senior tech or negotiator).
+    - Click a person to see their card.
+
 - 2026-10-17: Sales staff who automate contracts (user: "new types of staff which can automate the contract hiring"). `sim/sales.ts`, numbers in `CONFIG.staff.sales`.
   - **Account manager** (level 7, £6,000, £1.10/min):
     - Walks to a free reception desk and stands beside it (one per desk, never in the clients' spot).

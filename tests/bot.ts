@@ -1,4 +1,4 @@
-// A scripted player for balance testing. It plays sensibly, not perfectly:
+﻿// A scripted player for balance testing. It plays sensibly, not perfectly:
 // racks in rows with aisles, power and cooling when needed, staff, zones,
 // reception, contracts, upgrades and more rooms. Used by balance.test.ts.
 
@@ -7,10 +7,12 @@ import {
   buyLot,
   hireStaff,
   paintZone,
+  payRansom,
   placeBuilding,
   placeWall,
   refurbishRack,
   repairRack,
+  sellBuilding,
   signContract,
   startResearch,
   upgradeMax,
@@ -20,9 +22,10 @@ import { ageFactor, refurbishCost } from '../src/sim/buildings';
 import { canTakeOffer } from '../src/sim/contracts';
 import { costBreakdown, costsPerTick, incomeBreakdown, incomePerTick } from '../src/sim/economy';
 import { isOwnedTile, lotSize, nextLotPrice, purchasableLots } from '../src/sim/lots';
-import { bandwidthDemand, nextUplink, uplinkOf } from '../src/sim/network';
+import { nextUplink, peakBandwidthDemand, uplinkOf } from '../src/sim/network';
 import { RESEARCH } from '../src/sim/content/research';
-import { isProtectedFromFire } from '../src/sim/events';
+import { isProtectedFromFire, ransomCost } from '../src/sim/events';
+import { rackAgeDays } from '../src/sim/pressure';
 import { researchStatus } from '../src/sim/research';
 import { backupPower, powerDraw, powerSupply, supplyBySource } from '../src/sim/power';
 import { isUnlocked, levelOf } from '../src/sim/progression';
@@ -46,7 +49,8 @@ function detail(state: GameState): string {
   const inc = incomeBreakdown(state);
   const c = costBreakdown(state);
   const f = (n: number): string => n.toFixed(0);
-  return `walk ${f(inc.walkIn)} ctr ${f(inc.contracts)} mkt ${inc.market.toFixed(2)} eff ${inc.efficiency.toFixed(2)} | upk ${f(c.upkeep)} elec ${f(c.electricity)} wage ${f(c.wages)} net ${f(c.network)} rent ${f(c.rent)} | kW ${f(powerDraw(state))} active ${state.contracts.active.length} lots ${state.ownedLots.length}`;
+  const s = state.progress.stats;
+  return `walk ${f(inc.walkIn)} ctr ${f(inc.contracts)} mkt ${inc.market.toFixed(2)} eff ${inc.efficiency.toFixed(2)} | upk ${f(c.upkeep)} elec ${f(c.electricity)} wage ${f(c.wages)} ovh ${f(c.overhead)} | tax ${f(s.lastTax)} rep ${f(state.reputation)} | kW ${f(powerDraw(state))} ctr# ${state.contracts.active.length} lots ${state.ownedLots.length}`;
 }
 
 function free(state: GameState, x: number, y: number): boolean {
@@ -92,14 +96,16 @@ function coolSpotNear(state: GameState, x: number, y: number): [number, number] 
 
 function decide(state: GameState, did: Set<string>): void {
   const level = levelOf(state);
-  // Keep about two game hours of running costs in the bank.
-  const reserve = Math.max(1_500, costsPerTick(state) * 120);
+  // Keep running costs in the bank: two game hours early on, half a day once established.
+  const reserve = Math.max(1_500, costsPerTick(state) * (racksOf(state).length > 30 ? 720 : 120));
   const spend = (amount: number): boolean => state.cash - amount > reserve;
   // Saving up for something: don't buy racks or upgrades meanwhile.
   let saving = false;
 
-  // Repairs first.
+  // Repairs first, and pay off ransomware if we can.
   for (const r of racksOf(state)) if (r.status === 'failed' && spend(0)) repairRack(state, r.x, r.y);
+  const ransom = ransomCost(state, incomePerTick(state));
+  if (ransom !== null && spend(ransom)) payRansom(state, incomePerTick(state));
 
   // Power headroom (essential, so it may dip into the reserve).
   // Units and racks still being built count as if they were running.
@@ -142,13 +148,16 @@ function decide(state: GameState, did: Set<string>): void {
     if (next && spend(next.cost * 1.5)) startResearch(state, next.id);
   }
 
-  // Bandwidth headroom.
+  // Bandwidth headroom, planned for the evening peak.
   const next = nextUplink(state);
-  if (next && bandwidthDemand(state) > uplinkOf(state).mbps * 0.8 && next.level <= level) {
+  const peak = peakBandwidthDemand(state);
+  if (next && peak > uplinkOf(state).mbps * 0.85 && next.level <= level) {
     if (spend(next.cost)) upgradeUplink(state);
     else saving = true;
   }
-  const lineFull = bandwidthDemand(state) > uplinkOf(state).mbps;
+  const lineFull = peak > uplinkOf(state).mbps;
+  // Keep batteries full for power cuts.
+  state.battery.mode = 'reserve';
   const powerFull = powerDraw(state) > powerSupply(state);
 
   // Cool the hottest rack if it's getting warm.
@@ -165,7 +174,7 @@ function decide(state: GameState, did: Set<string>): void {
     const engineers = state.staff.filter((s) => s.role === 'engineer').length;
     const techs = state.staff.filter((s) => s.role === 'technician').length;
     const pending = state.buildings.filter((b) => b.status === 'building').length;
-    if (pending > engineers * 3 && spend(CONFIG.staff.roles.engineer.hireFee)) hireStaff(state, 'engineer');
+    if ((pending > engineers * 3 || engineers < 2) && spend(CONFIG.staff.roles.engineer.hireFee)) hireStaff(state, 'engineer');
     if (racksOf(state).length > (techs + 1) * 10 && spend(CONFIG.staff.roles.technician.hireFee)) hireStaff(state, 'technician');
   }
 
@@ -190,19 +199,29 @@ function decide(state: GameState, did: Set<string>): void {
     did.add('reception');
   }
 
-  // Sign contracts we can serve, but only while nothing is throttled.
-  const healthy = incomeBreakdown(state).efficiency >= 1;
+  // Sign contracts we can serve, but only while nothing is throttled, the
+  // line copes with the peak, and reputation isn't on the floor.
+  const healthy = incomeBreakdown(state).efficiency >= 1 && !lineFull && (!state.liveWorld || state.reputation > 30);
   if (healthy) for (const offer of [...state.contracts.offers]) if (canTakeOffer(state, offer)) signContract(state, offer.id);
 
   // Don't queue more building than the engineers can get through.
   const engineers = state.staff.filter((s) => s.role === 'engineer').length;
   if (pending('rack') + pending('power') > engineers * 3) return;
 
+  // Losing money with more walk-in racks than the market wants: sell one.
+  const inc = incomeBreakdown(state);
+  if (incomePerTick(state) < costsPerTick(state) * 0.95 && inc.allocation.walkIn.length > CONFIG.market.freeRacks + 15) {
+    const spare = [...inc.allocation.walkIn].sort((a, b) => a.upgrade - b.upgrade)[0];
+    if (spare) sellBuilding(state, spare.x, spare.y);
+  }
+
   if (saving || lineFull || powerFull) return;
+  // More racks only while the business is clearly making money.
+  const thin = incomePerTick(state) < costsPerTick(state) * 1.12 && racksOf(state).length > 16;
 
   // More racks: the best model unlocked that we can afford.
   const models = (['rack_enterprise', 'rack_performance', 'rack_basic'] as const).filter((k) => isUnlocked(state, k));
-  for (const kind of models) {
+  for (const kind of thin ? [] : models) {
     if (!spend(buildingDef(kind).cost * (racksOf(state).length >= 16 ? 3 : 1))) continue;
     const spot = rackSpots(state).find(([x, y]) => free(state, x, y));
     if (spot) placeBuilding(state, kind, spot[0], spot[1]);
@@ -211,24 +230,32 @@ function decide(state: GameState, did: Set<string>): void {
 
   // Upgrades with spare cash: the least-upgraded rack first. Past 16 racks,
   // upgrading beats adding more.
-  if (state.cash > reserve * 3 || (racksOf(state).length >= 16 && state.cash > reserve * 1.5)) {
+  if (!thin && (state.cash > reserve * 3 || (racksOf(state).length >= 16 && state.cash > reserve * 1.5))) {
     const rack = racksOf(state)
       .filter((r) => r.status === 'ok')
       .sort((a, b) => a.upgrade - b.upgrade)[0];
     if (rack) upgradeMax(state, rack.x, rack.y);
   }
 
-  // Refurbish racks that have aged a lot.
-  for (const r of racksOf(state)) if (r.status === 'ok' && ageFactor(state, r) < 0.8 && spend(refurbishCost(r))) refurbishRack(state, r.x, r.y);
+  // Refurbish racks that have aged a lot, or are nearing end of life.
+  const old = (r: (typeof state.buildings)[number]): boolean =>
+    ageFactor(state, r) < 0.8 || rackAgeDays(state, r.refreshedAtTick) > CONFIG.pressure.endOfLifeDays - 5;
+  for (const r of racksOf(state)) if (r.status === 'ok' && old(r) && spend(refurbishCost(r))) refurbishRack(state, r.x, r.y);
 
   // Expand when rich.
   const lot = purchasableLots(state)[0];
-  if (lot && state.cash > nextLotPrice(state) * 1.5) buyLot(state, lot.id);
+  if (lot && state.cash > nextLotPrice(state) * 1.5 && buyLot(state, lot.id).ok) {
+    // A door through the wall into the new room so staff can reach it.
+    const { w, h: lh } = lotSize(state);
+    const [col, row] = lot.id.split('_').slice(1).map(Number);
+    for (const dy of [0, 1, -1, 2, -2]) if (placeWall(state, 'wall_door', col! * w, row! * lh + Math.floor(lh / 2) + dy, 'v').ok) break;
+    for (const dx of [0, 1, -1, 2, -2]) if (placeWall(state, 'wall_door', col! * w + Math.floor(w / 2) + dx, row! * lh, 'h').ok) break;
+  }
 }
 
 // Plays `days` days and returns the final state, for debugging the bot.
 export function inspectBot(days: number): GameState {
-  const state = createInitialState(undefined, undefined, 7, { staffSim: true });
+  const state = createInitialState(undefined, undefined, 7, { staffSim: true, liveWorld: true });
   const did = new Set<string>();
   for (let t = 0; t < days * CONFIG.time.ticksPerDay && !state.bankrupt; t++) {
     if (t % 30 === 0) decide(state, did);
@@ -238,13 +265,14 @@ export function inspectBot(days: number): GameState {
 }
 
 export function playBot(days: number): DayReport[] {
-  const state = createInitialState(undefined, undefined, 7, { staffSim: true });
+  const state = createInitialState(undefined, undefined, 7, { staffSim: true, liveWorld: true });
   const did = new Set<string>();
   const reports: DayReport[] = [];
   const day = CONFIG.time.ticksPerDay;
   let income = 0;
   let costs = 0;
   let samples = 0;
+  let taxBefore = 0;
   for (let t = 0; t < days * day && !state.bankrupt; t++) {
     if (t % 30 === 0) decide(state, did);
     tick(state);
@@ -254,6 +282,9 @@ export function playBot(days: number): DayReport[] {
       samples++;
     }
     if ((t + 1) % day === 0) {
+      // Tax counts as a cost too (charged as the day's profit builds up).
+      costs += ((state.progress.stats.taxPaid - taxBefore) / day) * samples;
+      taxBefore = state.progress.stats.taxPaid;
       reports.push({
         day: (t + 1) / day,
         level: levelOf(state),
