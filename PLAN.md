@@ -206,6 +206,11 @@ The user's list, grouped. Each group gets a detailed plan and its open questions
 **C. Staff and build time** (expands the old Milestone 8, "Staff and random incidents"; needs C0)
 - **Engineers build servers:** placing a rack starts a 5–10 second build (it isn't live until finished), done by an engineer who walks to it. More engineers means more builds at once.
 - **Maintenance staff:** servers need periodic maintenance by staff; too few staff and racks degrade or fail more often, so you hire more as you grow. Wages are a running cost.
+- **Staff cost money twice:**
+  - **Hiring fee:** a one-off cost to bring a staff member on (recruitment), paid when they appear.
+  - **Wage:** an ongoing cost per minute for as long as they're employed, shown in the HUD's "out" figure next to rent and upkeep. Firing stops the wage, and the hiring fee isn't refunded.
+  - Fee and wage both vary by role (e.g. engineer vs maintenance tech) and live in `config.ts` like other balance numbers.
+  - *Ask:* do wages rise with staff level or experience? Should a staff member go unpaid (and quit) if cash goes negative?
 - **Staff use the zones:** they take breaks in the staff room and collect parts from the storage room, so where those rooms sit in your layout matters.
   - *Ask:* do staff show as little people walking around? Is build time in real seconds or game minutes (it must scale with speed)?
 
