@@ -161,6 +161,18 @@ export const CONFIG = {
     // Past events remembered for the UI.
     historyLength: 12,
   },
+  // Upgradable safety buildings (sim/safety.ts).
+  safety: {
+    // Each UPS level multiplies its backup kW by this (40 kW → ~800 kW at level 10).
+    upsGrowth: 1.35,
+    // Each firewall level multiplies the Mbps it filters by this
+    // (1 Gbps → ~110 Gbps at level 10). Attacks scale with your line, so the
+    // biggest lines need several fully upgraded firewalls.
+    firewallGrowth: 1.6,
+    // One firewall never blocks more than this share of an attack, however
+    // big it is: you need at least two to stop one completely.
+    firewallMaxShare: 0.5,
+  },
   // Research (content/research.ts): one project at a time, paid upfront.
   research: {
     // Speeds up every project (1 = as listed).
@@ -274,7 +286,8 @@ export const CONFIG = {
     ups_battery: {
       name: 'UPS battery bank', category: 'safety', cost: 4000, upkeepPerTick: 0.15, incomePerTick: 0,
       powerDraw: 0, powerSupply: 0, heatPerTick: 0.05, coolingStrength: 0, coolingRadius: 0,
-      upgrade: { output: 0, powerDraw: 0, heat: 0 }, backupKw: 40,
+      // output only marks it upgradable; backup grows by CONFIG.safety.upsGrowth.
+      upgrade: { output: 1, powerDraw: 0, heat: 0 }, backupKw: 40,
     },
     fire_suppression: {
       name: 'Fire suppression', category: 'safety', cost: 6000, upkeepPerTick: 0.1, incomePerTick: 0,
@@ -284,7 +297,8 @@ export const CONFIG = {
     firewall: {
       name: 'Firewall appliance', category: 'safety', cost: 9000, upkeepPerTick: 0.25, incomePerTick: 0,
       powerDraw: 0.5, powerSupply: 0, heatPerTick: 0.1, coolingStrength: 0, coolingRadius: 0,
-      upgrade: { output: 0, powerDraw: 0, heat: 0 }, ddosShield: 0.35,
+      // output only marks it upgradable; filtering grows by CONFIG.safety.firewallGrowth.
+      upgrade: { output: 1, powerDraw: 0.1, heat: 0 }, ddosFilterMbps: 1000,
     },
     cooling_fan: {
       name: 'Cooling unit', category: 'cooling', cost: 1200, upkeepPerTick: 0.4, incomePerTick: 0,
@@ -663,10 +677,11 @@ export interface BuildingDef {
   // Power only: fed from the grid, so a power cut hits it.
   readonly gridFed?: boolean;
   // Safety buildings: UPS backup kW during power cuts, fire suppression
-  // radius (square, in tiles), and share of an attack a firewall blocks.
+  // radius (square, in tiles), and Mbps of attack traffic a firewall filters.
+  // Backup and filtering grow with upgrade level (CONFIG.safety).
   readonly backupKw?: number;
   readonly suppressionRadius?: number;
-  readonly ddosShield?: number;
+  readonly ddosFilterMbps?: number;
 }
 
 export interface FloorDef {

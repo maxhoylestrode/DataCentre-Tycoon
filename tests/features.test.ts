@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { moveGroup, placeBuilding, sellBuilding, startResearch } from '../src/sim/commands';
+import { moveGroup, placeBuilding, sellBuilding, startResearch, upgradeBuilding } from '../src/sim/commands';
 import { RESEARCH } from '../src/sim/content/research';
 import { costBreakdown, incomeBreakdown } from '../src/sim/economy';
-import { activeEffect, ambientTemp, ddosFactor, eventChancePerDay, stepEvents, triggerEvent } from '../src/sim/events';
+import { activeEffect, ambientTemp, attackMbps, ddosBlocked, ddosFactor, eventChancePerDay, stepEvents, triggerEvent } from '../src/sim/events';
+import { firewallFilterMbps, firewallShare, upsBackupKw } from '../src/sim/safety';
 import { canSellCompany, legacyPointsFor, sellCompany } from '../src/sim/legacy';
 import { lineCapacity } from '../src/sim/network';
 import { backupPower, electricityCost, powerMultiblocks, powerSupply, supplyBySource } from '../src/sim/power';
 import { totalXpForLevel } from '../src/sim/progression';
 import { researchBonus, researchTicks } from '../src/sim/research';
 import { deserialize, serialize } from '../src/sim/save';
-import { createInitialState, type GameState, getBuildingAt } from '../src/sim/state';
+import { createInitialState, type GameState, getBuildingAt, HISTORY_FIELDS } from '../src/sim/state';
 import { tick } from '../src/sim/tick';
 import { applyUndo, makeEntry, takeSnapshot } from '../src/sim/undo';
 import { fastNetwork } from './helpers';
@@ -96,7 +97,39 @@ describe('random events', () => {
     triggerEvent(state, 'ddos');
     expect(ddosFactor(state)).toBeCloseTo(1 - CONFIG.events.ddosLoss);
     placeBuilding(state, 'firewall', 0, 0);
-    expect(lineCapacity(state)).toBeCloseTo(full * (1 - CONFIG.events.ddosLoss + CONFIG.buildings.firewall.ddosShield));
+    const blocked = ddosBlocked(state);
+    expect(blocked).toBeGreaterThan(0);
+    expect(lineCapacity(state)).toBeCloseTo(full * (1 - CONFIG.events.ddosLoss * (1 - blocked)));
+  });
+
+  it('one firewall blocks at most half an attack; more firewalls and upgrades block more', () => {
+    const state = game();
+    state.uplink = 'uplink_800g';
+    placeBuilding(state, 'firewall', 0, 0);
+    const one = ddosBlocked(state);
+    expect(one).toBeLessThan(CONFIG.safety.firewallMaxShare);
+    placeBuilding(state, 'firewall', 2, 0);
+    expect(ddosBlocked(state)).toBeCloseTo(one * 2);
+    const fw = getBuildingAt(state, 0, 0)!;
+    expect(upgradeBuilding(state, 0, 0).ok).toBe(true);
+    expect(firewallFilterMbps(fw)).toBeCloseTo(CONFIG.buildings.firewall.ddosFilterMbps * CONFIG.safety.firewallGrowth);
+    expect(ddosBlocked(state)).toBeGreaterThan(one * 2);
+    fw.upgrade = CONFIG.upgrades.maxLevel;
+    expect(firewallShare(fw, attackMbps(state))).toBeLessThanOrEqual(CONFIG.safety.firewallMaxShare);
+    // On a small line, one firewall already hits its cap; two stop the attack.
+    state.uplink = 'uplink_100m';
+    expect(ddosBlocked(state)).toBe(1);
+    triggerEvent(state, 'ddos');
+    expect(ddosFactor(state)).toBe(1);
+  });
+
+  it('upgrading a UPS bank gives more backup', () => {
+    const state = game();
+    placeBuilding(state, 'ups_battery', 0, 0);
+    const before = backupPower(state);
+    expect(upgradeBuilding(state, 0, 0).ok).toBe(true);
+    expect(backupPower(state)).toBeCloseTo(before * CONFIG.safety.upsGrowth);
+    expect(upsBackupKw(getBuildingAt(state, 0, 0)!, CONFIG.upgrades.maxLevel)).toBeGreaterThan(before * 10);
   });
 
   it('good events pay out', () => {
@@ -194,6 +227,35 @@ describe('stats history', () => {
     run(state, CONFIG.history.sampleTicks * 3);
     expect(state.history.samples).toHaveLength(3);
     expect(state.history.samples[0]!.tick).toBeGreaterThan(0);
+  });
+
+  it('tracks every stat, and the parts add up to the totals', () => {
+    const state = game();
+    placeBuilding(state, 'rack_basic', 3, 3);
+    placeBuilding(state, 'power_basic', 0, 0);
+    run(state, CONFIG.history.sampleTicks);
+    const s = state.history.samples[0]!;
+    for (const f of HISTORY_FIELDS) expect(s[f], f).toBeTypeOf('number');
+    expect(s.walkIn! + s.contracts!).toBeCloseTo(s.income!);
+    expect(s.rent! + s.upkeep! + s.electricity! + s.network! + s.wages!).toBeCloseTo(s.costs!);
+    expect(s.racks).toBe(1);
+    expect(s.maxTemp!).toBeGreaterThanOrEqual(s.avgTemp!);
+  });
+
+  it('reads samples from saves that tracked fewer stats, leaving the new ones empty', () => {
+    const state = game();
+    run(state, CONFIG.history.sampleTicks);
+    const data = JSON.parse(serialize(state));
+    const history = data.data.history;
+    history.samples = [{ tick: 60, income: 5, costs: 2, cash: 100, powerDraw: 1, powerSupply: 12, uptime: 1, racks: 2 }];
+    history.acc = { ticks: 10, income: 50, costs: 20, powerDraw: 0, powerSupply: 0, uptime: 10 };
+    const loaded = deserialize(JSON.stringify(data));
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    const [sample] = loaded.state.history.samples;
+    expect(sample).toMatchObject({ tick: 60, income: 5, racks: 2 });
+    expect(sample!.walkIn).toBeUndefined();
+    expect(loaded.state.history.acc).toEqual({ ticks: 0, sums: {} });
   });
 });
 

@@ -316,6 +316,20 @@ Done when: I can create an account, play on one device, log in on another and co
 
 (Claude Code: add dated entries here when a decision changes the plan.)
 
+- 2026-10-17: Statistics screen, repair markers and upgradable safety (user request).
+  - **Statistics (N):** rebuilt in the style of a city builder's stats screen.
+    - A sidebar lists 35 stats in 9 groups, each with its latest value and a trend (green or red by whether up is good).
+    - Ticked stats share one big graph. Lines with different units are each scaled to fit.
+    - Hovering the graph shows a cursor and exact values.
+    - Overview cards with sparklines, income and cost breakdown bars, records and the incident log.
+  - **History:** samples now record every field in `HISTORY_FIELDS` (`sim/state.ts`). Older samples keep only what they had, and the graph leaves gaps. No save version bump: `readHistory` handles both shapes.
+  - **Repair marker:** a red "!" sprite floats over failed racks, always facing the camera and drawn over everything. Clicking the badge counts as clicking its rack.
+  - **Firewalls:** they filter a bandwidth (`ddosFilterMbps`, 1 Gbps × 1.6 per upgrade level) instead of a flat share.
+    - An attack is 70% of your line, so attacks grow as you upgrade it.
+    - Each firewall blocks at most 50% of an attack, and firewalls add up.
+    - On the biggest line a fully upgraded firewall blocks about 20%, so late game needs several.
+  - **UPS banks:** now upgradable, with backup × 1.35 per level (40 kW to about 800 kW at level 10). Numbers are in `CONFIG.safety`.
+
 - 2026-10-17: Late-game depth, power tiers, bulk editing, stats and sound (user: "add 1,2,3,4,7", plus "better leveled power sources" and a menu fix). Save v9.
   - **Research** (`content/research.ts`, Y): 19 projects in 4 tiers from L8, £15k up to £5m. One at a time, paid upfront, takes game days. Effects: power, cooling, electricity, contract pay, walk-in income, market size, staff speed, ageing, bandwidth, incident chance, upkeep.
   - **Selling the company** (bottom of Research, from L15): restart for legacy points = floor(4 × √(value in £m)). Each point gives +2% income and +£1,000 starting cash, forever. Value = cash + building resale + 10 days of profit.

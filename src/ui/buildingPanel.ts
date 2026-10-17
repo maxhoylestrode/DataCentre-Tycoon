@@ -19,8 +19,10 @@ import {
   slotsOf,
   upgradeCost,
 } from '../sim/buildings';
-import { formatMbps } from '../sim/network';
-import { powerMultiblocks } from '../sim/power';
+import { attackMbps, ddosBlocked } from '../sim/events';
+import { formatMbps, uplinkOf } from '../sim/network';
+import { backupPower, powerMultiblocks } from '../sim/power';
+import { firewallFilterMbps, firewallShare, upsBackupKw } from '../sim/safety';
 import { planUpgradeMax } from '../sim/commands';
 import { SLOT_NAMES, TRADEMARK_NOTE } from '../sim/content/parts';
 import type { Part } from '../sim/content/types';
@@ -170,7 +172,7 @@ export class BuildingPanel {
       category === 'chiller' ? this.chillerInfo(state, b)
       : isRack ? this.rackInfo(state, b)
       : category === 'power' ? this.powerInfo(state, b)
-      : category === 'safety' ? this.safetyInfo(b)
+      : category === 'safety' ? this.safetyInfo(state, b)
       : def.zone ? `<div class="muted">Works on a ${def.zone} room zone (Zones menu).</div>`
       : '';
 
@@ -212,14 +214,30 @@ export class BuildingPanel {
     return lines.join('');
   }
 
-  private safetyInfo(b: Building): string {
+  private safetyInfo(state: GameState, b: Building): string {
     const def = buildingDef(b.kind);
-    if (def.backupKw) return `<div class="muted">Gives ${def.backupKw} kW of backup during a power cut. Add more for more backup.</div>`;
+    const atMax = b.upgrade >= CONFIG.upgrades.maxLevel;
+    const row = (label: string, now: string, next: string): string =>
+      `<table><tr><td>${label}</td><td>${now}${!atMax && next !== now ? ` <span class="up">→ ${next}</span>` : ''}</td></tr></table>`;
+    if (def.backupKw) {
+      return (
+        row('Backup power', kw(upsBackupKw(b)), kw(upsBackupKw(b, b.upgrade + 1))) +
+        `<div class="muted">Covers lost grid power during a power cut. All your UPS banks add up: ${kw(backupPower(state))} in total. Upgrades add more.</div>`
+      );
+    }
     if (def.suppressionRadius) {
       const size = def.suppressionRadius * 2 + 1;
       return `<div class="muted">Puts out fires in racks within a ${size}×${size} area around it.</div>`;
     }
-    return `<div class="muted">Blocks ${Math.round((def.ddosShield ?? 0) * 100)}% of a cyber attack. Two or more block nearly all of it.</div>`;
+    const attack = attackMbps(state);
+    const share = (level: number): string => `${Math.round(firewallShare(b, attack, level) * 100)}%`;
+    return (
+      row('Filters', formatMbps(firewallFilterMbps(b)), formatMbps(firewallFilterMbps(b, b.upgrade + 1))) +
+      row('Blocks of an attack', share(b.upgrade), share(b.upgrade + 1)) +
+      `<div class="muted">An attack on your ${formatMbps(uplinkOf(state).mbps)} line would be about ${formatMbps(attack)}. ` +
+      `Each firewall blocks up to ${CONFIG.safety.firewallMaxShare * 100}%, and they add up: yours block <b>${Math.round(ddosBlocked(state) * 100)}%</b> together. ` +
+      'Bigger lines need upgraded firewalls, or more of them.</div>'
+    );
   }
 
   private chillerInfo(state: GameState, b: Building): string {

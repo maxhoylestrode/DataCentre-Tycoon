@@ -2,6 +2,7 @@ import { buildingDef, CONFIG } from '../config';
 import { buildingStats } from './buildings';
 import { researchBonus } from './research';
 import { activeEffect } from './events';
+import { upsBackupKw } from './safety';
 import { categoryOf, type GameState, isRunning } from './state';
 
 // Four power sources of the same kind in a full 2×2 square form a
@@ -48,9 +49,9 @@ export function supplyBySource(state: GameState): { grid: number; renewable: num
   return out;
 }
 
-// kW of backup the UPS batteries can give during a power cut.
+// kW of backup the UPS batteries can give during a power cut (more with upgrades).
 export function backupPower(state: GameState): number {
-  return state.buildings.reduce((sum, b) => sum + (isRunning(b) ? (buildingDef(b.kind).backupKw ?? 0) : 0), 0);
+  return state.buildings.reduce((sum, b) => sum + (isRunning(b) ? upsBackupKw(b) : 0), 0);
 }
 
 // kW lost right now to a power cut, after UPS batteries cover what they can.

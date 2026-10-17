@@ -46,6 +46,8 @@ import {
   type EventsState,
   type FloorTile,
   type GameState,
+  HISTORY_FIELDS,
+  type HistoryField,
   type HistoryState,
   type LegacyState,
   type ResearchState,
@@ -221,17 +223,15 @@ export function serialize(state: GameState, now: Date = new Date()): string {
       overdrawnSince: state.overdrawnSince,
       history: {
         // Rounded: the graphs don't need more.
-        samples: state.history.samples.map((s) => ({
-          tick: s.tick,
-          income: round2(s.income),
-          costs: round2(s.costs),
-          cash: Math.round(s.cash),
-          powerDraw: round2(s.powerDraw),
-          powerSupply: round2(s.powerSupply),
-          uptime: Math.round(s.uptime * 1000) / 1000,
-          racks: s.racks,
-        })),
-        acc: { ...state.history.acc },
+        samples: state.history.samples.map((s) => {
+          const out: Record<string, number> = { tick: s.tick };
+          for (const f of HISTORY_FIELDS) {
+            const v = s[f];
+            if (v !== undefined) out[f] = Math.abs(v) >= 1000 ? Math.round(v) : Math.round(v * 1000) / 1000;
+          }
+          return out;
+        }),
+        acc: { ticks: state.history.acc.ticks, sums: { ...state.history.acc.sums } },
       },
     },
   };
@@ -342,7 +342,6 @@ function readState(data: Data): GameState {
   return state;
 }
 
-const round2 = (n: number): number => Math.round(n * 100) / 100;
 const RESEARCH_IDS = new Set(RESEARCH.map((r) => r.id));
 const EVENT_KINDS: EventKind[] = ['power_cut', 'heatwave', 'fire', 'ddos', 'rush_order', 'press_visit'];
 
@@ -380,6 +379,16 @@ function readLegacy(raw: unknown): LegacyState {
   return { points: intIn(raw.points, 0, 1_000_000) ?? 0, sales: intIn(raw.sales, 0, 1_000_000) ?? 0 };
 }
 
+// Known stats fields that are finite numbers; anything else is dropped.
+function readHistoryFields(raw: Record<string, unknown>): Partial<Record<HistoryField, number>> {
+  const out: Partial<Record<HistoryField, number>> = {};
+  for (const f of HISTORY_FIELDS) {
+    const v = finite(raw[f]);
+    if (v !== null) out[f] = f === 'uptime' ? clamp(v, 0, 1) : v;
+  }
+  return out;
+}
+
 function readHistory(raw: unknown): HistoryState {
   const history = createHistoryState();
   if (!isObject(raw)) return history;
@@ -387,28 +396,17 @@ function readHistory(raw: unknown): HistoryState {
     if (!isObject(s)) continue;
     const tick = finite(s.tick);
     if (tick === null) continue;
-    history.samples.push({
-      tick,
-      income: finite(s.income) ?? 0,
-      costs: finite(s.costs) ?? 0,
-      cash: finite(s.cash) ?? 0,
-      powerDraw: finite(s.powerDraw) ?? 0,
-      powerSupply: finite(s.powerSupply) ?? 0,
-      uptime: clamp(finite(s.uptime) ?? 1, 0, 1),
-      racks: intIn(s.racks, 0, 1_000_000) ?? 0,
-    });
+    history.samples.push({ tick, ...readHistoryFields(s) });
   }
   history.samples = history.samples.slice(-CONFIG.history.maxSamples);
   if (isObject(raw.acc)) {
     const a = raw.acc;
-    history.acc = {
-      ticks: intIn(a.ticks, 0, CONFIG.history.sampleTicks) ?? 0,
-      income: finite(a.income) ?? 0,
-      costs: finite(a.costs) ?? 0,
-      powerDraw: finite(a.powerDraw) ?? 0,
-      powerSupply: finite(a.powerSupply) ?? 0,
-      uptime: finite(a.uptime) ?? 0,
-    };
+    // Early v9 saves kept the running sums at the top level, not under sums.
+    const sums = readHistoryFields(isObject(a.sums) ? a.sums : a);
+    const ticks = intIn(a.ticks, 0, CONFIG.history.sampleTicks) ?? 0;
+    // An hour sampled with the old, shorter list would average the new
+    // fields over too few ticks: start that hour afresh instead.
+    history.acc = isObject(a.sums) ? { ticks, sums } : { ticks: 0, sums: {} };
   }
   return history;
 }

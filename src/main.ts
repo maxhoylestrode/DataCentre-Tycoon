@@ -355,6 +355,15 @@ function dropCarried(tile: Tile): void {
   } else play('error');
 }
 
+// The tile under the cursor, except that a "!" badge over a failed building
+// counts as that building's tile: the badge floats above the rack, so it
+// usually sits over a different tile.
+function pickWithAlerts(cx: number, cy: number): Tile | null {
+  const alert = picker.pickObject(cx, cy, buildings.alerts());
+  const b = alert ? state.buildings.find((x) => x.id === alert.userData.buildingId) : undefined;
+  return b ? { x: b.x, y: b.y } : picker.pick(cx, cy);
+}
+
 // A click (or a box that's a single tile) with the current tool.
 function handleClick(cx: number, cy: number): void {
   if (tool === 'sell') {
@@ -364,7 +373,7 @@ function handleClick(cx: number, cy: number): void {
       return;
     }
   }
-  const tile = picker.pick(cx, cy);
+  const tile = carrying ? picker.pick(cx, cy) : pickWithAlerts(cx, cy);
   if (!tile) return;
   if (tool === 'move') {
     if (carrying) dropCarried(tile);
@@ -605,7 +614,7 @@ function closePanels(): void {
 
 const updateInput = attachInput(renderer.domElement, rig, {
   onHover: (cx, cy) => {
-    hoveredTile = picker.pick(cx, cy);
+    hoveredTile = carrying ? picker.pick(cx, cy) : pickWithAlerts(cx, cy);
     hoverGrid = picker.pickGrid(cx, cy);
   },
   onHoverEnd: () => {

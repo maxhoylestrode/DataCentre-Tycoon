@@ -167,7 +167,7 @@ Add it to `CONFIG.buildings` with `category: 'power'` and a `powerSupply`, an un
 
 ## Add a safety building
 
-`category: 'safety'` with one of `backupKw` (UPS in power cuts), `suppressionRadius` (stops fires) or `ddosShield` (share of a cyber attack blocked). It appears in the Safety menu. New kinds of random event are engine work in `src/sim/events.ts` (numbers in `CONFIG.events`).
+`category: 'safety'` with one of `backupKw` (UPS in power cuts), `suppressionRadius` (stops fires) or `ddosFilterMbps` (attack traffic a firewall filters; each firewall blocks at most `CONFIG.safety.firewallMaxShare` of an attack). Give it `upgrade.output > 0` to make it upgradable: backup and filtering grow by `CONFIG.safety.upsGrowth` / `firewallGrowth` per level (`src/sim/safety.ts`). It appears in the Safety menu. New kinds of random event are engine work in `src/sim/events.ts` (numbers in `CONFIG.events`).
 
 ## Add zone furniture
 

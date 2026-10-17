@@ -269,27 +269,30 @@ export interface LegacyState {
   sales: number;
 }
 
-// One stats sample, averaged over a game hour (per-tick values).
-export interface HistorySample {
-  tick: number;
-  income: number;
-  costs: number;
-  cash: number;
-  powerDraw: number;
-  powerSupply: number;
-  // Share of work actually done (power × network efficiency), 0..1.
-  uptime: number;
-  racks: number;
-}
+// Every value the stats graphs track (sim/history.ts says how each is measured).
+// Money is per tick; uptime and efficiencies are 0..1; temperatures in °C.
+export const HISTORY_FIELDS = [
+  // Averaged over the hour.
+  'income', 'walkIn', 'contracts', 'costs', 'rent', 'upkeep', 'electricity', 'network', 'wages',
+  'uptime', 'powerEff', 'networkEff', 'powerDraw', 'powerSupply', 'bandwidth', 'lineCapacity', 'avgTemp', 'maxTemp',
+  // Taken at the end of the hour.
+  'cash', 'racks', 'racksRunning', 'racksFailed', 'racksContracted', 'buildings', 'staff', 'engineers',
+  'technicians', 'activeContracts', 'clientsWaiting', 'prestige', 'level', 'xp', 'researchDone', 'market',
+] as const;
+export type HistoryField = (typeof HISTORY_FIELDS)[number];
+
+// One stats sample per game hour. Fields can be missing in samples from
+// older saves, which tracked fewer things; graphs leave a gap there.
+export type HistorySample = { tick: number } & Partial<Record<HistoryField, number>>;
 
 export interface HistoryState {
   samples: HistorySample[];
   // Running sums for the hour being sampled.
-  acc: { ticks: number; income: number; costs: number; powerDraw: number; powerSupply: number; uptime: number };
+  acc: { ticks: number; sums: Partial<Record<HistoryField, number>> };
 }
 
 export function createHistoryState(): HistoryState {
-  return { samples: [], acc: { ticks: 0, income: 0, costs: 0, powerDraw: 0, powerSupply: 0, uptime: 0 } };
+  return { samples: [], acc: { ticks: 0, sums: {} } };
 }
 
 export interface GameState {

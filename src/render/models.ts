@@ -970,9 +970,46 @@ function createScaffold(): { group: THREE.Group; bar: THREE.Mesh } {
   return { group, bar };
 }
 
+// A red "!" badge drawn on a canvas, shown as a sprite so it always faces the
+// camera: marks failed buildings that need clicking to repair.
+let alertMat: THREE.SpriteMaterial | null = null;
+function alertMaterial(): THREE.SpriteMaterial {
+  if (alertMat) return alertMat;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const c = size / 2;
+  ctx.beginPath();
+  ctx.arc(c, c, c - 8, 0, Math.PI * 2);
+  ctx.fillStyle = '#ff3b45';
+  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 84px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('!', c, c + 4);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  // Drawn over everything so it shows even behind other racks.
+  alertMat = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
+  return alertMat;
+}
+
+function createAlert(): THREE.Sprite {
+  const sprite = new THREE.Sprite(alertMaterial());
+  sprite.scale.setScalar(0.55);
+  sprite.renderOrder = 10;
+  return sprite;
+}
+
 interface PlacedView extends BuildingView {
   model: THREE.Group;
   scaffold: { group: THREE.Group; bar: THREE.Mesh } | null;
+  alert: THREE.Sprite | null;
 }
 
 // Keeps one view per building in GameState. Reads state, never writes it.
@@ -981,6 +1018,13 @@ export class BuildingLayer {
   private readonly views = new Map<number, PlacedView>();
   // Buildings being carried by the move tool: drawn lifted at the cursor.
   private carried = new Map<number, { x: number; y: number; rot: number }>();
+
+  // The "!" badges over failed buildings, each tagged with its building id.
+  alerts(): THREE.Sprite[] {
+    const out: THREE.Sprite[] = [];
+    for (const view of this.views.values()) if (view.alert) out.push(view.alert);
+    return out;
+  }
 
   carry(list: { id: number; x: number; y: number; rot: number }[]): void {
     this.carried = new Map(list.map((c) => [c.id, c]));
@@ -996,7 +1040,7 @@ export class BuildingLayer {
         const holder = new THREE.Group();
         holder.add(inner.group);
         holder.position.copy(tileToWorld(state.width, state.height, building.x, building.y));
-        view = { group: holder, model: inner.group, update: inner.update, scaffold: null };
+        view = { group: holder, model: inner.group, update: inner.update, scaffold: null, alert: null };
         this.views.set(building.id, view);
         this.group.add(holder);
       }
@@ -1023,6 +1067,20 @@ export class BuildingLayer {
         view.group.remove(view.scaffold.group);
         view.scaffold = null;
         view.model.scale.y = 1;
+      }
+      if (building.status === 'failed') {
+        if (!view.alert) {
+          view.alert = createAlert();
+          view.alert.userData.buildingId = building.id;
+          view.group.add(view.alert);
+        }
+        // Bob and pulse gently so it catches the eye.
+        const t = performance.now() / 1000;
+        view.alert.position.y = 2.45 + Math.sin(t * 3 + building.id) * 0.08;
+        view.alert.scale.setScalar(0.55 + Math.sin(t * 6 + building.id) * 0.04);
+      } else if (view.alert) {
+        view.group.remove(view.alert);
+        view.alert = null;
       }
       view.update(state, building, dt);
     }

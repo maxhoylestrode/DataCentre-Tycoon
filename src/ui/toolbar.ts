@@ -1,6 +1,7 @@
 import { BUILDING_KINDS, buildingDef, CONFIG, FLOOR_KINDS, isFloorKind, WALL_KINDS } from '../config';
 import { isWallTool, isZoneTool, type Tool, TOOL_HOTKEYS, toolCost, toolName, ZONE_TOOLS } from '../input/tools';
 import { buildingStats } from '../sim/buildings';
+import { formatMbps } from '../sim/network';
 import { isUnlocked, unlockFor } from '../sim/progression';
 import type { GameState } from '../sim/state';
 import { kw } from './format';
@@ -77,9 +78,9 @@ function stat(tool: Tool): string {
       if (def.renewable) return `+${kw(s.powerSupply)} · free electricity`;
       return `+${kw(s.powerSupply)} · 2×2 = +${CONFIG.multiblock.bonus * 100}%${def.gridFed ? '' : ' · on-site'}`;
     case 'safety':
-      if (def.backupKw) return `${kw(def.backupKw)} backup in power cuts`;
+      if (def.backupKw) return `${kw(def.backupKw)} backup in power cuts · upgradable`;
       if (def.suppressionRadius) return `Stops fires · ${def.suppressionRadius * 2 + 1}×${def.suppressionRadius * 2 + 1} area`;
-      return `Blocks ${Math.round((def.ddosShield ?? 0) * 100)}% of attacks`;
+      return `Filters ${formatMbps(def.ddosFilterMbps ?? 0)} of attacks · upgradable`;
     case 'cooling': return s.coolingRadius > 20 ? `Whole room · ${kw(s.powerDraw)}` : `${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} area · ${kw(s.powerDraw)}`;
     case 'chiller': return `Feeds ${def.chillerCapacity} vents · ${def.chillerRange} tiles`;
     case 'decor': return `+${s.prestige} prestige`;
@@ -92,7 +93,7 @@ const GROUP_HINTS: Partial<Record<GroupIcon, string>> = {
   racks: 'Servers that earn money · drag to place rows with aisles',
   power: 'Keep supply above draw · 4 of a kind in a 2×2 square = +25%',
   cooling: 'Keep racks under 45°C · press H for the heat map',
-  safety: 'Protection against power cuts, fires and cyber attacks',
+  safety: 'Protection against power cuts, fires and cyber attacks · place anywhere, upgrade by clicking',
   decor: 'Prestige: better contract pay and more offers',
   zones: 'Drag to paint rooms, then add their furniture',
   walls: 'Drag along grid lines · walls block heat',

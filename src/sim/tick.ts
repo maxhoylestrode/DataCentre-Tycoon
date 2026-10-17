@@ -1,7 +1,7 @@
 import { CONFIG } from '../config';
 import { refreshOffers } from './contractBoard';
 import { finishContracts, recordService } from './contracts';
-import { costsPerTick, incomeBreakdown } from './economy';
+import { costBreakdown, incomeBreakdown } from './economy';
 import { stepEvents } from './events';
 import { failOverheatedRacks, stepHeat } from './heat';
 import { recordHistory } from './history';
@@ -33,13 +33,13 @@ export function tick(state: GameState): void {
 
   const income = incomeBreakdown(state);
   const total = income.walkIn + income.contracts;
-  const costs = costsPerTick(state);
-  const net = total - costs;
+  const costs = costBreakdown(state);
+  const net = total - costs.total;
   state.cash += net;
   state.progress.stats.contractIncome += income.contracts;
   recordService(state, income.allocation, income.efficiency);
   recordTick(state, total, net);
-  recordHistory(state, total, costs, income.efficiency);
+  recordHistory(state, income, costs);
   stepResearch(state);
   stepEvents(state, total);
 

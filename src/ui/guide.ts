@@ -99,11 +99,12 @@ const SECTIONS: Section[] = [
     html: `
       <p>From level 7, things go wrong now and then, and more often the bigger you are:</p>
       <ul>
-        <li><b>Power cut</b>: grid power drops for a few hours. <b>UPS battery banks</b> cover the gap.</li>
+        <li><b>Power cut</b>: grid power drops for a few hours. <b>UPS battery banks</b> cover the gap; upgrade them for more backup.</li>
         <li><b>Heatwave</b>: the room gets ${CONFIG.events.heatwaveBoost}°C warmer for up to a day. Have spare cooling.</li>
         <li><b>Fire</b>: a hot rack and its neighbours burn out, unless <b>fire suppression</b> covers them.</li>
-        <li><b>Cyber attack</b>: most of your internet line is lost for a while. <b>Firewalls</b> block it.</li>
+        <li><b>Cyber attack</b>: most of your internet line is lost for a while. <b>Firewalls</b> filter it: each one blocks up to ${CONFIG.safety.firewallMaxShare * 100}% of an attack, and they add up. Attacks grow with your line, so upgrade them or build more.</li>
       </ul>
+      <p>A rack that has failed shows a red <b>!</b> above it. Click the rack (or the <b>!</b>) to repair it.</p>
       <p>Some news is good: <b>rush jobs</b> pay cash, and <b>press visits</b> pay more the more prestige (decor) you have.</p>
       <p class="tip">Build protection from the <b>Safety</b> menu (F). Research <i>Predictive monitoring</i> to make incidents rarer.</p>`,
   },
@@ -130,7 +131,8 @@ const SECTIONS: Section[] = [
     id: 'stats',
     title: 'Stats',
     html: `
-      <p>Open <b>Stats (N)</b> for graphs of income, costs, profit, cash, power and uptime over the last day, week or two weeks, plus a list of recent incidents.</p>`,
+      <p>Open <b>Stats (N)</b>. The left side lists over 30 stats in groups (finances, income, expenses, power, internet, temperature, infrastructure, people, company), each with its latest value and how it changed. Tick any of them to plot them together on the big graph, and hover the graph for exact values.</p>
+      <p>Click a card at the top, or a row in the income and cost breakdowns, to graph just that stat. Choose 24 hours, 7 days or all time at the top.</p>`,
   },
   {
     id: 'rooms',

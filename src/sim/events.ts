@@ -3,15 +3,18 @@
 // - power cut: grid-fed supply drops; UPS battery banks cover the gap.
 // - heatwave: the room's ambient temperature rises for a while.
 // - fire: a hot rack burns out with its neighbours, unless fire suppression covers it.
-// - ddos: an attack eats most of the internet line; firewalls block some of it.
+// - ddos: an attack eats most of the internet line; firewalls filter it, each
+//   up to half the attack, more with upgrades (sim/safety.ts).
 // Good ones: a rush job (cash) and a press visit (cash + XP by prestige).
 // Rolled with the seeded RNG, so games stay repeatable.
 
 import { buildingDef, CONFIG } from '../config';
+import { UPLINKS } from './content/uplinks';
 import { prestigeOf } from './prestige';
 import { isUnlocked } from './progression';
 import { researchBonus } from './research';
 import { nextRandom, pick, randomInt } from './rng';
+import { attackBlocked } from './safety';
 import { type EventKind, type EventRecord, type GameState, isRunning, racksOf, tempAt } from './state';
 
 const E = CONFIG.events;
@@ -33,11 +36,21 @@ export function ambientTemp(state: GameState): number {
   return CONFIG.heat.ambient + (activeEffect(state, 'heatwave') ? E.heatwaveBoost : 0);
 }
 
+// Size of a cyber attack in Mbps: a share of your line, so attacks grow with it.
+export function attackMbps(state: GameState): number {
+  const line = UPLINKS.find((u) => u.id === state.uplink) ?? UPLINKS[0]!;
+  return line.mbps * E.ddosLoss;
+}
+
+// Share of an attack your firewalls block right now (0 to 1).
+export function ddosBlocked(state: GameState): number {
+  return attackBlocked(state, attackMbps(state));
+}
+
 // Share of the internet line left during an attack (1 when there isn't one).
 export function ddosFactor(state: GameState): number {
   if (!activeEffect(state, 'ddos')) return 1;
-  const shield = state.buildings.reduce((s, b) => s + (isRunning(b) ? (buildingDef(b.kind).ddosShield ?? 0) : 0), 0);
-  return Math.min(1, 1 - E.ddosLoss + shield);
+  return 1 - E.ddosLoss * (1 - ddosBlocked(state));
 }
 
 // Chance of an event today.
