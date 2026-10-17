@@ -7,6 +7,8 @@ import {
   sellBuilding,
   startResearch,
   upgradeAllRacks,
+  repairAllRacks,
+  refurbishAllRacks,
   upgradeBuilding,
   upgradeMax,
   upgradeUnit,
@@ -78,6 +80,22 @@ describe('power sources', () => {
     for (let i = 0; i < 4; i++) placeBuilding(state, 'rack_basic', i * 2, 5);
     expect(upgradeAllRacks(state)).toBeGreaterThan(0);
     for (const r of state.buildings) expect(planUpgradeMax(state, r.x, r.y).steps).toHaveLength(0);
+  });
+
+  it('repair all fixes every failed rack; replace worn hardware refurbishes worn ones only', () => {
+    const state = game();
+    for (let i = 0; i < 4; i++) placeBuilding(state, 'rack_basic', i * 2, 5);
+    const racks = state.buildings;
+    racks[0]!.status = 'failed';
+    racks[1]!.status = 'failed';
+    expect(repairAllRacks(state)).toBe(2);
+    expect(racks.filter((r) => r.status === 'failed')).toHaveLength(0);
+    state.liveWorld = true;
+    state.tick = 100 * CONFIG.time.ticksPerDay;
+    racks[2]!.refreshedAtTick = 0;
+    racks[3]!.refreshedAtTick = state.tick;
+    expect(refurbishAllRacks(state)).toBe(1);
+    expect(racks[2]!.refreshedAtTick).toBe(state.tick);
   });
 
   it('solar power is free: it comes off the electricity bill', () => {

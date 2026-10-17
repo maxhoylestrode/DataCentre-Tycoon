@@ -72,6 +72,12 @@ export function rackCondition(state: GameState, rack: Building): number {
   return Math.max(0, (ageFactor(state, rack) - CONFIG.ageing.floor) / (1 - CONFIG.ageing.floor));
 }
 
+// A working rack whose hardware is worn enough to be worth replacing.
+export const WORN_CONDITION = 0.35;
+export function isWorn(state: GameState, rack: Building): boolean {
+  return rack.status === 'ok' && rackCondition(state, rack) < WORN_CONDITION;
+}
+
 // Chance per game hour this rack fails from old age.
 export function endOfLifeChance(state: GameState, rackRefreshed: number): number {
   if (!state.liveWorld) return 0;

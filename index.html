@@ -266,7 +266,8 @@
       .hotbar .hb-btn.hb-small svg { width: 20px; height: 20px; }
       .hotbar .hb-btn.hb-small .hb-label, .hotbar .hb-btn.hb-small .hb-key { display: none; }
       .hotbar .hb-btn.hb-small.active::after { left: 13px; right: 13px; }
-      .hb-tools { display: grid; grid-template-columns: repeat(5, 40px); grid-auto-rows: 26px; gap: 2px; }
+      /* Always two rows; new buttons add columns. */
+      .hb-tools { display: grid; grid-template-rows: repeat(2, 26px); grid-auto-flow: column; grid-auto-columns: 40px; gap: 2px; }
       .hb-tools .hb-btn.hb-small { height: 26px; border-radius: 8px; }
       .hb-tools .hb-btn.hb-small svg { width: 17px; height: 17px; }
       .hb-label { font-size: 10.5px; letter-spacing: 0.02em; }
@@ -535,7 +536,8 @@
       /* All racks */
       .racklist-panel { width: min(900px, calc(100vw - 24px)); }
       .rl-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 6px; }
-      .rl-bar > button { margin-left: auto; }
+      .rl-bulk { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+      .rl-bulk button { font-size: 12px; white-space: nowrap; }
       .rl-tabs { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 9px; background: rgba(0, 0, 0, 0.25); font-size: 12px; }
       .rl-tabs .muted { padding: 0 6px; }
       .rl-tabs button { padding: 3px 10px; border: 0; border-radius: 7px; background: transparent; color: #8a94a3; font-size: 12px; }

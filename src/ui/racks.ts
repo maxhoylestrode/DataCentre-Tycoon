@@ -2,13 +2,15 @@ import { buildingDef, CONFIG } from '../config';
 import { ageFactor, buildingStats, isOverdue, rackCores, rackTier, refurbishCost, slotsOf } from '../sim/buildings';
 import { planUpgradeMax } from '../sim/commands';
 import { repairCost } from '../sim/economy';
-import { endOfLifeChance, rackCondition } from '../sim/pressure';
+import { endOfLifeChance, isWorn, rackCondition } from '../sim/pressure';
 import { type Building, type GameState, racksOf, tempAt } from '../sim/state';
 import { ICONS } from './icons';
 
 export interface RackListHandlers {
   onUpgradeMax(buildingId: number): void;
   onUpgradeAll(): void;
+  onRepairAll(): void;
+  onRefurbishAll(): void;
   onRefurbish(buildingId: number): void;
   onRepair(buildingId: number): void;
   // Look at the rack and open its panel.
@@ -46,6 +48,8 @@ export class RackListPanel {
       if (act === 'close') return this.toggle(false);
       if (act === 'max') handlers.onUpgradeMax(id);
       else if (act === 'all') handlers.onUpgradeAll();
+      else if (act === 'repair-all') handlers.onRepairAll();
+      else if (act === 'refurbish-all') handlers.onRefurbishAll();
       else if (act === 'refurbish') handlers.onRefurbish(id);
       else if (act === 'repair') handlers.onRepair(id);
       else if (el.dataset.sort) this.sort = el.dataset.sort as Sort;
@@ -101,6 +105,12 @@ export class RackListPanel {
     const attention = rows.filter((x) => x.issues.length > 0).length;
     const upgradable = rows.filter((x) => x.plan.steps.length > 0).length;
     const avg = rows.length ? rows.reduce((s, x) => s + x.condition, 0) / rows.length : 1;
+    const failedRacks = racks.filter((r) => r.status === 'failed');
+    const failed = failedRacks.length;
+    const repairTotal = failedRacks.reduce((s, r) => s + repairCost(r), 0);
+    const wornRacks = racks.filter((r) => isWorn(state, r));
+    const worn = wornRacks.length;
+    const refurbTotal = wornRacks.reduce((s, r) => s + refurbishCost(r), 0);
     const tab = (kind: 'sort' | 'filter', value: string, label: string, active: boolean): string =>
       `<button data-${kind}="${value}" class="${active ? 'active' : ''}">${label}</button>`;
 
@@ -114,7 +124,11 @@ export class RackListPanel {
       <div class="rl-bar">
         <div class="rl-tabs">${tab('filter', 'all', 'All', this.filter === 'all')}${tab('filter', 'attention', 'Needs attention', this.filter === 'attention')}</div>
         <div class="rl-tabs"><span class="muted">Sort</span>${tab('sort', 'condition', 'Condition', this.sort === 'condition')}${tab('sort', 'income', 'Earnings', this.sort === 'income')}${tab('sort', 'upgrades', 'Upgrades', this.sort === 'upgrades')}${tab('sort', 'location', 'Location', this.sort === 'location')}</div>
-        <button data-act="all" class="primary" ${upgradable ? '' : 'disabled'} title="Max-upgrades every rack, cheapest first, while the money lasts">⏫ Upgrade all</button>
+        <div class="rl-bulk">
+          <button data-act="repair-all" ${failed ? '' : 'disabled'} title="Repairs every failed rack you can afford">🔧 Repair all${failed ? ` (${failed}) · ${money(repairTotal)}` : ''}</button>
+          <button data-act="refurbish-all" ${worn ? '' : 'disabled'} title="Refurbishes every rack past or near end of life (condition under 35%), oldest first">♻ Replace worn hardware${worn ? ` (${worn}) · ${money(refurbTotal)}` : ''}</button>
+          <button data-act="all" class="primary" ${upgradable ? '' : 'disabled'} title="Max-upgrades every rack, cheapest first, while the money lasts">⏫ Upgrade all</button>
+        </div>
       </div>
       <div class="rl-list">
         ${shown.map((x) => this.row(state, x.r, x.condition, x.income, x.issues, x.plan)).join('') || '<div class="ct-empty">Nothing here.</div>'}

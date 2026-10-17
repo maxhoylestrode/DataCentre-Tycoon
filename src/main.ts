@@ -29,6 +29,8 @@ import {
   togglePause,
   upgradeBuilding,
   upgradeAllRacks,
+  repairAllRacks,
+  refurbishAllRacks,
   upgradeMax,
   upgradePart,
   upgradeUplink,
@@ -460,6 +462,16 @@ const rackList = new RackListPanel(document.body, {
     const n = upgradeAllRacks(state);
     play(n > 0 ? 'cash' : 'error');
     if (n > 0) toasts.show(`<b>Upgraded ${n} part${n > 1 ? 's' : ''}</b> across your racks.`, 'goal');
+  },
+  onRepairAll: () => {
+    const n = repairAllRacks(state);
+    play(n > 0 ? 'cash' : 'error');
+    if (n > 0) toasts.show(`<b>Repairing ${n} rack${n > 1 ? 's' : ''}</b>${state.staffSim ? ': engineers are on their way.' : '.'}`, 'goal');
+  },
+  onRefurbishAll: () => {
+    const n = refurbishAllRacks(state);
+    play(n > 0 ? 'cash' : 'error');
+    if (n > 0) toasts.show(`<b>Replaced worn hardware in ${n} rack${n > 1 ? 's' : ''}</b>: good as new.`, 'goal');
   },
   onRefurbish: (id) => withBuilding(id, (x, y) => play(refurbishRack(state, x, y).ok ? 'cash' : 'error')),
   onRepair: (id) => withBuilding(id, (x, y) => play(repairRack(state, x, y).ok ? 'cash' : 'error')),

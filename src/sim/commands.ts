@@ -40,6 +40,7 @@ import {
   type Specialism,
 } from './state';
 import { multiblockOf } from './power';
+import { isWorn, rackCondition } from './pressure';
 import { ransomCost } from './events';
 import { hireFeeOf, hirableRoles, isAway, nameFor, newMember, specialismsFor, trainingCost } from './staff';
 
@@ -241,6 +242,21 @@ export function upgradeAllRacks(state: GameState): number {
   let bought = 0;
   for (const { b } of racks) bought += upgradeMax(state, b.x, b.y);
   return bought;
+}
+
+// Repairs every failed rack, cheapest first, while the money lasts. Returns how many.
+export function repairAllRacks(state: GameState): number {
+  const failed = state.buildings.filter((b) => categoryOf(b) === 'rack' && b.status === 'failed').sort((a, b) => repairCost(a) - repairCost(b));
+  return failed.filter((b) => repairRack(state, b.x, b.y).ok).length;
+}
+
+// Refurbishes every worn rack (see isWorn), most worn first, while the money
+// lasts. Returns how many.
+export function refurbishAllRacks(state: GameState): number {
+  const worn = state.buildings
+    .filter((b) => categoryOf(b) === 'rack' && isWorn(state, b))
+    .sort((a, b) => rackCondition(state, a) - rackCondition(state, b));
+  return worn.filter((b) => refurbishRack(state, b.x, b.y).ok).length;
 }
 
 // Floor tiles go on their own layer, so they can sit under buildings.
