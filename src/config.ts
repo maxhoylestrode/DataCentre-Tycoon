@@ -300,6 +300,106 @@ export const CONFIG = {
       powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 20,
     },
+    bench: {
+      name: 'Bench', category: 'decor', cost: 500, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 1,
+    },
+    cactus: {
+      name: 'Cactus', category: 'decor', cost: 350, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 1,
+    },
+    bookshelf: {
+      name: 'Bookshelf', category: 'decor', cost: 900, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 2,
+    },
+    floor_lamp: {
+      name: 'Floor lamp', category: 'decor', cost: 700, upkeepPerTick: 0.01, incomePerTick: 0,
+      powerDraw: 0.1, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 1,
+    },
+    rug: {
+      name: 'Rug', category: 'decor', cost: 800, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 2,
+    },
+    whiteboard: {
+      name: 'Whiteboard', category: 'decor', cost: 1100, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 2,
+    },
+    coffee_table: {
+      name: 'Coffee table', category: 'decor', cost: 1000, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 2,
+    },
+    bean_bag: {
+      name: 'Bean bag', category: 'decor', cost: 650, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 1,
+    },
+    vending_machine: {
+      name: 'Vending machine', category: 'decor', cost: 3500, upkeepPerTick: 0.03, incomePerTick: 0,
+      powerDraw: 0.5, powerSupply: 0, heatPerTick: 0.03, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 3,
+    },
+    bonsai: {
+      name: 'Bonsai tree', category: 'decor', cost: 2200, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 3,
+    },
+    ping_pong: {
+      name: 'Table tennis', category: 'decor', cost: 5000, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 6,
+    },
+    pool_table: {
+      name: 'Pool table', category: 'decor', cost: 7500, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 7,
+    },
+    fountain: {
+      name: 'Indoor fountain', category: 'decor', cost: 9000, upkeepPerTick: 0.04, incomePerTick: 0,
+      powerDraw: 0.3, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 9,
+    },
+    globe: {
+      name: 'Floor globe', category: 'decor', cost: 4000, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 5,
+    },
+    status_wall: {
+      name: 'Status dashboard', category: 'decor', cost: 11000, upkeepPerTick: 0.03, incomePerTick: 0,
+      powerDraw: 0.4, powerSupply: 0, heatPerTick: 0.02, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 10,
+    },
+    sculpture: {
+      name: 'Abstract sculpture', category: 'decor', cost: 18000, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 14,
+    },
+    circuit_art: {
+      name: 'Circuit board art', category: 'decor', cost: 15000, upkeepPerTick: 0.01, incomePerTick: 0,
+      powerDraw: 0.1, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 12,
+    },
+    piano: {
+      name: 'Grand piano', category: 'decor', cost: 26000, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 18,
+    },
+    robot_mascot: {
+      name: 'Robot mascot', category: 'decor', cost: 45000, upkeepPerTick: 0.03, incomePerTick: 0,
+      powerDraw: 0.3, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 28,
+    },
+    golden_server: {
+      name: 'Golden server monument', category: 'decor', cost: 80000, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 40,
+    },
   },
   // Things painted on the floor layer, which can sit under buildings.
   floors: {

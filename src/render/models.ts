@@ -478,8 +478,305 @@ const createTrophyCase = staticView((g) => {
   }
 });
 
+// Places a mesh at x/z (box and cylinder already set its height).
+const at = <T extends THREE.Object3D>(obj: T, x: number, z = 0, y?: number): T => {
+  obj.position.x = x;
+  obj.position.z = z;
+  if (y !== undefined) obj.position.y = y;
+  return obj;
+};
+const glass =(color = 0xdff0ff, opacity = 0.25): THREE.MeshStandardMaterial =>
+  mat(color, { transparent: true, opacity, roughness: 0.05 });
+
+const createBench = staticView((g) => {
+  for (const x of [-0.38, 0.38]) g.add(at(box(0.06, 0.3, 0.4, metal), x));
+  for (let i = 0; i < 3; i++) g.add(at(box(0.9, 0.035, 0.1, wood, 0.32), 0, -0.12 + i * 0.12));
+  for (let i = 0; i < 2; i++) g.add(at(box(0.9, 0.08, 0.03, wood, 0.48 + i * 0.13), 0, -0.2));
+});
+
+const createCactus = staticView((g) => {
+  g.add(cylinder(0.14, 0.2, potMat, 0.1, 12));
+  const cactusMat = mat(0x4f9a4a, { roughness: 0.8 });
+  g.add(cylinder(0.08, 0.55, cactusMat, 0.47, 10));
+  g.add(at(cylinder(0.05, 0.22, cactusMat, 0.55, 8), 0.12));
+  g.add(at(cylinder(0.04, 0.18, cactusMat, 0.48, 8), -0.11));
+  g.add(at(box(0.12, 0.04, 0.04, cactusMat, 0.45), 0.07));
+  g.add(at(box(0.1, 0.04, 0.04, cactusMat, 0.4), -0.06));
+  g.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), mat(0xff6a9a)), 0, 0, 0.76));
+});
+
+const createBookshelf = staticView((g) => {
+  const shelfWood = mat(0x6e4a2e);
+  g.add(at(box(0.9, 1.7, 0.06, shelfWood), 0, -0.17));
+  for (const x of [-0.43, 0.43]) g.add(at(box(0.04, 1.7, 0.4, shelfWood), x));
+  const spines = [0xb03a3a, 0x2f6fb0, 0x3fbf6a, 0xd8b26a, 0x7a4ff0, 0x30343a, 0xe8603a];
+  for (let s = 0; s < 4; s++) {
+    g.add(box(0.86, 0.03, 0.4, shelfWood, 0.05 + s * 0.42));
+    let x = -0.38;
+    for (let i = 0; x < 0.36; i++) {
+      const w = 0.05 + ((s * 7 + i * 3) % 4) * 0.012;
+      const h = 0.26 + ((s + i * 5) % 3) * 0.04;
+      g.add(at(box(w, h, 0.28, mat(spines[(s * 3 + i) % spines.length]!), 0.065 + s * 0.42 + h / 2), x + w / 2, 0.02));
+      x += w + 0.008;
+    }
+  }
+});
+
+const createFloorLamp = staticView((g) => {
+  g.add(cylinder(0.16, 0.03, darkMat, 0.015, 16));
+  g.add(cylinder(0.02, 1.4, metal, 0.72, 8));
+  const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.2, 0.24, 16, 1, true), mat(0xf3e6c8, { side: THREE.DoubleSide }));
+  shade.position.y = 1.45;
+  g.add(shade);
+  g.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), glow(0xffe0a0, 1.4)), 0, 0, 1.4));
+});
+
+const createRug = staticView((g) => {
+  const rug = box(0.95, 0.015, 0.95, mat(0x8a3a4a, { roughness: 0.95 }));
+  rug.castShadow = false;
+  g.add(rug);
+  const inner = box(0.7, 0.017, 0.7, mat(0xd8b26a, { roughness: 0.95 }));
+  inner.castShadow = false;
+  g.add(inner);
+  const centre = box(0.4, 0.019, 0.4, mat(0x2f4f6f, { roughness: 0.95 }));
+  centre.castShadow = false;
+  g.add(centre);
+});
+
+const createWhiteboard = staticView((g) => {
+  for (const x of [-0.4, 0.4]) g.add(at(box(0.04, 1.5, 0.04, metal), x));
+  for (const x of [-0.4, 0.4]) g.add(at(box(0.06, 0.03, 0.4, metal, 0.015), x));
+  g.add(box(0.86, 0.6, 0.03, mat(0xf6f8fa, { roughness: 0.2 }), 1.1));
+  const ink = [0x2f6fb0, 0xd13f3f, 0x3fbf6a];
+  for (let i = 0; i < 4; i++) {
+    g.add(at(box(0.3 + (i % 2) * 0.2, 0.025, 0.005, mat(ink[i % 3]!), 1.3 - i * 0.1), -0.15 + (i % 2) * 0.05, 0.018));
+  }
+  g.add(at(box(0.7, 0.03, 0.06, metal, 0.78), 0, 0.03));
+});
+
+const createCoffeeTable = staticView((g) => {
+  g.add(box(0.8, 0.05, 0.5, glass(0xc8e4f0, 0.5), 0.38));
+  for (const [x, z] of [[-0.35, -0.2], [0.35, -0.2], [-0.35, 0.2], [0.35, 0.2]] as const) {
+    g.add(at(box(0.04, 0.36, 0.04, metal), x, z));
+  }
+  g.add(at(box(0.7, 0.02, 0.4, wood, 0.12), 0));
+  g.add(at(cylinder(0.04, 0.08, whiteMat, 0.45, 10), 0.18, 0.05));
+  g.add(at(box(0.22, 0.03, 0.16, mat(0x2f6fb0), 0.42), -0.15, -0.02));
+});
+
+const createBeanBag = staticView((g) => {
+  const bag = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), mat(0xe8603a, { roughness: 0.95 }));
+  bag.scale.set(1.1, 0.7, 1.1);
+  bag.position.y = 0.2;
+  bag.castShadow = true;
+  g.add(bag);
+  const dent = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), mat(0xd04f2c, { roughness: 0.95 }));
+  dent.scale.set(1, 0.5, 1);
+  dent.position.set(0, 0.36, 0.05);
+  g.add(dent);
+});
+
+const createVendingMachine = staticView((g) => {
+  g.add(box(0.7, 1.8, 0.6, mat(0xc0302e)));
+  g.add(at(box(0.46, 1.22, 0.02, mat(0x1a1d22), 1.05), -0.08, 0.305));
+  const snacks = [0xffd23a, 0x3fbf6a, 0x4aa8ff, 0xff8a2a, 0xa346e6];
+  for (let r = 0; r < 5; r++) {
+    g.add(at(box(0.44, 0.015, 0.06, metal, 0.53 + r * 0.22), -0.08, 0.335));
+    for (let c = 0; c < 4; c++) {
+      g.add(at(box(0.07, 0.12, 0.04, mat(snacks[(r + c) % 5]!), 0.6 + r * 0.22), -0.245 + c * 0.11, 0.335));
+    }
+  }
+  g.add(at(box(0.46, 1.22, 0.01, glass(0xdff0ff, 0.18), 1.05), -0.08, 0.365));
+  g.add(at(box(0.14, 0.4, 0.02, darkMat, 1.2), 0.24, 0.31));
+  g.add(at(box(0.1, 0.06, 0.02, glow(0x5dff9a, 1), 1.35), 0.24, 0.32));
+  g.add(at(box(0.44, 0.14, 0.03, darkMat, 0.25), -0.08, 0.31));
+});
+
+const createBonsai = staticView((g) => {
+  g.add(box(0.4, 0.12, 0.28, mat(0x2a3a5a), 0.06));
+  const trunkMat = mat(0x5a3a24);
+  const trunk = cylinder(0.035, 0.32, trunkMat, 0.28, 8);
+  trunk.rotation.z = 0.3;
+  g.add(trunk);
+  const branch = at(cylinder(0.02, 0.2, trunkMat, 0.38, 6), 0.1);
+  branch.rotation.z = -0.9;
+  g.add(branch);
+  for (const [x, y, r] of [[-0.06, 0.48, 0.13], [0.16, 0.44, 0.1], [0.02, 0.58, 0.09]] as const) {
+    const pad = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), leafMat);
+    pad.scale.y = 0.55;
+    pad.position.set(x, y, 0);
+    pad.castShadow = true;
+    g.add(pad);
+  }
+});
+
+const createPingPong = staticView((g) => {
+  g.add(box(0.95, 0.04, 0.6, mat(0x1f5f9a), 0.6));
+  g.add(at(box(0.95, 0.005, 0.01, whiteMat, 0.62), 0));
+  g.add(box(0.012, 0.1, 0.62, mat(0xeeeeee, { transparent: true, opacity: 0.7 }), 0.67));
+  for (const [x, z] of [[-0.4, -0.24], [0.4, -0.24], [-0.4, 0.24], [0.4, 0.24]] as const) {
+    g.add(at(box(0.04, 0.58, 0.04, darkMat), x, z));
+  }
+  g.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), mat(0xff9a3a)), 0.2, 0.1, 0.66));
+  const paddle = at(cylinder(0.06, 0.012, mat(0xd13f3f), 0.63, 12), -0.3, 0.12);
+  g.add(paddle);
+});
+
+const createPoolTable = staticView((g) => {
+  g.add(box(0.98, 0.12, 0.62, mat(0x5a3420), 0.66));
+  g.add(box(0.86, 0.02, 0.5, mat(0x1f7a3f, { roughness: 0.95 }), 0.73));
+  for (const [x, z] of [[-0.42, -0.24], [0.42, -0.24], [-0.42, 0.24], [0.42, 0.24]] as const) {
+    g.add(at(box(0.09, 0.6, 0.09, mat(0x4a2a18)), x, z));
+  }
+  const balls = [0xffd23a, 0x2f6fb0, 0xd13f3f, 0x7a4ff0, 0xff8a2a, 0x1a1a1a, 0xffffff];
+  balls.forEach((c, i) => {
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), mat(c, { roughness: 0.3 }));
+    ball.position.set(i === 6 ? -0.25 : 0.12 + (i % 3) * 0.045, 0.765, i === 6 ? 0 : -0.05 + Math.floor(i / 3) * 0.05);
+    g.add(ball);
+  });
+  const cue = at(cylinder(0.008, 0.8, wood, 0.76, 6), -0.05, 0.2);
+  cue.rotation.z = Math.PI / 2;
+  g.add(cue);
+});
+
+const createFountain = staticView((g) => {
+  const stone = mat(0xc9c4b8, { roughness: 0.8 });
+  g.add(cylinder(0.45, 0.22, stone, 0.11, 24));
+  const pool = cylinder(0.4, 0.04, mat(0x3fa7e0, { transparent: true, opacity: 0.7, roughness: 0.05 }), 0.21, 24);
+  pool.castShadow = false;
+  g.add(pool);
+  g.add(cylinder(0.08, 0.5, stone, 0.4, 12));
+  g.add(cylinder(0.2, 0.05, stone, 0.66, 18));
+  const jet = cylinder(0.03, 0.3, mat(0x9fd8ff, { transparent: true, opacity: 0.6, emissive: 0x3fa7e0, emissiveIntensity: 0.3 }), 0.83, 8);
+  jet.castShadow = false;
+  g.add(jet);
+});
+
+const createGlobe = staticView((g) => {
+  g.add(cylinder(0.18, 0.03, wood, 0.015, 16));
+  g.add(cylinder(0.025, 0.55, wood, 0.3, 8));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.012, 6, 28), mat(0xd8b26a, { metalness: 0.7, roughness: 0.3 }));
+  ring.position.y = 0.85;
+  g.add(ring);
+  const earth = new THREE.Mesh(new THREE.SphereGeometry(0.22, 18, 14), mat(0x2f7fc0, { roughness: 0.5 }));
+  earth.position.y = 0.85;
+  earth.rotation.z = 0.4;
+  earth.castShadow = true;
+  g.add(earth);
+  for (const [x, y, z, s] of [[0.12, 0.92, 0.15, 0.09], [-0.15, 0.8, 0.12, 0.07], [0.05, 0.75, -0.18, 0.08]] as const) {
+    const land = new THREE.Mesh(new THREE.SphereGeometry(s, 8, 6), mat(0x4f9a4a));
+    land.position.set(x, y, z);
+    land.scale.set(1, 0.6, 0.5);
+    g.add(land);
+  }
+});
+
+const createStatusWall = staticView((g) => {
+  for (const x of [-0.35, 0.35]) g.add(at(box(0.05, 0.9, 0.05, darkMat), x));
+  g.add(box(0.98, 0.6, 0.06, mat(0x15181e), 1.15));
+  g.add(at(box(0.92, 0.54, 0.01, glow(0x0f2a3a, 0.5), 1.15), 0, 0.035));
+  // Bar chart and a status grid.
+  for (let i = 0; i < 6; i++) {
+    const h = 0.08 + ((i * 7) % 5) * 0.05;
+    g.add(at(box(0.05, h, 0.01, glow(0x4fb3ff, 1.1), 0.95 + h / 2), -0.38 + i * 0.07, 0.042));
+  }
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 4; c++) {
+      const colour = (r * 4 + c) % 7 === 3 ? 0xffb347 : 0x5dff9a;
+      g.add(at(box(0.06, 0.06, 0.01, glow(colour, 1.2), 1.3 - r * 0.1), 0.12 + c * 0.09, 0.042));
+    }
+  }
+});
+
+const createSculpture = staticView((g) => {
+  g.add(box(0.5, 0.5, 0.5, mat(0xe8e8e8, { roughness: 0.4 })));
+  // No environment map, so keep metalness low or it renders black.
+  const chrome = mat(0xb8d4f0, { metalness: 0.35, roughness: 0.2, emissive: 0x1a3a6a, emissiveIntensity: 0.25 });
+  const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.18, 0.05, 64, 10, 2, 3), chrome);
+  knot.position.y = 0.85;
+  knot.castShadow = true;
+  g.add(knot);
+});
+
+const createCircuitArt = staticView((g) => {
+  for (const x of [-0.3, 0.3]) g.add(at(box(0.04, 0.8, 0.04, darkMat), x, -0.1));
+  g.add(at(box(0.9, 0.65, 0.05, mat(0x1d5a3a), 1.1), 0, -0.1));
+  const copper = glow(0xffb347, 0.6);
+  for (let i = 0; i < 5; i++) {
+    g.add(at(box(0.6 - i * 0.08, 0.015, 0.01, copper, 0.88 + i * 0.1), -0.05 + (i % 2) * 0.08, -0.07));
+    g.add(at(box(0.015, 0.2 + (i % 3) * 0.08, 0.01, copper, 1.0 + (i % 2) * 0.08), -0.35 + i * 0.17, -0.07));
+  }
+  g.add(at(box(0.18, 0.18, 0.03, darkMat, 1.12), 0.05, -0.06));
+  g.add(at(box(0.04, 0.04, 0.01, glow(0x5dff9a, 1.4), 1.3), 0.32, -0.06));
+});
+
+const createPiano = staticView((g) => {
+  const black = mat(0x111214, { roughness: 0.2, metalness: 0.2 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.22, 24, 1, false, 0, Math.PI), black);
+  body.rotation.y = -Math.PI / 2;
+  body.position.set(0, 0.72, -0.05);
+  body.scale.set(1, 1, 0.9);
+  body.castShadow = true;
+  g.add(body);
+  g.add(at(box(0.84, 0.22, 0.2, black, 0.72), 0, 0.1));
+  g.add(at(box(0.78, 0.03, 0.12, whiteMat, 0.66), 0, 0.26));
+  for (let i = 0; i < 9; i++) g.add(at(box(0.035, 0.02, 0.07, black, 0.685), -0.33 + i * 0.085, 0.24));
+  for (const [x, z] of [[-0.35, 0.1], [0.35, 0.1], [0.3, -0.35]] as const) g.add(at(box(0.06, 0.6, 0.06, black), x, z));
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.02, 24, 1, false, 0, Math.PI), black);
+  lid.rotation.set(0.6, -Math.PI / 2, 0);
+  lid.position.set(0, 1.0, -0.15);
+  g.add(lid);
+});
+
+const createRobotMascot = staticView((g) => {
+  const shell = mat(0xdfe6ee, { metalness: 0.4, roughness: 0.3 });
+  const accent = mat(0x4aa8ff, { metalness: 0.3 });
+  for (const x of [-0.1, 0.1]) g.add(at(box(0.1, 0.4, 0.12, accent), x));
+  g.add(box(0.4, 0.45, 0.28, shell, 0.65));
+  g.add(at(box(0.16, 0.1, 0.01, glow(0x5dff9a, 1.2), 0.7), 0, 0.145));
+  for (const x of [-0.26, 0.26]) {
+    const arm = at(box(0.08, 0.38, 0.1, accent, 0.62), x);
+    arm.rotation.z = x < 0 ? -0.2 : 0.5;
+    g.add(arm);
+  }
+  g.add(box(0.32, 0.26, 0.26, shell, 1.03));
+  g.add(at(box(0.26, 0.1, 0.01, darkMat, 1.05), 0, 0.135));
+  for (const x of [-0.06, 0.06]) g.add(at(box(0.04, 0.04, 0.01, glow(0x4fb3ff, 1.6), 1.05), x, 0.142));
+  g.add(cylinder(0.01, 0.14, metal, 1.23, 6));
+  g.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), glow(0xff5a5f, 1.5)), 0, 0, 1.31));
+});
+
+const createGoldenServer = staticView((g) => {
+  g.add(box(0.8, 0.25, 0.8, mat(0x2a2f36, { roughness: 0.4 })));
+  g.add(box(0.7, 0.04, 0.7, mat(0x8a1f2a, { roughness: 0.9 }), 0.27));
+  const gold = mat(0xffcf3a, { metalness: 0.35, roughness: 0.25, emissive: 0xb07a00, emissiveIntensity: 0.35 });
+  g.add(box(0.42, 1.3, 0.45, gold, 0.94));
+  for (let i = 0; i < 8; i++) g.add(at(box(0.36, 0.02, 0.01, mat(0xc89a28, { metalness: 0.3 }), 0.45 + i * 0.13), 0, 0.23));
+  for (let i = 0; i < 6; i++) g.add(at(box(0.025, 0.025, 0.01, glow(0xffffff, 1.5), 0.5 + i * 0.16), 0.15, 0.235));
+});
+
 // Every building id has a model. TypeScript enforces that new ids get one.
 const FACTORIES: Record<BuildingKind, () => BuildingView> = {
+  bench: createBench,
+  cactus: createCactus,
+  bookshelf: createBookshelf,
+  floor_lamp: createFloorLamp,
+  rug: createRug,
+  whiteboard: createWhiteboard,
+  coffee_table: createCoffeeTable,
+  bean_bag: createBeanBag,
+  vending_machine: createVendingMachine,
+  bonsai: createBonsai,
+  ping_pong: createPingPong,
+  pool_table: createPoolTable,
+  fountain: createFountain,
+  globe: createGlobe,
+  status_wall: createStatusWall,
+  sculpture: createSculpture,
+  circuit_art: createCircuitArt,
+  piano: createPiano,
+  robot_mascot: createRobotMascot,
+  golden_server: createGoldenServer,
   cooling_ac: createRoomAcView,
   break_table: createBreakTable,
   coffee_machine: createCoffeeMachine,
