@@ -182,9 +182,7 @@ export class Hud {
     const hour = hourOf(state.tick);
     const band = rateBand(state);
     const sky = !state.liveWorld ? '' : hour >= 6 && hour < 19 ? '☀️' : '🌙';
-    const rate = band === 'peak' ? '<span class="hud-rate peak" title="Evening peak: electricity costs more">Peak ⚡</span>'
-      : band === 'night' ? '<span class="hud-rate night" title="Night: electricity is cheap">Cheap ⚡</span>' : '';
-    p['hud-clock']!.innerHTML = `${sky} ${clockText(state.tick)} ${rate}`;
+    p['hud-clock']!.innerHTML = `${sky} ${clockText(state.tick)}`;
 
     const load = supply > 0 ? draw / supply : 1;
     p['hud-power-text']!.innerHTML = `<span>Power</span><b>${num(draw)} / ${num(supply)} kW</b>`;
@@ -201,6 +199,9 @@ export class Hud {
       const rep = Math.round(state.reputation);
       const tone = rep >= 65 ? 'good' : rep < 40 ? 'warn' : '';
       chips.push(`<span class="hud-chip ${tone}" title="Reputation: uptime, cool racks and kept promises raise it. It changes how many customers come and what contracts pay.">★ ${reputationLabel(rep)} ${rep}</span>`);
+      // Electricity price band, beside the other status chips.
+      if (band === 'peak') chips.push(`<span class="hud-chip peak" title="Evening peak (17:00–21:00): electricity costs ${CONFIG.dayNight.peakRate}×">⚡ Peak price</span>`);
+      else if (band === 'night') chips.push(`<span class="hud-chip night" title="Night (00:00–07:00): electricity costs ${CONFIG.dayNight.nightRate}×">⚡ Cheap power</span>`);
       if (backupPower(state) > 0) chips.push(`<span class="hud-chip" title="UPS battery charge (${state.battery.mode === 'save' ? 'saving money at peak' : 'kept for power cuts'})">🔋 ${Math.round(state.battery.charge * 100)}%</span>`);
     }
     if (prestige > 0) chips.push(`<span class="hud-chip">✦ Prestige ${prestige}</span>`);
