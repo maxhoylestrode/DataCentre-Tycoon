@@ -49,6 +49,11 @@ export class RoomLook {
   private accentOn = false;
   private styleKey = '';
   private lotsKey = '';
+  // The lighting style's own intensity; the time of day scales it.
+  private baseIntensity = 1;
+  private readonly sunColour = new THREE.Color(0xffffff);
+  private readonly background = new THREE.Color(0x14171c);
+  private scene: THREE.Scene | null = null;
 
   constructor(scene: THREE.Scene) {
     scene.add(this.hemi);
@@ -58,12 +63,30 @@ export class RoomLook {
       left: -SHADOW_EXTENT, right: SHADOW_EXTENT, top: SHADOW_EXTENT, bottom: -SHADOW_EXTENT, near: 1, far: 80,
     });
     scene.add(this.sun, this.sun.target, this.geometry);
+    this.scene = scene;
   }
 
   // Keeps the shadow-casting light centred on what the camera is looking at.
   follow(target: THREE.Vector3): void {
     this.sun.position.copy(target).add(this.sunOffset);
     this.sun.target.position.copy(target);
+  }
+
+  // Lighting for the time of day (hour 0–24), or null for constant daylight.
+  // It stays bright enough to play at night: the room lights are on.
+  setTimeOfDay(hour: number | null): void {
+    const day = hour === null ? 1 : Math.max(0, Math.sin((Math.PI * (hour - 6)) / 12));
+    // Sun from the east in the morning, overhead at noon, west in the evening.
+    const angle = hour === null ? 0.6 : ((hour - 12) / 12) * 1.2;
+    this.sunOffset.set(14 * Math.sin(angle) + 4, 12 + 10 * day, 12);
+    const dusk = hour === null ? 0 : Math.max(0, 1 - Math.abs(day - 0.25) * 6) * (day > 0 ? 1 : 0);
+    // Cool blue at night, warm at dawn and dusk, white by day.
+    this.sunColour.setRGB(0.55 + 0.45 * day + 0.25 * dusk, 0.62 + 0.38 * day, 0.85 + 0.15 * day - 0.25 * dusk);
+    this.sun.color.copy(this.sunColour);
+    this.sun.intensity = 1.6 * this.baseIntensity * (0.45 + 0.55 * day);
+    this.hemi.intensity = 1.2 * this.baseIntensity * (0.75 + 0.25 * day);
+    this.background.setRGB(0.05 + 0.03 * day, 0.06 + 0.035 * day, 0.08 + 0.035 * day);
+    if (this.scene) (this.scene.background as THREE.Color).copy(this.background);
   }
 
   update(state: GameState): void {
@@ -138,6 +161,7 @@ export class RoomLook {
     if (light) {
       const intensity = light.intensity ?? 1;
       this.hemi.color.setHex(light.color);
+      this.baseIntensity = intensity;
       this.hemi.intensity = 1.2 * intensity;
       this.sun.intensity = 1.6 * intensity;
       this.accentOn = light.accent !== undefined;

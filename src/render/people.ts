@@ -166,6 +166,17 @@ export class PeopleLayer {
   readonly group = new THREE.Group();
   private readonly figures = new Map<string, Figure>();
 
+  // Staff figures, for clicking someone to see their card.
+  staffFigures(): THREE.Object3D[] {
+    return [...this.figures.values()].map((f) => f.rig.group).filter((g) => g.userData.staffId !== undefined);
+  }
+
+  // The staff id of a picked part of a figure, if any.
+  static staffIdOf(hit: THREE.Object3D | null): number | null {
+    for (let o = hit; o; o = o.parent) if (o.userData.staffId !== undefined) return o.userData.staffId as number;
+    return null;
+  }
+
   sync(state: GameState, dt: number): void {
     const alive = new Set<string>();
     const now = performance.now() / 1000;
@@ -217,11 +228,17 @@ export class PeopleLayer {
     };
 
     for (const s of state.staff) {
+      // Away training: not in the building.
+      if (s.trainingUntil !== null) continue;
       const working = s.task !== null && s.path.length === 0;
       const look = STAFF_LOOK[s.role] ?? STAFF_LOOK.technician!;
       // Account managers stand at their desk rather than tinkering with it.
       const busy = working && s.task?.kind !== 'desk';
-      place(`s${s.id}`, () => person(look.kind, `s${s.id}`, look.shirt), s.x, s.y, busy);
+      place(`s${s.id}`, () => {
+        const rig = person(look.kind, `s${s.id}`, look.shirt);
+        rig.group.userData.staffId = s.id;
+        return rig;
+      }, s.x, s.y, busy);
     }
     for (const c of state.clients) {
       if (state.tick < c.spawnTick) continue;

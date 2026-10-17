@@ -2,7 +2,8 @@ import { BUILDING_KINDS, buildingDef, CONFIG } from '../config';
 import { CUSTOMER_TYPES } from '../sim/content/customers';
 import type { ContractRequirement } from '../sim/content/types';
 import { canTakeOffer, committedRacks, freeRacks, qualifyingRacks, uptimeOf } from '../sim/contracts';
-import { incomeBreakdown } from '../sim/economy';
+import { incomeBreakdown, incomePerTick } from '../sim/economy';
+import { activeEffect, ransomCost } from '../sim/events';
 import { receptionProblem } from '../sim/people';
 import { managersAtDesks } from '../sim/sales';
 import { type Contract, type ContractTerms, type GameState, isRunning, racksOf } from '../sim/state';
@@ -13,6 +14,7 @@ export interface ContractsHandlers {
   onCancel(contractId: number): void;
   // Flips whether account managers sign contracts or only advise.
   onAutoSign(): void;
+  onPayRansom(): void;
 }
 
 const money = (n: number): string => `£${Math.round(n).toLocaleString('en-GB')}`;
@@ -73,6 +75,7 @@ export class ContractsPanel {
       if (act === 'close') this.toggle(false);
       else if (act === 'sign') handlers.onSign(id);
       else if (act === 'autosign') handlers.onAutoSign();
+      else if (act === 'ransom') handlers.onPayRansom();
       else if (act === 'cancel') {
         if (this.confirmCancelId === id) {
           handlers.onCancel(id);
@@ -117,7 +120,19 @@ export class ContractsPanel {
         ${tile('Free', String(freeRacks(state)), 'accent')}
         ${tile('Contract income', `£${income.toFixed(2)}<small>/min</small>`, 'good')}
       </div>
-      ${short ? '<div class="ct-alert">Not enough working racks for your contracts: uptime is dropping.</div>' : ''}`;
+      ${short ? '<div class="ct-alert">Not enough working racks for your contracts: uptime is dropping.</div>' : ''}
+      ${this.ransomware(state)}`;
+  }
+
+  // While ransomware has contracts locked: how long, and a button to pay it off.
+  private ransomware(state: GameState): string {
+    const attack = activeEffect(state, 'ransomware');
+    const cost = ransomCost(state, incomePerTick(state));
+    if (!attack || cost === null) return '';
+    const hours = Math.ceil((attack.endTick - state.tick) / 60);
+    return `
+      <div class="ct-alert ct-ransom"><b>Ransomware:</b> contract systems are locked for ${hours} more hour${hours > 1 ? 's' : ''}, so contracts earn nothing and their uptime is falling.
+        <button data-act="ransom" class="danger" ${state.cash < cost ? 'disabled' : ''}>Pay ransom ${money(cost)}</button></div>`;
   }
 
   // Customer avatar, name, type chip and headline pay.

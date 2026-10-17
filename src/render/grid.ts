@@ -150,12 +150,13 @@ export class TilePicker {
   }
 
   // The first of these objects under the cursor, if any (e.g. alert badges).
-  pickObject(clientX: number, clientY: number, objects: THREE.Object3D[]): THREE.Object3D | null {
+  // With recursive, children count too (e.g. a person's limbs).
+  pickObject(clientX: number, clientY: number, objects: THREE.Object3D[], recursive = false): THREE.Object3D | null {
     if (objects.length === 0) return null;
     const rect = this.canvas.getBoundingClientRect();
     this.ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(this.ndc, this.camera);
-    return this.raycaster.intersectObjects(objects, false)[0]?.object ?? null;
+    return this.raycaster.intersectObjects(objects, recursive)[0]?.object ?? null;
   }
 
   // The floor point under the cursor in grid coordinates (room corner at

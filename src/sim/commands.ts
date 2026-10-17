@@ -29,7 +29,17 @@ import { cancelActiveContract, canTakeOffer } from './contracts';
 import { canAfford, repairCost } from './economy';
 import { buildTicks, investedValue, nextPart, partCost, refurbishCost, slotsOf, upgradeCost } from './buildings';
 import { awardBuildXp, checkProgress, isUnlocked, levelOf, upgradeCap } from './progression';
-import { type BatteryMode, categoryOf, floorAt, type GameState, getBuildingAt, isInBounds, type Specialism } from './state';
+import {
+  type BatteryMode,
+  type Building,
+  categoryOf,
+  floorAt,
+  type GameState,
+  getBuildingAt,
+  isInBounds,
+  type Specialism,
+} from './state';
+import { multiblockOf } from './power';
 import { ransomCost } from './events';
 import { hireFeeOf, hirableRoles, isAway, nameFor, newMember, specialismsFor, trainingCost } from './staff';
 
@@ -86,19 +96,30 @@ export function sellBuilding(state: GameState, x: number, y: number): CommandRes
   return { ok: true };
 }
 
+// What one upgrade step covers: a single building, or a whole power
+// multiblock, which upgrades as one unit. The step brings every member at the
+// lowest level up one, so a block with mixed levels evens out first.
+export function upgradeUnit(state: GameState, building: Building): { members: Building[]; level: number; cost: number } {
+  const block = multiblockOf(state, building);
+  if (!block) return { members: [building], level: building.upgrade, cost: upgradeCost(building) };
+  const level = Math.min(...block.map((b) => b.upgrade));
+  const members = block.filter((b) => b.upgrade === level);
+  return { members, level, cost: members.reduce((sum, b) => sum + upgradeCost(b), 0) };
+}
+
 export function upgradeBuilding(state: GameState, x: number, y: number): CommandResult {
   if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
   const building = getBuildingAt(state, x, y);
   if (!building) return { ok: false, reason: 'empty' };
   if (slotsOf(building).length > 0) return { ok: false, reason: 'use_parts' };
   if (buildingDef(building.kind).upgrade.output === 0) return { ok: false, reason: 'not_upgradable' };
-  if (building.status !== 'ok') return { ok: false, reason: 'not_working' };
-  if (building.upgrade >= upgradeCap(state)) return { ok: false, reason: 'at_cap' };
-  const cost = upgradeCost(building);
-  if (state.cash < cost) return { ok: false, reason: 'insufficient_funds' };
+  const unit = upgradeUnit(state, building);
+  if (unit.members.some((b) => b.status !== 'ok')) return { ok: false, reason: 'not_working' };
+  if (unit.level >= upgradeCap(state)) return { ok: false, reason: 'at_cap' };
+  if (state.cash < unit.cost) return { ok: false, reason: 'insufficient_funds' };
 
-  state.cash -= cost;
-  building.upgrade += 1;
+  state.cash -= unit.cost;
+  for (const b of unit.members) b.upgrade += 1;
   state.progress.stats.upgrades += 1;
   // Shares the daily-capped building XP trickle.
   awardBuildXp(state);
@@ -162,9 +183,15 @@ export function planUpgradeMax(state: GameState, x: number, y: number): UpgradeP
 
   if (slotsOf(building).length === 0) {
     if (buildingDef(building.kind).upgrade.output === 0) return plan;
-    for (let level = building.upgrade; level < upgradeCap(state); level++) {
-      const cost = upgradeCost(building, level);
+    // Step through levels on copies (a multiblock's members all go up together).
+    const block = (multiblockOf(state, building) ?? [building]).map((b) => ({ ...b }));
+    for (;;) {
+      const level = Math.min(...block.map((b) => b.upgrade));
+      if (level >= upgradeCap(state)) break;
+      const behind = block.filter((b) => b.upgrade === level);
+      const cost = behind.reduce((sum, b) => sum + upgradeCost(b), 0);
       if (cash < cost) break;
+      for (const b of behind) b.upgrade += 1;
       cash -= cost;
       plan.cost += cost;
       plan.steps.push({ kind: 'level' });
@@ -200,6 +227,19 @@ export function upgradeMax(state: GameState, x: number, y: number): number {
     if (!result.ok) break;
     bought++;
   }
+  return bought;
+}
+
+// Max-upgrades every rack, the cheapest plans first so the money goes as far
+// as possible. Returns how many upgrades were bought.
+export function upgradeAllRacks(state: GameState): number {
+  const racks = state.buildings
+    .filter((b) => slotsOf(b).length > 0 && b.status === 'ok')
+    .map((b) => ({ b, cost: planUpgradeMax(state, b.x, b.y).cost }))
+    .filter((x) => x.cost > 0)
+    .sort((a, b) => a.cost - b.cost);
+  let bought = 0;
+  for (const { b } of racks) bought += upgradeMax(state, b.x, b.y);
   return bought;
 }
 

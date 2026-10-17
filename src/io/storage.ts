@@ -14,9 +14,11 @@ export interface Settings {
   sound: boolean;
   // 0..1
   volume: number;
+  // Whether the scene's lighting follows the time of day.
+  dayLighting: boolean;
 }
 
-const DEFAULT_SETTINGS: Settings = { autosave: true, seenGuide: false, sound: true, volume: 0.5 };
+const DEFAULT_SETTINGS: Settings = { autosave: true, seenGuide: false, sound: true, volume: 0.5, dayLighting: true };
 
 // localStorage can throw (private mode, storage full, blocked site data).
 function read(key: string): string | null {
@@ -61,6 +63,7 @@ export function loadSettings(): Settings {
       sound: typeof parsed.sound === 'boolean' ? parsed.sound : DEFAULT_SETTINGS.sound,
       volume:
         typeof parsed.volume === 'number' && parsed.volume >= 0 && parsed.volume <= 1 ? parsed.volume : DEFAULT_SETTINGS.volume,
+      dayLighting: typeof parsed.dayLighting === 'boolean' ? parsed.dayLighting : DEFAULT_SETTINGS.dayLighting,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

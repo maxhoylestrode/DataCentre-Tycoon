@@ -1,4 +1,14 @@
+import { CONFIG, type Difficulty, DIFFICULTIES } from '../config';
+
+const DIFFICULTY_NOTES: Record<Difficulty, string> = {
+  relaxed: 'Lower overhead and tax, fewer incidents, gentler reputation losses.',
+  normal: 'The game as designed: big companies have to work for their profit.',
+  tough: 'Higher overhead and tax, more incidents, harsher reputation losses.',
+};
+
 export interface MenuHandlers {
+  onSetDifficulty(difficulty: Difficulty): void;
+  onSetDayLighting(on: boolean): void;
   onSaveNow(): boolean;
   onExport(): void;
   // Returns an error message, or null when the file is a valid save.
@@ -14,6 +24,7 @@ export interface MenuSettings {
   autosave: boolean;
   sound: boolean;
   volume: number;
+  dayLighting: boolean;
 }
 
 // Save/settings menu, opened from a button in the top-right corner.
@@ -25,6 +36,8 @@ export class Menu {
   private readonly message: HTMLElement;
   private readonly importConfirm: HTMLElement;
   private readonly newGameButton: HTMLButtonElement;
+  private readonly difficulty: HTMLSelectElement;
+  private readonly difficultyNote: HTMLElement;
   private confirmingNewGame = false;
   private lastSavedAt: Date | null = null;
 
@@ -47,6 +60,11 @@ export class Menu {
       <label class="row"><input type="checkbox" data-act="autosave"> Autosave (every 30s and when you leave)</label>
       <label class="row"><input type="checkbox" data-act="sound"> Sound</label>
       <label class="row volume">Volume <input type="range" min="0" max="100" step="5" data-act="volume"></label>
+      <label class="row"><input type="checkbox" data-act="daylight"> Day and night lighting</label>
+      <label class="row difficulty">Difficulty
+        <select data-act="difficulty">${DIFFICULTIES.map((d) => `<option value="${d}">${CONFIG.difficulty[d].name}</option>`).join('')}</select>
+      </label>
+      <div class="muted fine difficulty-note"></div>
       <div class="row"><button data-act="new" class="danger">New game</button></div>
       <div class="message"></div>
       <input type="file" accept=".json,application/json" hidden>
@@ -67,6 +85,12 @@ export class Menu {
     const volume = q<HTMLInputElement>('[data-act="volume"]');
     volume.value = String(Math.round(settings.volume * 100));
     volume.addEventListener('input', () => handlers.onSetVolume(Number(volume.value) / 100));
+    const daylight = q<HTMLInputElement>('[data-act="daylight"]');
+    daylight.checked = settings.dayLighting;
+    daylight.addEventListener('change', () => handlers.onSetDayLighting(daylight.checked));
+    this.difficulty = q<HTMLSelectElement>('[data-act="difficulty"]');
+    this.difficultyNote = q('.difficulty-note');
+    this.difficulty.addEventListener('change', () => handlers.onSetDifficulty(this.difficulty.value as Difficulty));
 
     toggle.addEventListener('click', () => {
       this.panel.classList.toggle('open');
@@ -121,10 +145,13 @@ export class Menu {
     if (isError) this.panel.classList.add('open');
   }
 
-  update(): void {
+  update(difficulty: Difficulty): void {
     if (!this.panel.classList.contains('open')) return;
     const text = this.lastSavedAt ? `Last saved ${this.lastSavedAt.toLocaleTimeString('en-GB')}` : 'Not saved yet';
     if (this.status.textContent !== text) this.status.textContent = text;
+    if (document.activeElement !== this.difficulty && this.difficulty.value !== difficulty) this.difficulty.value = difficulty;
+    const note = DIFFICULTY_NOTES[difficulty];
+    if (this.difficultyNote.textContent !== note) this.difficultyNote.textContent = note;
   }
 
   private resetConfirms(): void {

@@ -16,6 +16,8 @@ export const ICONS = {
   safety: svg('<path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/>'),
   research: svg('<path d="M9 2h6M10 2v6L4.5 18.5A2 2 0 0 0 6.3 21h11.4a2 2 0 0 0 1.8-2.5L14 8V2"/><path d="M7.5 14h9"/>'),
   stats: svg('<path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/>'),
+  racklist: svg('<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M4 9h16M4 15h16"/><circle cx="7.5" cy="6" r=".8" fill="currentColor"/><circle cx="7.5" cy="12" r=".8" fill="currentColor"/><circle cx="7.5" cy="18" r=".8" fill="currentColor"/><path d="M11 6h6M11 12h6M11 18h6"/>'),
+  agebars: svg('<rect x="3" y="9" width="18" height="6" rx="1.5"/><rect x="4.5" y="10.5" width="9" height="3" rx=".5" fill="currentColor"/>'),
   undo: svg('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
   sound: svg('<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>'),
   heat: svg('<path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0z"/><path d="M12 9v8"/>'),

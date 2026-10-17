@@ -4,7 +4,7 @@ import { researchBonus } from './research';
 import { activeEffect } from './events';
 import { upsBackupKw } from './safety';
 import { batteryFlow, electricityRate, moveBatteryCharge } from './daynight';
-import { categoryOf, type GameState, isRunning } from './state';
+import { type Building, categoryOf, type GameState, isRunning } from './state';
 
 // Four power sources of the same kind in a full 2×2 square form a
 // multiblock. Each belongs to at most one block; squares are claimed scanning
@@ -30,6 +30,18 @@ export function powerMultiblocks(state: GameState): { members: Set<number>; corn
     corners.push({ x: b.x, y: b.y });
   }
   return { members, corners };
+}
+
+// The four buildings of the multiblock this one belongs to, or null.
+export function multiblockOf(state: GameState, building: Building): Building[] | null {
+  const { members, corners } = powerMultiblocks(state);
+  if (!members.has(building.id)) return null;
+  const corner = corners.find((c) => (building.x === c.x || building.x === c.x + 1) && (building.y === c.y || building.y === c.y + 1));
+  if (!corner) return null;
+  const block = state.buildings.filter(
+    (b) => members.has(b.id) && (b.x === corner.x || b.x === corner.x + 1) && (b.y === corner.y || b.y === corner.y + 1),
+  );
+  return block.length === 4 ? block : null;
 }
 
 // Supply split by source: grid-fed (the mains connection, power units and

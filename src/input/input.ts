@@ -22,6 +22,7 @@ export interface InputHandlers {
   onUndo(): void;
   onToggleResearch(): void;
   onToggleStats(): void;
+  onToggleRackList(): void;
   onEscape(): void;
   // Draw mode: left-drag draws (walls, zones, boxes of buildings) instead of
   // panning. Gets the pointer type so touch can keep one-finger panning.
@@ -173,6 +174,7 @@ export function attachInput(canvas: HTMLCanvasElement, rig: CameraRig, handlers:
     if (e.code === 'KeyQ') handlers.onRotate();
     if (e.code === 'KeyY') handlers.onToggleResearch();
     if (e.code === 'KeyN') handlers.onToggleStats();
+    if (e.code === 'KeyJ') handlers.onToggleRackList();
     if (e.code === 'Escape') {
       // Cancels a wall being drawn; otherwise closes panels.
       if (press?.drawing) {

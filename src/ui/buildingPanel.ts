@@ -17,19 +17,19 @@ import {
   rackTier,
   refurbishCost,
   slotsOf,
-  upgradeCost,
 } from '../sim/buildings';
 import { attackMbps, ddosBlocked } from '../sim/events';
 import { formatMbps, uplinkOf } from '../sim/network';
-import { backupPower, powerMultiblocks } from '../sim/power';
+import { backupPower, multiblockOf } from '../sim/power';
+import { endOfLifeChance, rackAgeDays } from '../sim/pressure';
 import { firewallFilterMbps, firewallShare, upsBackupKw } from '../sim/safety';
-import { planUpgradeMax } from '../sim/commands';
+import { planUpgradeMax, upgradeUnit } from '../sim/commands';
 import { SLOT_NAMES, TRADEMARK_NOTE } from '../sim/content/parts';
 import type { Part } from '../sim/content/types';
 import { repairCost } from '../sim/economy';
 import { feedVents } from '../sim/floor';
 import { isUnlocked, levelOf, unlockFor, upgradeCap } from '../sim/progression';
-import { type Building, categoryOf, type GameState, tempAt } from '../sim/state';
+import { type BatteryMode, type Building, categoryOf, type GameState, tempAt } from '../sim/state';
 import { kw, num } from './format';
 
 export interface BuildingPanelHandlers {
@@ -41,6 +41,7 @@ export interface BuildingPanelHandlers {
   onRotate(buildingId: number): void;
   onMove(buildingId: number): void;
   onRefurbish(buildingId: number): void;
+  onBatteryMode(mode: BatteryMode): void;
 }
 
 const money = (n: number): string => `£${Math.round(n).toLocaleString('en-GB')}`;
@@ -101,6 +102,7 @@ export class BuildingPanel {
       else if (act === 'rotate') handlers.onRotate(id);
       else if (act === 'move') handlers.onMove(id);
       else if (act === 'refurbish') handlers.onRefurbish(id);
+      else if (act === 'battery') handlers.onBatteryMode(button.dataset.mode as BatteryMode);
       else if (act === 'sell') {
         if (this.confirmSell) {
           handlers.onSell(id);
@@ -163,9 +165,11 @@ export class BuildingPanel {
       : b.status === 'building' ? `<span class="warn">Under construction · ${Math.round((1 - b.buildRemaining / buildTicks(b.kind)) * 100)}%</span>`
       : '<span class="good">Working</span>';
 
+    // A multiblock shows (and upgrades) its lowest member's level.
+    const shownLevel = levelled ? upgradeUnit(state, b).level : 0;
     const levelLine = levelled
-      ? ` <span class="muted">level ${b.upgrade} / ${max}</span>
-         <div class="pips">${Array.from({ length: max }, (_, i) => `<span class="${i < b.upgrade ? 'on' : ''}"></span>`).join('')}</div>`
+      ? ` <span class="muted">${multiblockOf(state, b) ? 'block ' : ''}level ${shownLevel} / ${max}</span>
+         <div class="pips">${Array.from({ length: max }, (_, i) => `<span class="${i < shownLevel ? 'on' : ''}"></span>`).join('')}</div>`
       : '';
 
     const extra =
@@ -183,7 +187,7 @@ export class BuildingPanel {
       ${extra}
       ${isRack || levelled ? this.maxButton(state, b) : ''}
       ${isRack ? this.partSlots(state, b) : ''}
-      ${levelled ? this.upgradeButton(state, b, upgradeCap(state), b.upgrade >= max) : ''}
+      ${levelled ? this.upgradeButton(state, b, upgradeCap(state)) : ''}
       ${b.status === 'failed' ? `<button data-act="repair" ${state.cash < repairCost(b) ? 'disabled' : ''}>Repair (${money(repairCost(b))})</button>` : ''}
       <button data-act="rotate" title="Rotate (Q while placing)">⟳ Rotate</button>
       <button data-act="move" title="Pick it up and place it somewhere else (M)">✥ Move</button>
@@ -203,8 +207,10 @@ export class BuildingPanel {
   private powerInfo(state: GameState, b: Building): string {
     const def = buildingDef(b.kind);
     const lines: string[] = [];
-    if (powerMultiblocks(state).members.has(b.id)) {
-      lines.push(`<div class="good">Part of a power multiblock: +${CONFIG.multiblock.bonus * 100}% output.</div>`);
+    const block = multiblockOf(state, b);
+    if (block) {
+      const supply = block.reduce((sum, m) => sum + buildingStats(m).powerSupply, 0) * (1 + CONFIG.multiblock.bonus);
+      lines.push(`<div class="good">Part of a power multiblock: +${CONFIG.multiblock.bonus * 100}% output, ${kw(supply)} from all four. The block upgrades as one.</div>`);
     } else {
       lines.push(`<div class="muted">Tip: four ${def.name.toLowerCase()}s in a 2×2 square produce ${CONFIG.multiblock.bonus * 100}% more.</div>`);
     }
@@ -220,9 +226,21 @@ export class BuildingPanel {
     const row = (label: string, now: string, next: string): string =>
       `<table><tr><td>${label}</td><td>${now}${!atMax && next !== now ? ` <span class="up">→ ${next}</span>` : ''}</td></tr></table>`;
     if (def.backupKw) {
+      const mode = state.battery.mode;
+      const modes = state.liveWorld
+        ? `<div class="rack-row"><span>Charge <b>${Math.round(state.battery.charge * 100)}%</b></span></div>
+           <div class="seg">
+             <button data-act="battery" data-mode="save" class="${mode === 'save' ? 'on' : ''}" title="Charge on cheap night power, cover the evening peak">Save money</button>
+             <button data-act="battery" data-mode="reserve" class="${mode === 'reserve' ? 'on' : ''}" title="Stay full, ready for power cuts">Keep for outages</button>
+           </div>
+           <div class="muted">${mode === 'save'
+             ? 'Charging at night and covering the evening peak to cut your bill. A power cut late in the evening may find them low.'
+             : 'Kept full, ready for any power cut.'}</div>`
+        : '';
       return (
         row('Backup power', kw(upsBackupKw(b)), kw(upsBackupKw(b, b.upgrade + 1))) +
-        `<div class="muted">Covers lost grid power during a power cut. All your UPS banks add up: ${kw(backupPower(state))} in total. Upgrades add more.</div>`
+        `<div class="muted">Covers lost grid power during a power cut while there's charge. All your UPS banks add up: ${kw(backupPower(state))} in total. Upgrades add more.</div>` +
+        modes
       );
     }
     if (def.suppressionRadius) {
@@ -259,8 +277,17 @@ export class BuildingPanel {
           '</div>',
       );
     }
+    if (state.liveWorld) {
+      const left = CONFIG.pressure.endOfLifeDays - rackAgeDays(state, b.refreshedAtTick);
+      const risk = endOfLifeChance(state, b.refreshedAtTick);
+      lines.push(
+        risk > 0
+          ? `<div class="rack-row"><span>End of life <b class="bad">${Math.round(risk * 24 * 100)}% chance a day of failing</b></span></div>`
+          : `<div class="rack-row"><span>End of life <b class="${left < 10 ? 'warn' : 'good'}">in ${Math.ceil(left)} days</b></span></div>`,
+      );
+    }
     if (state.staffSim && b.status === 'ok') {
-      const since = (state.tick - b.lastServicedTick) / CONFIG.time.ticksPerDay;
+      const since = Math.max(0, (state.tick - b.lastServicedTick) / CONFIG.time.ticksPerDay);
       const overdue = isOverdue(state, b);
       lines.push(
         `<div class="rack-row"><span>Serviced <b class="${overdue ? 'bad' : 'good'}">${since.toFixed(1)} days ago${overdue ? ' · overdue, earning less' : ''}</b></span></div>`,
@@ -313,18 +340,22 @@ export class BuildingPanel {
       </button>`;
   }
 
-  private upgradeButton(state: GameState, b: Building, cap: number, atMax: boolean): string {
-    if (atMax) return '<div class="muted">Fully upgraded.</div>';
+  private upgradeButton(state: GameState, b: Building, cap: number): string {
+    const unit = upgradeUnit(state, b);
+    const block = multiblockOf(state, b) !== null;
+    if (unit.level >= CONFIG.upgrades.maxLevel) return `<div class="muted">${block ? 'Multiblock fully' : 'Fully'} upgraded.</div>`;
     if (!isUnlocked(state, 'upgrades')) {
       return `<div class="muted">Upgrades unlock at level ${unlockFor('upgrades')?.level ?? '?'}.</div>`;
     }
-    const cost = upgradeCost(b);
     let reason = '';
-    if (b.upgrade >= cap) reason = `Reach level ${b.upgrade + 1} to upgrade further.`;
-    else if (b.status !== 'ok') reason = 'Repair it first.';
-    else if (state.cash < cost) reason = `Need ${money(cost)}.`;
+    if (unit.level >= cap) reason = `Reach level ${unit.level + 1} to upgrade further.`;
+    else if (unit.members.some((m) => m.status !== 'ok')) reason = block ? 'Every unit in the block must be working.' : 'Repair it first.';
+    else if (state.cash < unit.cost) reason = `Need ${money(unit.cost)}.`;
+    const label = block
+      ? unit.members.length < 4 ? `Even out the block: ${unit.members.length} to level ${unit.level + 1}` : `Upgrade the whole block to level ${unit.level + 1}`
+      : `Upgrade to level ${unit.level + 1}`;
     return `
-      <button data-act="upgrade" class="primary" ${reason ? 'disabled' : ''}>Upgrade to level ${b.upgrade + 1} (${money(cost)})</button>
+      <button data-act="upgrade" class="primary" ${reason ? 'disabled' : ''}>${label} (${money(unit.cost)})</button>
       ${reason ? `<div class="muted">${reason}</div>` : ''}`;
   }
 }

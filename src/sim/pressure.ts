@@ -10,7 +10,8 @@
 import { CONFIG } from '../config';
 import { levelOf } from './progression';
 import { nextRandom } from './rng';
-import { type GameState, isRunning, racksOf } from './state';
+import { ageFactor } from './buildings';
+import { type Building, type GameState, isRunning, racksOf } from './state';
 
 const P = CONFIG.pressure;
 
@@ -62,6 +63,13 @@ export function closeTaxDay(state: GameState): void {
 // Days a rack has gone since its last CPU change or refurbish.
 export function rackAgeDays(state: GameState, rackRefreshed: number): number {
   return Math.max(0, state.tick - rackRefreshed) / CONFIG.time.ticksPerDay;
+}
+
+// A rack's hardware condition for the UI: 1 when new, 0 at end of life
+// (without a live world, at the ageing floor instead).
+export function rackCondition(state: GameState, rack: Building): number {
+  if (state.liveWorld) return Math.max(0, 1 - rackAgeDays(state, rack.refreshedAtTick) / P.endOfLifeDays);
+  return Math.max(0, (ageFactor(state, rack) - CONFIG.ageing.floor) / (1 - CONFIG.ageing.floor));
 }
 
 // Chance per game hour this rack fails from old age.

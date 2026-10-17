@@ -61,6 +61,16 @@ const CATEGORIES: Category[] = [
       { id: 'upkeep', label: 'Building upkeep', colour: '#c58cff', unit: 'perMin', get: (s) => s.upkeep, upIsGood: false },
       { id: 'rent', label: 'Rent', colour: '#ff6b5b', unit: 'perMin', get: (s) => s.rent, upIsGood: false },
       { id: 'networkCost', label: 'Internet line', colour: '#6fb8ff', unit: 'perMin', get: (s) => s.network, upIsGood: false },
+      { id: 'overhead', label: 'Facility overhead', colour: '#d9a066', unit: 'perMin', get: (s) => s.overhead, upIsGood: false },
+      { id: 'tax', label: 'Corporation tax', colour: '#e05a8a', unit: 'perMin', get: (s) => s.tax, upIsGood: false },
+    ],
+  },
+  {
+    id: 'market', label: 'Customers', icon: '◷', stats: [
+      { id: 'reputation', label: 'Reputation', colour: '#ffd23a', unit: 'count', get: (s) => s.reputation, upIsGood: true },
+      { id: 'demand', label: 'Customer demand', colour: '#7fe0a8', unit: 'pct', get: (s) => pct(s.demand) },
+      { id: 'electricityRate', label: 'Electricity price', colour: '#ffb02e', unit: 'pct', get: (s) => pct(s.electricityRate), upIsGood: false },
+      { id: 'batteryCharge', label: 'Battery charge', colour: '#5bc6ff', unit: 'pct', get: (s) => pct(s.batteryCharge) },
     ],
   },
   {
@@ -273,7 +283,7 @@ export class StatsPanel {
       </div>
       <div class="sx-split">
         ${this.breakdown('Income sources', 'income', ['walkIn', 'contracts'])}
-        ${this.breakdown('Where the money goes', 'costs', ['electricity', 'wages', 'upkeep', 'rent', 'networkCost'])}
+        ${this.breakdown('Where the money goes', 'costs', ['electricity', 'wages', 'upkeep', 'rent', 'networkCost', 'overhead', 'tax'])}
       </div>
       ${this.records(state)}
       ${this.incidents(state)}`;
@@ -543,6 +553,7 @@ export class StatsPanel {
       ['Contract income', money(s.contractIncome)],
       ['Upgrades bought', String(s.upgrades)],
       ['Rack failures', String(s.failures)],
+      ...(state.liveWorld ? ([['Tax paid', money(s.taxPaid)], ['Overhead paid', money(s.overheadPaid)]] as [string, string][]) : []),
     ];
     return `
       <div class="sx-card">

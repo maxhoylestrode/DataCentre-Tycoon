@@ -4,10 +4,13 @@ import { isOverdue } from '../sim/buildings';
 import { contractBoardOpen } from '../sim/contractBoard';
 import { committedRacks } from '../sim/contracts';
 import { costBreakdown, incomeBreakdown, repairCost } from '../sim/economy';
-import { bandwidthDemand, formatMbps, lineCapacity, networkEfficiency } from '../sim/network';
+import { bandwidthDemand, formatMbps, lineCapacity, networkEfficiency, peakBandwidthDemand } from '../sim/network';
 import { receptionProblem, staffSpeedFactor } from '../sim/people';
 import { activeEventText } from '../sim/events';
-import { powerCutLoss, powerDraw, powerEfficiency, powerSupply } from '../sim/power';
+import { backupPower, powerCutLoss, powerDraw, powerEfficiency, powerSupply } from '../sim/power';
+import { hourOf, rateBand } from '../sim/daynight';
+import { endOfLifeChance } from '../sim/pressure';
+import { reputationLabel } from '../sim/reputation';
 import { prestigeOf } from '../sim/prestige';
 import { levelInfo, tierFor } from '../sim/progression';
 import { type GameState, racksOf, tempAt } from '../sim/state';
@@ -44,12 +47,18 @@ function warnings(state: GameState): Warning[] {
   }
   const net = networkEfficiency(state);
   if (net < 1) out.push({ level: 'bad', text: `Internet line full: running at ${Math.floor(net * 100)}%. Upgrade it (click Network).` });
+  else if (state.liveWorld && peakBandwidthDemand(state) > lineCapacity(state)) {
+    out.push({ level: 'warn', text: `The evening rush will need ${formatMbps(peakBandwidthDemand(state))}: more than your line. Upgrade it before 8pm.` });
+  }
 
   const racks = racksOf(state);
   const failed = racks.filter((r) => r.status === 'failed');
   if (failed.length > 0) {
     out.push({ level: 'bad', text: `${failed.length} rack${failed.length > 1 ? 's' : ''} failed: click with a build tool to repair (${money(repairCost(failed[0]!))}).` });
   }
+  const worn = racks.filter((r) => r.status === 'ok' && endOfLifeChance(state, r.refreshedAtTick) > 0).length;
+  if (worn > 0) out.push({ level: 'warn', text: `${worn} rack${worn > 1 ? 's are' : ' is'} past end of life and failing more often: refurbish or fit a new CPU.` });
+  if (state.liveWorld && state.reputation < 30) out.push({ level: 'warn', text: 'Reputation is low: fewer customers and worse contract pay. Keep uptime high and racks cool.' });
   const hot = racks.filter((r) => r.status === 'ok' && tempAt(state, r.x, r.y) > CONFIG.heat.warnTemp).length;
   if (hot > 0) out.push({ level: 'warn', text: `${hot} rack${hot > 1 ? 's' : ''} running hot (fail at ${CONFIG.heat.failTemp}°C).` });
 
@@ -147,6 +156,7 @@ export class Hud {
       state.progress.xp, prestige, money(state.cash), totalIn.toFixed(2), costs.total.toFixed(2), state.tick,
       num(supply), num(draw), Math.round(demand), line.id, temp?.toFixed(1), preview?.text, state.paused, state.speed,
       state.bankrupt, state.staff.length, income.market.toFixed(2), warningList.map((w) => w.text).join(),
+      Math.round(state.reputation), Math.round(state.battery.charge * 100), Math.round(state.progress.stats.taxToday),
     ].join('|');
     if (text === this.lastText) return;
     this.lastText = text;
@@ -165,8 +175,16 @@ export class Hud {
       <div><span>Upkeep</span><b class="bad">-${perMin(costs.upkeep)}</b></div>
       <div><span>Electricity</span><b class="bad">-${perMin(costs.electricity)}</b></div>
       <div><span>Internet</span><b class="bad">-${perMin(costs.network)}</b></div>
-      <div><span>Wages</span><b class="bad">-${perMin(costs.wages)}</b></div>`;
-    p['hud-clock']!.innerHTML = clockText(state.tick);
+      <div><span>Wages</span><b class="bad">-${perMin(costs.wages)}</b></div>
+      ${costs.overhead > 0 ? `<div><span>Facility overhead</span><b class="bad">-${perMin(costs.overhead)}</b></div>` : ''}
+      ${state.liveWorld ? `<div><span>Tax so far today</span><b class="bad">-${money(state.progress.stats.taxToday)}</b></div>` : ''}`;
+    // Sun or moon, and the electricity price band, in a live world.
+    const hour = hourOf(state.tick);
+    const band = rateBand(state);
+    const sky = !state.liveWorld ? '' : hour >= 6 && hour < 19 ? '☀️' : '🌙';
+    const rate = band === 'peak' ? '<span class="hud-rate peak" title="Evening peak: electricity costs more">Peak ⚡</span>'
+      : band === 'night' ? '<span class="hud-rate night" title="Night: electricity is cheap">Cheap ⚡</span>' : '';
+    p['hud-clock']!.innerHTML = `${sky} ${clockText(state.tick)} ${rate}`;
 
     const load = supply > 0 ? draw / supply : 1;
     p['hud-power-text']!.innerHTML = `<span>Power</span><b>${num(draw)} / ${num(supply)} kW</b>`;
@@ -179,6 +197,12 @@ export class Hud {
     p['hud-net-fill']!.className = `fill hud-net-fill ${netLoad > 1 ? 'over' : netLoad > 0.85 ? 'high' : ''}`;
 
     const chips: string[] = [];
+    if (state.liveWorld) {
+      const rep = Math.round(state.reputation);
+      const tone = rep >= 65 ? 'good' : rep < 40 ? 'warn' : '';
+      chips.push(`<span class="hud-chip ${tone}" title="Reputation: uptime, cool racks and kept promises raise it. It changes how many customers come and what contracts pay.">★ ${reputationLabel(rep)} ${rep}</span>`);
+      if (backupPower(state) > 0) chips.push(`<span class="hud-chip" title="UPS battery charge (${state.battery.mode === 'save' ? 'saving money at peak' : 'kept for power cuts'})">🔋 ${Math.round(state.battery.charge * 100)}%</span>`);
+    }
     if (prestige > 0) chips.push(`<span class="hud-chip">✦ Prestige ${prestige}</span>`);
     if (state.staffSim) chips.push(`<span class="hud-chip">${ICONS.staff} ${state.staff.length} staff</span>`);
     if (income.market < 1) chips.push(`<span class="hud-chip warn" title="Walk-in customers are running out: contracts don't count">Market ${Math.round(income.market * 100)}%</span>`);

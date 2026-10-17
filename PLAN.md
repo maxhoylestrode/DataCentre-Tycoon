@@ -342,6 +342,14 @@ Done when: I can create an account, play on one device, log in on another and co
     - Hiring picks from three daily candidates per role.
     - Training raises a level, or from level 3 gives a specialism (electrician, repair specialist, senior tech or negotiator).
     - Click a person to see their card.
+  - **Mid-build additions** (user):
+    - Power multiblocks upgrade as one unit (`upgradeUnit` in `sim/commands.ts`), evening out mixed levels first.
+    - A hardware condition bar floats over every rack (toggle in the toolbar).
+    - An All racks list (J): sort and filter, plus per-rack max upgrade, refurbish and repair, and "Upgrade all" (cheapest plans first).
+  - **Balance:** tax is taken gradually as the day's profit builds up, not as one lump at midnight. Overhead counts only built racks: 0.35 per rack past 30, ×(racks/30)^0.5.
+    - The balance bot now plays the live world. It plans its line for the evening peak, keeps batteries in reserve, and sells surplus walk-in racks when losing money.
+    - Its margins run about 33–42% around days 9–11, 22–27% in days 12–16, and under 25% from day 20. `balance.test.ts` now also checks the late squeeze.
+  - **Save v11:** a fix for v10 saves from development builds that lost the live world flag.
 
 - 2026-10-17: Sales staff who automate contracts (user: "new types of staff which can automate the contract hiring"). `sim/sales.ts`, numbers in `CONFIG.staff.sales`.
   - **Account manager** (level 7, £6,000, £1.10/min):

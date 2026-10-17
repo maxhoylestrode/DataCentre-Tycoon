@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { moveGroup, placeBuilding, sellBuilding, startResearch, upgradeBuilding } from '../src/sim/commands';
+import {
+  moveGroup,
+  placeBuilding,
+  planUpgradeMax,
+  sellBuilding,
+  startResearch,
+  upgradeAllRacks,
+  upgradeBuilding,
+  upgradeMax,
+  upgradeUnit,
+} from '../src/sim/commands';
+import { upgradeCost } from '../src/sim/buildings';
 import { RESEARCH } from '../src/sim/content/research';
 import { costBreakdown, incomeBreakdown } from '../src/sim/economy';
 import { activeEffect, ambientTemp, attackMbps, ddosBlocked, ddosFactor, eventChancePerDay, stepEvents, triggerEvent } from '../src/sim/events';
@@ -43,6 +54,30 @@ describe('power sources', () => {
     sellBuilding(state, 1, 1);
     placeBuilding(state, 'power_gas', 1, 1);
     expect(powerMultiblocks(state).corners).toHaveLength(1);
+  });
+
+  it('a multiblock upgrades as one unit, evening out mixed levels first', () => {
+    const state = game();
+    for (const [x, y] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) placeBuilding(state, 'power_gas', x, y);
+    const block = state.buildings.filter((b) => b.kind === 'power_gas');
+    const cash = state.cash;
+    expect(upgradeBuilding(state, 1, 1).ok).toBe(true);
+    expect(block.map((b) => b.upgrade)).toEqual([1, 1, 1, 1]);
+    expect(cash - state.cash).toBeCloseTo(block.reduce((s, b) => s + upgradeCost(b, 0), 0));
+    block[0]!.upgrade = 3;
+    expect(upgradeUnit(state, block[1]!)).toMatchObject({ level: 1 });
+    upgradeBuilding(state, 0, 0);
+    expect(block.map((b) => b.upgrade)).toEqual([3, 2, 2, 2]);
+    // Upgrade max brings the whole block up together.
+    upgradeMax(state, 0, 0);
+    expect(new Set(block.map((b) => b.upgrade)).size).toBe(1);
+  });
+
+  it('upgrade all racks spends on the cheapest plans first', () => {
+    const state = game();
+    for (let i = 0; i < 4; i++) placeBuilding(state, 'rack_basic', i * 2, 5);
+    expect(upgradeAllRacks(state)).toBeGreaterThan(0);
+    for (const r of state.buildings) expect(planUpgradeMax(state, r.x, r.y).steps).toHaveLength(0);
   });
 
   it('solar power is free: it comes off the electricity bill', () => {

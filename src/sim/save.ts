@@ -74,7 +74,8 @@ import { levelFromJobs, nameFor, SPECIALISMS, traitFor, TRAITS } from './staff';
 // v8: staff, clients, zones, internet line, building rotation, ageing, maintenance and construction.
 // v9: research, random events, legacy (company sales) and stats history.
 // v10: the live world (difficulty, reputation, batteries) and staff names, levels and traits.
-export const SAVE_VERSION = 10;
+// v11: fixes v10 development saves that lost the live world flag.
+export const SAVE_VERSION = 11;
 
 // Part ids as they were when v5 was introduced. Hard-coded so this migration
 // never changes if the parts catalogue does later.
@@ -181,6 +182,9 @@ const MIGRATIONS: Record<number, (data: Data) => Data> = {
         : data.buildings,
     };
   },
+  // Some v10 saves from development builds lost the live world flag: real
+  // games (people simulated) switch it on, with the same end-of-life grace.
+  10: (data) => (data.staffSim === true && data.liveWorld !== true ? MIGRATIONS[9]!({ ...data, liveWorld: true }) : data),
 };
 
 export function serialize(state: GameState, now: Date = new Date()): string {
@@ -219,6 +223,7 @@ export function serialize(state: GameState, now: Date = new Date()): string {
       // recalculated after loading.
       staff: state.staff.map((s) => ({
         id: s.id, role: s.role, founder: s.founder, x: s.x, y: s.y, task: s.task ? { ...s.task } : null,
+        name: s.name, level: s.level, jobs: s.jobs, trait: s.trait, specialism: s.specialism, trainingUntil: s.trainingUntil,
       })),
       nextStaffId: state.nextStaffId,
       clients: state.clients.map((c) => ({ id: c.id, offerId: c.offerId, x: c.x, y: c.y, state: c.state, spawnTick: c.spawnTick })),

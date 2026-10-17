@@ -34,7 +34,7 @@ const SECTIONS: Section[] = [
         <li><b>Solar array</b>: its power is free, so it comes off your electricity bill.</li>
         <li>Grid-fed sources (power units, substations) lose most of their output in a <b>power cut</b>; on-site generators keep going.</li>
       </ul>
-      <p>Put <b>four of the same kind in a 2×2 square</b> to form a multiblock: each produces 25% more.</p>
+      <p>Put <b>four of the same kind in a 2×2 square</b> to form a multiblock: each produces 25% more, and the block upgrades as one unit.</p>
       <p>You pay an <b>electricity bill</b> for what you draw. The more you use, the higher the rate per kW.</p>`,
   },
   {
@@ -63,7 +63,7 @@ const SECTIONS: Section[] = [
     title: 'Upgrades & ageing',
     html: `
       <p>Click any building to open its panel. Racks have <b>part slots</b> (CPU, memory, storage, network, cooling, GPU) with real hardware; power and cooling units have levels. <b>Upgrade max</b> buys everything you can afford.</p>
-      <p>Hardware <b>ages</b>: a rack slowly earns less until you fit a new CPU or <b>Refurbish</b> it.</p>
+      <p>Hardware <b>ages</b>: a rack slowly earns less until you fit a new CPU or <b>Refurbish</b> it. The bar above each rack shows its condition. Open <b>All racks (J)</b> to see every rack in one list and max-upgrade them from there, or all at once.</p>
       <p class="tip">Upgraded parts draw more power and make more heat, so plan power and cooling with them.</p>`,
   },
   {
@@ -71,7 +71,8 @@ const SECTIONS: Section[] = [
     title: 'Staff & building',
     html: `
       <p>Nothing builds itself: <b>engineers</b> walk to new buildings and build them, and repair failed racks. <b>Technicians</b> service racks every few days; overdue racks earn less.</p>
-      <p>Open <b>Staff (T)</b> to hire. Each hire costs a fee and a wage every minute.</p>
+      <p>Open <b>Staff (T)</b> to hire. Each morning there are new <b>candidates</b> for each role, each with a level (1–5) and maybe a <b>trait</b>: speedy, tinkerer, careful, night owl, early bird, workaholic, lazy or charmer. Hover a trait to see what it does.</p>
+      <p>Staff level up as they finish jobs: each level works faster but earns a higher wage. Click someone (in the list or in the room) to see their card. From there you can <b>train</b> them for a level, or from level ${CONFIG.staffGrowth.specialismLevel} for a specialism such as Electrician. Training takes them away for ${CONFIG.staffGrowth.trainingTicks / 60} game hours.</p>
       <p>Later you can hire people to handle contracts:</p>
       <ul>
         <li><b>Account manager</b> (level ${CONFIG.staff.roles.account_manager.minLevel}): stands at a reception desk and talks to each client. They sign the contract if you have the racks, your recent uptime beats the promise, and it raises your total income. Otherwise they leave a note saying why. One per desk. Turn signing off in the Contracts panel if you only want their advice.</li>
@@ -112,6 +113,32 @@ const SECTIONS: Section[] = [
       <p>A rack that has failed shows a red <b>!</b> above it. Click the rack (or the <b>!</b>) to repair it.</p>
       <p>Some news is good: <b>rush jobs</b> pay cash, and <b>press visits</b> pay more the more prestige (decor) you have.</p>
       <p class="tip">Build protection from the <b>Safety</b> menu (F). Research <i>Predictive monitoring</i> to make incidents rarer.</p>`,
+  },
+  {
+    id: 'daynight',
+    title: 'Day & night',
+    html: `
+      <p>Customers come and go through the day: quiet before dawn, busiest around 8pm. Over a day it averages out, but the <b>evening rush</b> uses much more internet bandwidth, so size your line for the peak. The HUD warns you when it won't cope.</p>
+      <ul>
+        <li>Electricity is <b>cheap at night</b> (00:00–07:00, ${CONFIG.dayNight.nightRate}×) and <b>dear at the evening peak</b> (17:00–21:00, ${CONFIG.dayNight.peakRate}×).</li>
+        <li><b>UPS batteries</b> store charge. In <i>Save money</i> mode they charge at night and cover the peak, cutting your bill. In <i>Keep for outages</i> mode they stay full. Either way a power cut drains them. Switch modes in a UPS bank's panel.</li>
+        <li>The room is about ${CONFIG.dayNight.tempSwing}°C warmer in the afternoon.</li>
+      </ul>
+      <p class="tip">Don't like the lighting change? Turn off <b>Day and night lighting</b> in the Menu.</p>`,
+  },
+  {
+    id: 'bigcompany',
+    title: 'Running a big company',
+    html: `
+      <p>Making money gets harder as you grow:</p>
+      <ul>
+        <li><b>Reputation</b> (★ in the HUD) drifts towards how well you run things: high uptime, cool racks, few failures and decor raise it. Kept contracts add to it; broken ones and fires take it away. It changes how many customers come (0.7× to 1.3×), what contracts pay and how many clients visit.</li>
+        <li><b>Facility overhead</b>: past ${CONFIG.pressure.overheadFreeRacks} racks, every rack costs a little more to run, and more again the bigger you are. Better racks beat more racks.</li>
+        <li><b>Corporation tax</b> comes off each day's profit, in bands: none on the first £10k a day, then 20%, 35% and 45%. It's taken gradually through the day.</li>
+        <li><b>Hardware end of life</b>: ${CONFIG.pressure.endOfLifeDays} days after its last new CPU or refurbish, a rack starts failing, more often the older it gets. The bar over each rack shows how long it has left. The <b>All racks</b> list (J) shows them all.</li>
+        <li>From level ${CONFIG.pressure.lateFromLevel}: <b>blackouts</b>, <b>ransomware</b> (contracts locked until it passes or you pay; strong firewalls stop it) and <b>major fires</b>. Clients also want bigger contracts with stricter promises.</li>
+      </ul>
+      <p class="tip">Choose <b>Relaxed</b>, <b>Normal</b> or <b>Tough</b> difficulty in the Menu at any time.</p>`,
   },
   {
     id: 'research',
@@ -159,7 +186,7 @@ const SECTIONS: Section[] = [
         <tr><td>Drag</td><td>Place, sell or pick up everything in a box</td></tr>
         <tr><td>Ctrl+Z</td><td>Undo</td></tr>
         <tr><td>Q</td><td>Rotate what you're placing</td></tr>
-        <tr><td>H K T Y N</td><td>Heat, Contracts, Staff, Research, Stats</td></tr>
+        <tr><td>H K T Y N J</td><td>Heat, Contracts, Staff, Research, Stats, All racks</td></tr>
         <tr><td>L V G</td><td>Style, Tall walls, Guide</td></tr>
         <tr><td>Esc</td><td>Cancel / close panels</td></tr>
       </table>`,

@@ -4,7 +4,8 @@ import { buildTicks, partTierTotal } from '../sim/buildings';
 import { rackFill } from '../sim/economy';
 import { feedVents } from '../sim/floor';
 import { powerEfficiency, powerMultiblocks } from '../sim/power';
-import { type Building, type GameState, tempAt } from '../sim/state';
+import { rackCondition } from '../sim/pressure';
+import { type Building, categoryOf, type GameState, tempAt } from '../sim/state';
 import { tileToWorld } from './grid';
 
 const { width: RW, depth: RD } = CONFIG.rack;
@@ -1006,10 +1007,47 @@ function createAlert(): THREE.Sprite {
   return sprite;
 }
 
+// A rack's hardware condition bar, like a health bar: two sprites (always
+// facing the camera), the fill anchored to the background's left edge.
+const AGE_BAR_W = 0.8;
+const AGE_BAR_H = 0.11;
+const ageBarBgMat = new THREE.SpriteMaterial({ color: 0x5a6472, depthTest: false, transparent: true, opacity: 0.9 });
+
+interface AgeBar {
+  group: THREE.Group;
+  fill: THREE.Sprite;
+  mat: THREE.SpriteMaterial;
+}
+
+function createAgeBar(): AgeBar {
+  const group = new THREE.Group();
+  const bg = new THREE.Sprite(ageBarBgMat);
+  bg.scale.set(AGE_BAR_W + 0.05, AGE_BAR_H + 0.05, 1);
+  bg.renderOrder = 8;
+  const mat = new THREE.SpriteMaterial({ color: 0x4cc38a, depthTest: false, transparent: true });
+  const fill = new THREE.Sprite(mat);
+  fill.renderOrder = 9;
+  group.add(bg, fill);
+  group.position.y = 2.25;
+  return { group, fill, mat };
+}
+
+const ageColour = new THREE.Color();
+function setAgeBar(bar: AgeBar, condition: number): void {
+  const c = Math.max(0.02, Math.min(1, condition));
+  const w = AGE_BAR_W * c;
+  bar.fill.scale.set(w, AGE_BAR_H, 1);
+  // Anchor so the fill's left edge meets the background's, in screen space.
+  bar.fill.center.set((0.5 * AGE_BAR_W) / w, 0.5);
+  ageColour.setHex(c > 0.5 ? 0x4cc38a : c > 0.2 ? 0xffc23a : 0xff4d5e);
+  bar.mat.color.copy(ageColour);
+}
+
 interface PlacedView extends BuildingView {
   model: THREE.Group;
   scaffold: { group: THREE.Group; bar: THREE.Mesh } | null;
   alert: THREE.Sprite | null;
+  ageBar: AgeBar | null;
 }
 
 // Keeps one view per building in GameState. Reads state, never writes it.
@@ -1018,6 +1056,8 @@ export class BuildingLayer {
   private readonly views = new Map<number, PlacedView>();
   // Buildings being carried by the move tool: drawn lifted at the cursor.
   private carried = new Map<number, { x: number; y: number; rot: number }>();
+  // Hardware condition bars over racks (toggled from the toolbar).
+  showAgeBars = true;
 
   // The "!" badges over failed buildings, each tagged with its building id.
   alerts(): THREE.Sprite[] {
@@ -1040,7 +1080,7 @@ export class BuildingLayer {
         const holder = new THREE.Group();
         holder.add(inner.group);
         holder.position.copy(tileToWorld(state.width, state.height, building.x, building.y));
-        view = { group: holder, model: inner.group, update: inner.update, scaffold: null, alert: null };
+        view = { group: holder, model: inner.group, update: inner.update, scaffold: null, alert: null, ageBar: null };
         this.views.set(building.id, view);
         this.group.add(holder);
       }
@@ -1081,6 +1121,19 @@ export class BuildingLayer {
       } else if (view.alert) {
         view.group.remove(view.alert);
         view.alert = null;
+      }
+      // Hardware condition over working racks (the "!" takes its place when failed).
+      const showBar = this.showAgeBars && categoryOf(building) === 'rack' && building.status !== 'building' && building.status !== 'failed';
+      if (showBar) {
+        if (!view.ageBar) {
+          view.ageBar = createAgeBar();
+          view.group.add(view.ageBar.group);
+        }
+        setAgeBar(view.ageBar, rackCondition(state, building));
+      } else if (view.ageBar) {
+        view.group.remove(view.ageBar.group);
+        view.ageBar.mat.dispose();
+        view.ageBar = null;
       }
       view.update(state, building, dt);
     }

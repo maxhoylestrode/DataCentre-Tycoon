@@ -184,16 +184,17 @@ describe('power multiblocks', () => {
     expect(powerSupply(state)).toBeCloseTo(base + 4 * unit * (1 + CONFIG.multiblock.bonus));
   });
 
-  it('a unit belongs to one block only, and upgraded units keep their bonus', () => {
+  it('a unit belongs to one block only, and an upgraded block keeps its bonus', () => {
     const state = game();
     // A 3×2 strip only fits one block.
     for (let x = 2; x <= 4; x++) for (let y = 2; y <= 3; y++) placeBuilding(state, 'power_basic', x, y);
     expect(powerMultiblocks(state).corners).toHaveLength(1);
     expect(powerMultiblocks(state).members.size).toBe(4);
     const before = powerSupply(state);
+    // The whole block of four goes up a level together.
     upgradeBuilding(state, 2, 2);
     expect(powerSupply(state) - before).toBeCloseTo(
-      CONFIG.buildings.power_basic.powerSupply * CONFIG.buildings.power_basic.upgrade.output * (1 + CONFIG.multiblock.bonus),
+      4 * CONFIG.buildings.power_basic.powerSupply * CONFIG.buildings.power_basic.upgrade.output * (1 + CONFIG.multiblock.bonus),
     );
   });
 });

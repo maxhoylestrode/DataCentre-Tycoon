@@ -5,7 +5,6 @@ import {
   buyStyle,
   cancelContract,
   fireStaff,
-  hireStaff,
   moveBuilding,
   moveGroup,
   paintZone,
@@ -19,11 +18,17 @@ import {
   rotateBuilding,
   sellBuilding,
   setAutoSign,
+  setBatteryMode,
+  setDifficulty,
+  hireCandidate,
+  payRansom,
+  trainStaff,
   setSpeed,
   signContract,
   startResearch,
   togglePause,
   upgradeBuilding,
+  upgradeAllRacks,
   upgradeMax,
   upgradePart,
   upgradeUplink,
@@ -58,6 +63,8 @@ import { isUnlocked, totalXpForLevel } from './sim/progression';
 import { isOwnedTile, lotAt, lotSize, purchasableLots } from './sim/lots';
 import { investedValue } from './sim/buildings';
 import { sellCompany } from './sim/legacy';
+import { hourOf } from './sim/daynight';
+import { incomePerTick } from './sim/economy';
 import { applyUndo, makeEntry, takeSnapshot, type UndoEntry } from './sim/undo';
 import { Sound, type SoundName } from './audio/sound';
 import { RoomSale } from './ui/rooms';
@@ -72,6 +79,7 @@ import { NetworkPanel } from './ui/networkPanel';
 import { ResearchPanel } from './ui/research';
 import { StaffPanel } from './ui/staff';
 import { StatsPanel } from './ui/stats';
+import { RackListPanel } from './ui/racks';
 import { StylePanel } from './ui/style';
 import { Toasts } from './ui/toasts';
 import { Toolbar, toolUnlocked } from './ui/toolbar';
@@ -377,6 +385,15 @@ function handleClick(cx: number, cy: number): void {
   }
   const tile = carrying ? picker.pick(cx, cy) : pickWithAlerts(cx, cy);
   if (!tile) return;
+  // Clicking a member of staff (when the click wouldn't build anything) opens their card.
+  if (!carrying && previewTool(state, tool, tile.x, tile.y)?.action !== 'place') {
+    const staffId = PeopleLayer.staffIdOf(picker.pickObject(cx, cy, people.staffFigures(), true));
+    if (staffId !== null) {
+      staffPanel.show(staffId);
+      play('click');
+      return;
+    }
+  }
   if (tool === 'move') {
     if (carrying) dropCarried(tile);
     else {
@@ -420,6 +437,10 @@ const contracts = new ContractsPanel(document.body, {
     if (signContract(state, id).ok) play('cash');
   },
   onCancel: (id) => cancelContract(state, id),
+  onPayRansom: () => {
+    if (payRansom(state, incomePerTick(state)).ok) play('cash');
+    else play('error');
+  },
   onAutoSign: () => {
     setAutoSign(state, !state.contracts.autoSign);
     play('click');
@@ -432,6 +453,27 @@ const toggleContracts = (): void => {
 const withBuilding = (id: number, run: (x: number, y: number) => void): void => {
   const b = state.buildings.find((x) => x.id === id);
   if (b) run(b.x, b.y);
+};
+const rackList = new RackListPanel(document.body, {
+  onUpgradeMax: (id) => withBuilding(id, (x, y) => play(upgradeMax(state, x, y) > 0 ? 'cash' : 'error')),
+  onUpgradeAll: () => {
+    const n = upgradeAllRacks(state);
+    play(n > 0 ? 'cash' : 'error');
+    if (n > 0) toasts.show(`<b>Upgraded ${n} part${n > 1 ? 's' : ''}</b> across your racks.`, 'goal');
+  },
+  onRefurbish: (id) => withBuilding(id, (x, y) => play(refurbishRack(state, x, y).ok ? 'cash' : 'error')),
+  onRepair: (id) => withBuilding(id, (x, y) => play(repairRack(state, x, y).ok ? 'cash' : 'error')),
+  onFocus: (id) => {
+    const b = state.buildings.find((x) => x.id === id);
+    if (!b) return;
+    const p = tileToWorld(state.width, state.height, b.x, b.y);
+    rig.focus(p.x, p.z);
+    buildingPanel.show(id);
+  },
+});
+const toggleAgeBars = (): void => {
+  buildings.showAgeBars = !buildings.showAgeBars;
+  toasts.show(`Rack condition bars ${buildings.showAgeBars ? 'on' : 'off'}`, 'goal');
 };
 // Panel actions that change a building can be undone.
 const recorded = (label: string, id: number, run: (x: number, y: number) => void, cue: SoundName = 'cash'): void =>
@@ -456,16 +498,25 @@ const buildingPanel = new BuildingPanel(document.body, {
   onRefurbish: (id) => withBuilding(id, (x, y) => {
     if (refurbishRack(state, x, y).ok) play('cash');
   }),
+  onBatteryMode: (mode) => {
+    setBatteryMode(state, mode);
+    play('click');
+  },
 });
 const stylePanel = new StylePanel(document.body, { onChoose: (id) => buyStyle(state, id) });
 const toggleStyle = (): void => {
   if (isUnlocked(state, 'room_styles')) stylePanel.toggle();
 };
 const staffPanel = new StaffPanel(document.body, {
-  onHire: (role) => {
-    if (hireStaff(state, role).ok) play('cash');
+  onHire: (id) => {
+    if (hireCandidate(state, id).ok) play('cash');
+    else play('error');
   },
   onFire: (id) => fireStaff(state, id),
+  onTrain: (id, specialism) => {
+    if (trainStaff(state, id, specialism).ok) play('research');
+    else play('error');
+  },
 });
 const networkPanel = new NetworkPanel(document.body, {
   onUpgrade: () => {
@@ -551,6 +602,14 @@ const menu = new Menu(document.body, settings, {
     sound.setEnabled(on);
     saveSettings(settings);
   },
+  onSetDifficulty: (difficulty) => {
+    setDifficulty(state, difficulty);
+    toasts.show(`<b>Difficulty: ${CONFIG.difficulty[difficulty].name}</b>`, 'goal');
+  },
+  onSetDayLighting: (on) => {
+    settings.dayLighting = on;
+    saveSettings(settings);
+  },
   onSetVolume: (volume) => {
     settings.volume = volume;
     sound.setVolume(volume);
@@ -601,10 +660,13 @@ const toolbar = new Toolbar(document.body, {
   onToggleGuide: () => guide.toggle(),
   onToggleResearch: toggleResearch,
   onToggleStats: () => statsPanel.toggle(),
+  onToggleRackList: () => rackList.toggle(),
+  onToggleAgeBars: toggleAgeBars,
   onUndo: undo,
 });
 
 function closePanels(): void {
+  rackList.toggle(false);
   carrying = null;
   toolbar.close();
   buildingPanel.close();
@@ -675,6 +737,7 @@ const updateInput = attachInput(renderer.domElement, rig, {
   onToggleGuide: () => guide.toggle(),
   onToggleResearch: toggleResearch,
   onToggleStats: () => statsPanel.toggle(),
+  onToggleRackList: () => rackList.toggle(),
   onUndo: undo,
   onRotate: () => {
     // Rotates the building whose panel is open, otherwise the next placement
@@ -792,6 +855,7 @@ function frame(now: number): void {
   multiblocks.sync(state);
   lots.update(state);
   room.update(state);
+  room.setTimeOfDay(settings.dayLighting && state.liveWorld ? hourOf(state.tick) : null);
   room.follow(rig.target);
   roomSale.update(state, rig.camera, renderer.domElement);
   heat.update(state);
@@ -803,6 +867,8 @@ function frame(now: number): void {
     staff: staffPanel.open,
     research: researchPanel.open,
     stats: statsPanel.open,
+    racklist: rackList.open,
+    agebars: buildings.showAgeBars,
     style: stylePanel.open,
     wallHeight: walls.tall,
     guide: guide.open,
@@ -815,10 +881,11 @@ function frame(now: number): void {
   networkPanel.update(state);
   researchPanel.update(state);
   statsPanel.update(state);
+  rackList.update(state);
   const selected = buildingPanel.update(state);
   selection.set(selected ? { x: selected.x, y: selected.y } : null, 'inspect');
   announcer.update(state);
-  menu.update();
+  menu.update(state.difficulty);
   renderer.render(scene, rig.camera);
 
   requestAnimationFrame(frame);

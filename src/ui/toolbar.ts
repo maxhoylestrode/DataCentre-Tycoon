@@ -17,6 +17,8 @@ export interface ToolbarHandlers {
   onToggleGuide(): void;
   onToggleResearch(): void;
   onToggleStats(): void;
+  onToggleRackList(): void;
+  onToggleAgeBars(): void;
   onUndo(): void;
 }
 
@@ -46,7 +48,7 @@ const GROUPS: Group[] = [
 interface Toggle {
   id: GroupIcon;
   label: string;
-  hotkey: string;
+  hotkey?: string;
   unlockId: string;
   onClick: () => void;
 }
@@ -187,6 +189,8 @@ export class Toolbar {
       { id: 'staff', label: 'Staff', hotkey: 'T', unlockId: 'rack_basic', onClick: handlers.onToggleStaff },
       { id: 'research', label: 'Research', hotkey: 'Y', unlockId: 'research', onClick: handlers.onToggleResearch },
       { id: 'stats', label: 'Stats', hotkey: 'N', unlockId: 'rack_basic', onClick: handlers.onToggleStats },
+      { id: 'racklist', label: 'All racks', hotkey: 'J', unlockId: 'rack_basic', onClick: handlers.onToggleRackList },
+      { id: 'agebars', label: 'Rack condition bars', unlockId: 'rack_basic', onClick: handlers.onToggleAgeBars },
       { id: 'style', label: 'Style', hotkey: 'L', unlockId: 'room_styles', onClick: handlers.onToggleStyle },
       { id: 'wallHeight', label: 'Tall walls', hotkey: 'V', unlockId: 'wall_basic', onClick: handlers.onToggleWallHeight },
       { id: 'guide', label: 'Guide', hotkey: 'G', unlockId: 'rack_basic', onClick: handlers.onToggleGuide },
