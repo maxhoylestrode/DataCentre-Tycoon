@@ -75,6 +75,10 @@ describe('save and load', () => {
       repairDoneTick: null,
       upgrade: 0,
       parts: {},
+      rot: 0,
+      refreshedAtTick: 0,
+      lastServicedTick: 0,
+      buildRemaining: 0,
     });
     // No copies of content definitions (names, costs) in the save.
     for (const b of save.data.buildings) {

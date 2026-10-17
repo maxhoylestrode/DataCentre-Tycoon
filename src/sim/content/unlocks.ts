@@ -1,8 +1,8 @@
 import type { Unlock } from './types';
 
-// Every building, floor type and mechanic, and the level it unlocks at. The
-// build menu, tooltips and level-up popup all read from this table.
-// (Rack parts and room styles carry their own level in parts.ts / styles.ts.)
+// Every building, floor type, wall type and mechanic, and the level it
+// unlocks at. The build menu, tooltips and level-up popup all read from this
+// table. (Rack parts, internet lines and room styles carry their own level.)
 export const UNLOCKS: Unlock[] = [
   { id: 'rack_basic', type: 'building', level: 1 },
   { id: 'power_basic', type: 'building', level: 2 },
@@ -23,7 +23,15 @@ export const UNLOCKS: Unlock[] = [
     name: 'Heat map',
     description: 'See the temperature of every tile (H).',
   },
+  {
+    id: 'staff',
+    type: 'mechanic',
+    level: 3,
+    name: 'Hiring',
+    description: 'Hire engineers to build and repair faster, and technicians to service racks (Staff panel).',
+  },
   { id: 'plant_small', type: 'building', level: 3 },
+  { id: 'water_cooler', type: 'building', level: 3 },
   {
     id: 'room_styles',
     type: 'mechanic',
@@ -31,24 +39,42 @@ export const UNLOCKS: Unlock[] = [
     name: 'Room styles',
     description: 'Restyle floors, walls and lighting for prestige (L).',
   },
+  {
+    id: 'zones',
+    type: 'mechanic',
+    level: 4,
+    name: 'Zones',
+    description: 'Paint server rooms, staff rooms and storage. Staff rooms house more staff; storage speeds up engineers.',
+  },
+  { id: 'break_table', type: 'building', level: 4 },
+  { id: 'coffee_machine', type: 'building', level: 4 },
+  { id: 'lockers', type: 'building', level: 4 },
+  { id: 'shelving', type: 'building', level: 5 },
   { id: 'light_pillar', type: 'building', level: 5 },
   {
     id: 'contract_board',
     type: 'mechanic',
     level: 6,
     name: 'Contract board',
-    description: 'Sign customers who pay more for promised uptime (K).',
+    description: 'Clients walk in through your front door and queue at reception with contract offers (K).',
   },
+  { id: 'desk_reception', type: 'building', level: 6 },
+  { id: 'door_outside', type: 'wall', level: 6 },
   { id: 'plant_tree', type: 'building', level: 6 },
+  { id: 'sofa', type: 'building', level: 7 },
   { id: 'rack_performance', type: 'building', level: 8 },
-  { id: 'desk_reception', type: 'building', level: 8 },
   { id: 'wall_glass', type: 'wall', level: 8 },
   { id: 'cooling_inrow', type: 'building', level: 9 },
+  { id: 'arcade_cabinet', type: 'building', level: 9 },
   { id: 'sign_company', type: 'building', level: 10 },
   { id: 'chiller', type: 'building', level: 11 },
   { id: 'floor_vent', type: 'floor', level: 11 },
+  { id: 'neon_sign', type: 'building', level: 12 },
   { id: 'rack_enterprise', type: 'building', level: 14 },
+  { id: 'aquarium', type: 'building', level: 14 },
   { id: 'server_showcase', type: 'building', level: 15 },
+  { id: 'cooling_ac', type: 'building', level: 18 },
+  { id: 'trophy_case', type: 'building', level: 20 },
   { id: 'rack_gpu', type: 'building', level: 22 },
   { id: 'rack_hyperscale', type: 'building', level: 31 },
 ];

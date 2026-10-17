@@ -40,6 +40,91 @@ export const CONFIG = {
     // ...and keeps it offline for this many ticks (3 game hours).
     repairTicks: 180,
   },
+  // Electricity: billed per kW actually drawn, every tick. Bands are marginal
+  // (like tax bands): only the kW above `aboveKw` pay that band's rate, so
+  // the early game is cheap and big operations pay more per kW.
+  electricity: {
+    bands: [
+      { aboveKw: 0, perKwTick: 0.03 },
+      { aboveKw: 60, perKwTick: 0.05 },
+      { aboveKw: 200, perKwTick: 0.08 },
+      { aboveKw: 600, perKwTick: 0.12 },
+    ],
+  },
+  // Market saturation: walk-in customers run out as you grow. Walk-in racks
+  // beyond `freeRacks` earn less: factor = (freeRacks / n) ^ exponent, never
+  // below `minFactor`. Racks serving contracts don't count.
+  market: {
+    freeRacks: 12,
+    exponent: 0.45,
+    minFactor: 0.3,
+  },
+  // Hardware ageing: a rack earns less as its CPU gets older (newer tech
+  // arrives). Upgrading the CPU or refurbishing resets the age.
+  ageing: {
+    // Earning power lost per game month (30 days), down to `floor`.
+    lossPerMonth: 0.06,
+    floor: 0.55,
+    ticksPerMonth: 43_200,
+    // Refurbishing costs this fraction of the rack's price plus its CPU's price.
+    refurbishFraction: 0.3,
+  },
+  // Network: one internet line (uplink) for the whole company, see
+  // content/uplinks.ts. Each running rack uses bandwidth: its network card's
+  // Gbps × average utilisation × servers in the rack. Demand over the line's
+  // speed slows income and contract service like a brownout.
+  network: {
+    utilisation: 0.03,
+  },
+  // Power units in a full 2×2 square form a multiblock, each producing this
+  // much more.
+  multiblock: {
+    bonus: 0.25,
+  },
+  // Staff: engineers build and repair, technicians service racks. Hiring is a
+  // one-off fee; wages are paid every tick. The founder engineer is free.
+  staff: {
+    roles: {
+      engineer: { name: 'Engineer', hireFee: 2_500, wagePerTick: 0.6 },
+      technician: { name: 'Technician', hireFee: 1_800, wagePerTick: 0.45 },
+    },
+    // Tiles per tick at full speed. 0.15 = 1.5 tiles a second at 1x.
+    walkSpeed: 0.15,
+    // Staff the company can house without a staff room; each break table in
+    // a staff room (with a coffee machine) adds `perBreakTable`.
+    baseCapacity: 2,
+    perBreakTable: 4,
+    // Over capacity, everyone works and walks this much slower.
+    tiredSpeed: 0.7,
+    // Without a storage room (zone with shelving), building and repairs take this much longer.
+    noStorageSlowdown: 1.5,
+  },
+  // Building takes an engineer this many ticks of work on site (plus walking).
+  // Racks scale with tier. Walls and floor tiles are instant.
+  construction: {
+    rackTicksBase: 50,
+    rackTicksPerTier: 12,
+    otherTicks: 35,
+    smallTicks: 15,
+  },
+  // Racks need servicing by a technician every `intervalTicks`. Overdue racks
+  // earn `overdueFactor` of their income until serviced.
+  maintenance: {
+    intervalTicks: 4_320,
+    workTicks: 40,
+    overdueFactor: 0.75,
+  },
+  // Clients: each contract offer is a person who walks in through an outside
+  // door and queues at a reception desk. Only clients who reach the desk
+  // can be signed.
+  clients: {
+    // Ticks between clients arriving each morning.
+    spawnGap: 25,
+  },
+  // Racks in a server zone get this much more income.
+  zones: {
+    serverRoomBonus: 0.05,
+  },
   // Every buildable thing, keyed by a stable id that saves and unlocks refer
   // to. Never rename an id once released; add a new one instead.
   // category decides behaviour: racks earn, power units supply, cooling cools.
@@ -107,20 +192,49 @@ export const CONFIG = {
       powerDraw: 3, powerSupply: 0, heatPerTick: 0,
       // Tuned so one unit keeps a 3x3 rack block warm but alive, two keep it cool.
       coolingStrength: 0.03, coolingRadius: 2,
-      upgrade: { output: 0.15, powerDraw: 0, heat: 0 },
+      upgrade: { output: 0.15, powerDraw: 0.08, heat: 0 },
     },
     cooling_inrow: {
       // Strong but short range: sits in a row of racks.
       name: 'In-row cooler', category: 'cooling', cost: 4900, upkeepPerTick: 0.8, incomePerTick: 0,
       powerDraw: 5, powerSupply: 0, heatPerTick: 0, coolingStrength: 0.08, coolingRadius: 1,
-      upgrade: { output: 0.15, powerDraw: 0, heat: 0 },
+      upgrade: { output: 0.15, powerDraw: 0.08, heat: 0 },
     },
     chiller: {
-      // Feeds floor vents within range. Does no cooling on its own.
+      // Feeds floor vents within range. Does no cooling on its own. Upgrades add
+      // chillerCapacityPerLevel vents per level and +1 range every 3 levels.
       name: 'Chiller', category: 'chiller', cost: 8400, upkeepPerTick: 1, incomePerTick: 0,
       powerDraw: 6, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
-      upgrade: { output: 0, powerDraw: 0, heat: 0 },
-      chillerRange: 4, chillerCapacity: 12,
+      upgrade: { output: 0.15, powerDraw: 0.08, heat: 0 },
+      chillerRange: 4, chillerCapacity: 12, chillerCapacityPerLevel: 3,
+    },
+    cooling_ac: {
+      // Cools every tile of its room (bounded by walls), gently. Expensive and power-hungry.
+      name: 'Room AC unit', category: 'cooling', cost: 60000, upkeepPerTick: 3, incomePerTick: 0,
+      powerDraw: 24, powerSupply: 0, heatPerTick: 0, coolingStrength: 0.022, coolingRadius: 99,
+      upgrade: { output: 0.15, powerDraw: 0.08, heat: 0 },
+    },
+    // Furniture for zones (see the zones section): a staff room needs break
+    // tables and a coffee machine; a storage room needs shelving.
+    break_table: {
+      name: 'Break table', category: 'furniture', cost: 900, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, zone: 'staff',
+    },
+    coffee_machine: {
+      name: 'Coffee machine', category: 'furniture', cost: 1500, upkeepPerTick: 0.05, incomePerTick: 0,
+      powerDraw: 0.5, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, zone: 'staff',
+    },
+    lockers: {
+      name: 'Staff lockers', category: 'furniture', cost: 700, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, zone: 'staff', prestige: 1,
+    },
+    shelving: {
+      name: 'Parts shelving', category: 'furniture', cost: 1200, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, zone: 'storage',
     },
     plant_small: {
       name: 'Potted plant', category: 'decor', cost: 420, upkeepPerTick: 0, incomePerTick: 0,
@@ -152,6 +266,36 @@ export const CONFIG = {
       powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 15,
     },
+    water_cooler: {
+      name: 'Water cooler', category: 'decor', cost: 600, upkeepPerTick: 0.01, incomePerTick: 0,
+      powerDraw: 0.2, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 1,
+    },
+    sofa: {
+      name: 'Lounge sofa', category: 'decor', cost: 2400, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 4,
+    },
+    arcade_cabinet: {
+      name: 'Arcade cabinet', category: 'decor', cost: 6000, upkeepPerTick: 0.03, incomePerTick: 0,
+      powerDraw: 0.6, powerSupply: 0, heatPerTick: 0.05, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 7,
+    },
+    neon_sign: {
+      name: 'Neon "ONLINE" sign', category: 'decor', cost: 9000, upkeepPerTick: 0.03, incomePerTick: 0,
+      powerDraw: 0.4, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 10,
+    },
+    aquarium: {
+      name: 'Aquarium', category: 'decor', cost: 14000, upkeepPerTick: 0.06, incomePerTick: 0,
+      powerDraw: 0.5, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 12,
+    },
+    trophy_case: {
+      name: 'Trophy case', category: 'decor', cost: 30000, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 20,
+    },
   },
   // Things painted on the floor layer, which can sit under buildings.
   floors: {
@@ -166,6 +310,8 @@ export const CONFIG = {
     wall_basic: { name: 'Wall', cost: 100 },
     wall_door: { name: 'Door', cost: 250 },
     wall_glass: { name: 'Glass wall', cost: 400 },
+    // Goes in an outer wall of the building. Clients and new staff arrive through it.
+    door_outside: { name: 'Front door', cost: 1500 },
   },
   wallHeights: {
     // Interior walls are drawn low by default so racks behind them stay
@@ -191,6 +337,8 @@ export const CONFIG = {
     // Applies to level upgrades and rack parts alike. Raised from 1 to 1.15
     // when upgrades felt too cheap.
     costMultiplier: 1.15,
+    // Scales the extra power every rack part draws: upgrades are power-hungry.
+    partPowerMultiplier: 1.6,
     // Scales the income every rack part adds. Lowered from 1 to 0.9 so
     // upgrades take longer to pay for themselves.
     partIncomeMultiplier: 0.9,
@@ -265,7 +413,11 @@ export const CONFIG = {
 
 export type Speed = (typeof CONFIG.time.speeds)[number];
 export type BuildingKind = keyof typeof CONFIG.buildings;
-export type BuildingCategory = 'rack' | 'power' | 'cooling' | 'chiller' | 'decor';
+export type BuildingCategory = 'rack' | 'power' | 'cooling' | 'chiller' | 'decor' | 'furniture';
+// Zones are painted onto tiles; see sim/zones.ts.
+export type ZoneKind = 'server' | 'staff' | 'storage';
+export const ZONE_KINDS: ZoneKind[] = ['server', 'staff', 'storage'];
+export type StaffRole = keyof typeof CONFIG.staff.roles;
 export const BUILDING_KINDS = Object.keys(CONFIG.buildings) as BuildingKind[];
 export type FloorKind = keyof typeof CONFIG.floors;
 export const FLOOR_KINDS = Object.keys(CONFIG.floors) as FloorKind[];
@@ -300,6 +452,9 @@ export interface BuildingDef {
   // Chillers only.
   readonly chillerRange?: number;
   readonly chillerCapacity?: number;
+  readonly chillerCapacityPerLevel?: number;
+  // Furniture only: the zone it serves.
+  readonly zone?: ZoneKind;
 }
 
 export interface FloorDef {

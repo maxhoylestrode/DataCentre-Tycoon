@@ -5,8 +5,19 @@
 // To change the format: bump SAVE_VERSION, add a migration from the previous
 // version to MIGRATIONS, and update readState. Never edit an old migration.
 
-import { buildingDef, CONFIG, isBuildingKind, isFloorKind, isWallKind, type Speed } from '../config';
-import { isInteriorEdge } from './walls';
+import {
+  buildingDef,
+  CONFIG,
+  isBuildingKind,
+  isFloorKind,
+  isWallKind,
+  type Speed,
+  type StaffRole,
+  ZONE_KINDS,
+  type ZoneKind,
+} from '../config';
+import { isValidWallEdge } from './walls';
+import { UPLINKS } from './content/uplinks';
 import { LOTS, STARTING_LOT } from './content/lots';
 import { MAP_HEIGHT, MAP_WIDTH } from './lots';
 import { ACHIEVEMENTS } from './content/achievements';
@@ -17,6 +28,10 @@ import { ROOM_STYLES } from './content/styles';
 import {
   type Building,
   type BuildingStatus,
+  type Client,
+  type StaffMember,
+  type StaffTaskKind,
+  type ZoneTile,
   type Contract,
   type ContractResult,
   type ContractsState,
@@ -40,7 +55,8 @@ import {
 // v5: racks upgrade through parts instead of levels; adds the floor layer and room style.
 // v6: adds interior walls.
 // v7: adds rooms (owned lots); the map grows to fit every lot.
-export const SAVE_VERSION = 7;
+// v8: staff, clients, zones, internet line, building rotation, ageing, maintenance and construction.
+export const SAVE_VERSION = 8;
 
 // Part ids as they were when v5 was introduced. Hard-coded so this migration
 // never changes if the parts catalogue does later.
@@ -109,6 +125,22 @@ const MIGRATIONS: Record<number, (data: Data) => Data> = {
   }),
   5: (data) => ({ ...data, walls: [] }),
   6: (data) => ({ ...data, ownedLots: ['lot_0_0'] }),
+  // Real games (at least one room in size) switch on the people simulation
+  // and get their founder engineer. Hardware and maintenance clocks start
+  // fresh so nothing is suddenly old or overdue.
+  7: (data) => {
+    const real = typeof data.width === 'number' && data.width >= CONFIG.lots.width;
+    const tick = typeof data.tick === 'number' ? data.tick : 0;
+    return {
+      ...data,
+      staffSim: real,
+      staff: real ? [{ id: 1, role: 'engineer', founder: true, x: 1, y: 1 }] : [],
+      nextStaffId: 2,
+      buildings: Array.isArray(data.buildings)
+        ? data.buildings.map((b: unknown) => (isObject(b) ? { ...b, refreshedAtTick: tick, lastServicedTick: tick } : b))
+        : data.buildings,
+    };
+  },
 };
 
 export function serialize(state: GameState, now: Date = new Date()): string {
@@ -135,7 +167,22 @@ export function serialize(state: GameState, now: Date = new Date()): string {
         repairDoneTick: b.repairDoneTick,
         upgrade: b.upgrade,
         parts: { ...b.parts },
+        rot: b.rot,
+        refreshedAtTick: b.refreshedAtTick,
+        lastServicedTick: b.lastServicedTick,
+        buildRemaining: b.buildRemaining,
       })),
+      uplink: state.uplink,
+      zones: state.zones.map((z) => ({ kind: z.kind, x: z.x, y: z.y })),
+      staffSim: state.staffSim,
+      // Staff and clients are saved with where they stand; their routes are
+      // recalculated after loading.
+      staff: state.staff.map((s) => ({
+        id: s.id, role: s.role, founder: s.founder, x: s.x, y: s.y, task: s.task ? { ...s.task } : null,
+      })),
+      nextStaffId: state.nextStaffId,
+      clients: state.clients.map((c) => ({ id: c.id, offerId: c.offerId, x: c.x, y: c.y, state: c.state, spawnTick: c.spawnTick })),
+      nextClientId: state.nextClientId,
       floor: state.floor.map((f) => ({ kind: f.kind, x: f.x, y: f.y })),
       walls: state.walls.map((w) => ({ kind: w.kind, x: w.x, y: w.y, dir: w.dir })),
       ownedLots: [...state.ownedLots],
@@ -233,13 +280,96 @@ function readState(data: Data): GameState {
     }
   }
   state.ownedLots = readOwnedLots(data.ownedLots);
+  state.staffSim = data.staffSim === true;
+  state.uplink = typeof data.uplink === 'string' && UPLINKS.some((u) => u.id === data.uplink) ? data.uplink : UPLINKS[0]!.id;
+  state.zones = readZones(data.zones, state);
+  state.staff = readStaff(data.staff, state);
+  // A people-simulated game always has its founder.
+  if (state.staffSim && !state.staff.some((s) => s.founder)) {
+    state.staff.unshift({ id: 0, role: 'engineer', founder: true, x: 1, y: 1, path: [], task: null });
+  }
+  state.nextStaffId = Math.max(
+    state.staff.reduce((m, s) => Math.max(m, s.id), 0) + 1,
+    intIn(data.nextStaffId, 1, Number.MAX_SAFE_INTEGER) ?? 1,
+  );
   state.floor = readFloor(data.floor, width, height);
   state.walls = readWalls(data.walls, state);
   state.style = readStyle(data.style);
   state.progress = readProgress(data.progress);
   state.contracts = readContracts(data.contracts);
   state.rngSeed = intIn(data.rngSeed, -(2 ** 31), 2 ** 31 - 1) ?? 1;
+  state.clients = readClients(data.clients, state);
+  state.nextClientId = Math.max(
+    state.clients.reduce((m, c) => Math.max(m, c.id), 0) + 1,
+    intIn(data.nextClientId, 1, Number.MAX_SAFE_INTEGER) ?? 1,
+  );
+  // Tasks on buildings that no longer exist are dropped.
+  const ids = new Set(state.buildings.map((b) => b.id));
+  for (const s of state.staff) if (s.task && !ids.has(s.task.buildingId)) s.task = null;
   return state;
+}
+
+function readZones(raw: unknown, state: GameState): ZoneTile[] {
+  const zones: ZoneTile[] = [];
+  const seen = new Set<string>();
+  for (const item of Array.isArray(raw) ? raw : []) {
+    if (!isObject(item) || !ZONE_KINDS.includes(item.kind as ZoneKind)) continue;
+    const x = intIn(item.x, 0, state.width - 1);
+    const y = intIn(item.y, 0, state.height - 1);
+    if (x === null || y === null || seen.has(`${x},${y}`)) continue;
+    seen.add(`${x},${y}`);
+    zones.push({ kind: item.kind as ZoneKind, x, y });
+  }
+  return zones;
+}
+
+const TASK_KINDS: StaffTaskKind[] = ['build', 'repair', 'service'];
+
+function readStaff(raw: unknown, state: GameState): StaffMember[] {
+  const staff: StaffMember[] = [];
+  for (const item of Array.isArray(raw) ? raw : []) {
+    if (!isObject(item) || typeof item.role !== 'string' || !Object.hasOwn(CONFIG.staff.roles, item.role)) continue;
+    const id = intIn(item.id, 1, Number.MAX_SAFE_INTEGER);
+    if (id === null) continue;
+    const t = isObject(item.task) ? item.task : null;
+    const task =
+      t && TASK_KINDS.includes(t.kind as StaffTaskKind) && intIn(t.buildingId, 1, Number.MAX_SAFE_INTEGER) !== null
+        ? { kind: t.kind as StaffTaskKind, buildingId: t.buildingId as number, workLeft: Math.max(0, finite(t.workLeft) ?? 0) }
+        : null;
+    staff.push({
+      id,
+      role: item.role as StaffRole,
+      founder: item.founder === true,
+      x: clamp(finite(item.x) ?? 1, 0, state.width - 1),
+      y: clamp(finite(item.y) ?? 1, 0, state.height - 1),
+      path: [],
+      task,
+    });
+  }
+  return staff;
+}
+
+function readClients(raw: unknown, state: GameState): Client[] {
+  const offers = new Set(state.contracts.offers.map((o) => o.id));
+  const clients: Client[] = [];
+  for (const item of Array.isArray(raw) ? raw : []) {
+    if (!isObject(item)) continue;
+    const id = intIn(item.id, 1, Number.MAX_SAFE_INTEGER);
+    const offerId = intIn(item.offerId, 1, Number.MAX_SAFE_INTEGER);
+    const st = item.state;
+    if (id === null || offerId === null || (st !== 'entering' && st !== 'waiting' && st !== 'leaving')) continue;
+    // A client whose offer is gone just leaves.
+    const clientState = offers.has(offerId) || st === 'leaving' ? st : 'leaving';
+    clients.push({
+      id, offerId, x: finite(item.x) ?? 0, y: finite(item.y) ?? 0, path: [],
+      state: clientState, spawnTick: finite(item.spawnTick) ?? 0,
+    });
+  }
+  return clients;
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
 }
 
 // Offers and contracts carry their own rolled numbers, so they stay valid
@@ -309,6 +439,7 @@ function readTerms(raw: unknown): ContractTerms | null {
     penalty: Math.max(0, finite(raw.penalty) ?? 0),
     xp: Math.max(0, finite(raw.xp) ?? 0),
     ...readRequirement(raw.requirement),
+    ...(raw.arrived === true ? { arrived: true } : {}),
   };
 }
 
@@ -355,7 +486,7 @@ function readWalls(raw: unknown, state: GameState): WallSegment[] {
     if (dir !== 'h' && dir !== 'v') continue;
     const x = finite(item.x);
     const y = finite(item.y);
-    if (x === null || y === null || !isInteriorEdge(state, x, y, dir)) continue;
+    if (x === null || y === null || !isValidWallEdge(state, item.kind, x, y, dir)) continue;
     const key = `${x},${y},${dir}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -403,7 +534,7 @@ function uniqueKnown(raw: unknown, known: Set<string>): string[] {
   return [...new Set(raw.filter((id): id is string => typeof id === 'string' && known.has(id)))];
 }
 
-const STATUSES: BuildingStatus[] = ['ok', 'failed', 'repairing'];
+const STATUSES: BuildingStatus[] = ['building', 'ok', 'failed', 'repairing'];
 
 function readBuilding(raw: unknown, width: number, height: number): Building | null {
   if (!isObject(raw) || typeof raw.kind !== 'string' || !isBuildingKind(raw.kind)) return null;
@@ -427,7 +558,14 @@ function readBuilding(raw: unknown, width: number, height: number): Building | n
       if (part && part.slot === slot) parts[slot] = part.id;
     }
   }
-  return { id, kind: raw.kind, x, y, builtAtTick: finite(raw.builtAtTick) ?? 0, status, repairDoneTick, upgrade, parts };
+  const builtAtTick = finite(raw.builtAtTick) ?? 0;
+  return {
+    id, kind: raw.kind, x, y, builtAtTick, status, repairDoneTick, upgrade, parts,
+    rot: intIn(raw.rot, 0, 3) ?? 0,
+    refreshedAtTick: finite(raw.refreshedAtTick) ?? builtAtTick,
+    lastServicedTick: finite(raw.lastServicedTick) ?? builtAtTick,
+    buildRemaining: status === 'building' ? Math.max(0, finite(raw.buildRemaining) ?? 0) : 0,
+  };
 }
 
 function isObject(v: unknown): v is Data {

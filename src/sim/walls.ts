@@ -25,6 +25,20 @@ export function isInteriorEdge(state: GameState, x: number, y: number, dir: 'h' 
   return isOwnedTile(state, x1, y1) && isOwnedTile(state, x2, y2);
 }
 
+// An edge on the building's outside: owned on one side, outside (off the map
+// or an unowned room) on the other. Front doors go here.
+export function isPerimeterEdge(state: GameState, x: number, y: number, dir: 'h' | 'v'): boolean {
+  if (!Number.isInteger(x) || !Number.isInteger(y)) return false;
+  const [[x1, y1], [x2, y2]] = edgeTiles(x, y, dir);
+  return isOwnedTile(state, x1, y1) !== isOwnedTile(state, x2, y2);
+}
+
+// Where a wall of this kind may go: front doors on the outside, everything
+// else inside.
+export function isValidWallEdge(state: GameState, kind: string, x: number, y: number, dir: 'h' | 'v'): boolean {
+  return kind === 'door_outside' ? isPerimeterEdge(state, x, y, dir) : isInteriorEdge(state, x, y, dir);
+}
+
 export function isRoomBoundaryEdge(state: GameState, x: number, y: number, dir: 'h' | 'v'): boolean {
   const [[x1, y1], [x2, y2]] = edgeTiles(x, y, dir);
   return isLotBoundary(state, x1, y1, x2, y2);

@@ -1,7 +1,7 @@
 // A building's actual numbers after upgrades and parts. Everything in the
 // sim reads these rather than the raw config, so upgrades apply everywhere.
 
-import { buildingDef, CONFIG, type PartSlot } from '../config';
+import { type BuildingKind, buildingDef, CONFIG, type PartSlot } from '../config';
 import { PARTS } from './content/parts';
 import type { ContractRequirement, Part } from './content/types';
 import type { Building, GameState } from './state';
@@ -62,8 +62,58 @@ export function partContribution(building: Building, part: Part): { income: numb
   const def = buildingDef(building.kind);
   return {
     income: part.income * U.partIncomeMultiplier * (def.partMultiplier ?? 1),
-    powerDraw: part.powerDraw * (def.powerFactor ?? 1),
+    powerDraw: part.powerDraw * U.partPowerMultiplier * (def.powerFactor ?? 1),
   };
+}
+
+// How long an engineer works on site to build this, in ticks.
+export function buildTicks(kind: BuildingKind): number {
+  const def = buildingDef(kind);
+  const C = CONFIG.construction;
+  if (def.category === 'rack') return C.rackTicksBase + C.rackTicksPerTier * (def.tier ?? 1);
+  if (def.category === 'decor' || def.category === 'furniture') return C.smallTicks;
+  return C.otherTicks;
+}
+
+// Hardware ageing: 1 for a fresh CPU, falling to the floor as it gets older.
+export function ageFactor(state: GameState, rack: Building): number {
+  const A = CONFIG.ageing;
+  const months = Math.max(0, state.tick - rack.refreshedAtTick) / A.ticksPerMonth;
+  return Math.max(A.floor, 1 - A.lossPerMonth * months);
+}
+
+// Price to refurbish a rack (reset its age without a new CPU).
+export function refurbishCost(rack: Building): number {
+  const cpu = installedPart(rack, 'cpu');
+  const cpuPrice = cpu ? partCost(rack, cpu) : 0;
+  return Math.round(((buildingDef(rack.kind).cost + cpuPrice) * CONFIG.ageing.refurbishFraction) / 10) * 10;
+}
+
+// Maintenance: racks not serviced for longer than the interval earn less.
+// Only applies when staff are simulated.
+export function isOverdue(state: GameState, rack: Building): boolean {
+  return state.staffSim && state.tick - rack.lastServicedTick > CONFIG.maintenance.intervalTicks;
+}
+
+export function maintenanceFactor(state: GameState, rack: Building): number {
+  return isOverdue(state, rack) ? CONFIG.maintenance.overdueFactor : 1;
+}
+
+// Chillers feed more vents per level, and reach one tile further every 3 levels.
+export function chillerCapacity(chiller: Building): number {
+  const def = buildingDef(chiller.kind);
+  return (def.chillerCapacity ?? 0) + (def.chillerCapacityPerLevel ?? 0) * chiller.upgrade;
+}
+
+export function chillerRange(chiller: Building): number {
+  return (buildingDef(chiller.kind).chillerRange ?? 0) + Math.floor(chiller.upgrade / 3);
+}
+
+// Bandwidth a running rack uses, in Mbps: card speed × utilisation × servers.
+export function rackBandwidth(rack: Building): number {
+  const nic = installedPart(rack, 'network');
+  const gbps = nic?.gbps ?? 1;
+  return gbps * 1000 * CONFIG.network.utilisation * (buildingDef(rack.kind).partMultiplier ?? 1);
 }
 
 export function buildingStats(building: Building, level: number = building.upgrade): BuildingStats {
@@ -90,7 +140,7 @@ export function buildingStats(building: Building, level: number = building.upgra
       const part = installedPart(building, slot);
       if (!part) continue;
       income += part.income * U.partIncomeMultiplier;
-      powerDraw += part.powerDraw;
+      powerDraw += part.powerDraw * U.partPowerMultiplier;
       heat += part.heat;
       heatReduction = Math.max(heatReduction, part.heatReduction ?? 0);
     }

@@ -1,7 +1,7 @@
 // Underfloor cooling: floor vents only work while a working chiller within
 // range has spare capacity to feed them.
 
-import { buildingDef } from '../config';
+import { chillerCapacity, chillerRange } from './buildings';
 import { type Building, categoryOf, type GameState, isRunning } from './state';
 
 export interface VentFeed {
@@ -12,8 +12,7 @@ export interface VentFeed {
 }
 
 function inRange(chiller: Building, x: number, y: number): boolean {
-  const range = buildingDef(chiller.kind).chillerRange ?? 0;
-  return Math.max(Math.abs(chiller.x - x), Math.abs(chiller.y - y)) <= range;
+  return Math.max(Math.abs(chiller.x - x), Math.abs(chiller.y - y)) <= chillerRange(chiller);
 }
 
 // Vents are fed in the order they were placed, each by the first chiller
@@ -26,7 +25,7 @@ export function feedVents(state: GameState): VentFeed {
   for (const vent of state.floor) {
     if (vent.kind !== 'floor_vent') continue;
     const chiller = chillers.find(
-      (c) => inRange(c, vent.x, vent.y) && load.get(c.id)! < (buildingDef(c.kind).chillerCapacity ?? 0),
+      (c) => inRange(c, vent.x, vent.y) && load.get(c.id)! < chillerCapacity(c),
     );
     if (!chiller) continue;
     load.set(chiller.id, load.get(chiller.id)! + 1);

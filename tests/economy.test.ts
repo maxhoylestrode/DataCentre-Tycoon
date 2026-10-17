@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { testState } from './helpers';
 import { CONFIG } from '../src/config';
-import { applyEconomy, costsPerTick, incomePerTick, netIncomePerTick, rackFill } from '../src/sim/economy';
+import { applyEconomy, costBreakdown, costsPerTick, incomePerTick, netIncomePerTick, rackFill } from '../src/sim/economy';
 import { placeBuilding } from '../src/sim/commands';
 import { getBuildingAt } from '../src/sim/state';
 
@@ -46,12 +46,14 @@ describe('economy', () => {
     const state = testState(5, 5);
     state.cash = 100_000;
     const m = E.runningCostMultiplier;
-    expect(costsPerTick(state)).toBeCloseTo(E.rentPerTick * m);
+    // The internet line and electricity are billed too; this test is about rent and upkeep.
+    const other = (): number => costBreakdown(state).network + costBreakdown(state).electricity;
+    expect(costsPerTick(state) - other()).toBeCloseTo(E.rentPerTick * m);
     placeBuilding(state, 'rack_basic', 0, 0);
     placeBuilding(state, 'power_basic', 1, 0);
     placeBuilding(state, 'cooling_fan', 2, 0);
     getBuildingAt(state, 0, 0)!.status = 'failed';
-    expect(costsPerTick(state)).toBeCloseTo(
+    expect(costsPerTick(state) - other()).toBeCloseTo(
       (E.rentPerTick + B.rack_basic.upkeepPerTick + B.power_basic.upkeepPerTick + B.cooling_fan.upkeepPerTick) * m,
     );
   });

@@ -3,10 +3,12 @@ import { refreshOffers } from './contractBoard';
 import { finishContracts, recordService } from './contracts';
 import { costsPerTick, incomeBreakdown } from './economy';
 import { failOverheatedRacks, stepHeat } from './heat';
+import { stepClients, stepStaff } from './people';
 import { powerEfficiency } from './power';
 import { checkProgress, endDay, recordTick } from './progression';
 import type { GameState } from './state';
 
+// Timed repairs (when staff aren't simulated; otherwise engineers do them).
 function completeRepairs(state: GameState): void {
   for (const b of state.buildings) {
     if (b.status === 'repairing' && b.repairDoneTick !== null && state.tick >= b.repairDoneTick) {
@@ -21,6 +23,8 @@ export function tick(state: GameState): void {
   if (state.bankrupt) return;
 
   completeRepairs(state);
+  stepStaff(state);
+  stepClients(state);
   stepHeat(state, powerEfficiency(state));
   failOverheatedRacks(state);
 

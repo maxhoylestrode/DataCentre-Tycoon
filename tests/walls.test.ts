@@ -40,11 +40,16 @@ describe('placing walls', () => {
     expect(placeWall(state, 'wall_basic', 1.5, 3, 'v').ok).toBe(false);
   });
 
-  it('one wall per edge, but walls and buildings can share a tile', () => {
+  it('one wall per edge (placing another kind swaps it), and walls and buildings can share a tile', () => {
     const state = wallState();
     placeBuilding(state, 'rack_basic', 3, 3);
     expect(placeWall(state, 'wall_basic', 3, 3, 'v').ok).toBe(true);
-    expect(placeWall(state, 'wall_glass', 3, 3, 'v')).toEqual({ ok: false, reason: 'occupied' });
+    expect(placeWall(state, 'wall_basic', 3, 3, 'v')).toEqual({ ok: false, reason: 'occupied' });
+    // A door on an existing wall replaces it, paying the difference.
+    const cash = state.cash;
+    expect(placeWall(state, 'wall_door', 3, 3, 'v')).toEqual({ ok: true });
+    expect(state.walls.filter((w) => w.x === 3 && w.y === 3 && w.dir === 'v')).toEqual([{ kind: 'wall_door', x: 3, y: 3, dir: 'v' }]);
+    expect(state.cash).toBe(cash - (CONFIG.walls.wall_door.cost - CONFIG.walls.wall_basic.cost * CONFIG.economy.sellRefund));
     expect(placeWall(state, 'wall_basic', 3, 3, 'h').ok).toBe(true);
   });
 

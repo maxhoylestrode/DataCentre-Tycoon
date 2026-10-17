@@ -37,12 +37,12 @@ export const PARTS: Part[] = [
   { id: 'sto_nvme_d7_p5520', slot: 'storage', brand: 'Solidigm', model: 'D7-P5520 NVMe', specs: '8 × 15.36 TB', level: 27, cost: 16000, income: 3.3, powerDraw: 0.4, heat: 0.04 },
 
   // Network
-  { id: 'net_1g_i350', slot: 'network', brand: 'Intel', model: 'I350', specs: '1 GbE', level: 1, cost: 0, income: 0, powerDraw: 0, heat: 0 },
-  { id: 'net_10g_x710', slot: 'network', brand: 'Intel', model: 'X710', specs: '10 GbE', level: 3, cost: 500, income: 0.3, powerDraw: 0, heat: 0 },
-  { id: 'net_25g_cx4', slot: 'network', brand: 'Mellanox', model: 'ConnectX-4 Lx', specs: '25 GbE', level: 7, cost: 1300, income: 0.7, powerDraw: 0.05, heat: 0 },
-  { id: 'net_100g_cx6', slot: 'network', brand: 'Mellanox', model: 'ConnectX-6', specs: '100 GbE', level: 13, cost: 3200, income: 1.3, powerDraw: 0.15, heat: 0.01 },
-  { id: 'net_200g_cx7', slot: 'network', brand: 'NVIDIA', model: 'ConnectX-7', specs: '200 GbE', level: 19, cost: 7000, income: 2.0, powerDraw: 0.25, heat: 0.02 },
-  { id: 'net_400g_cx7', slot: 'network', brand: 'NVIDIA', model: 'ConnectX-7 (2 × 200G)', specs: '400 GbE', level: 25, cost: 13000, income: 2.8, powerDraw: 0.35, heat: 0.03 },
+  { id: 'net_1g_i350', slot: 'network', gbps: 1, brand: 'Intel', model: 'I350', specs: '1 GbE', level: 1, cost: 0, income: 0, powerDraw: 0, heat: 0 },
+  { id: 'net_10g_x710', slot: 'network', gbps: 10, brand: 'Intel', model: 'X710', specs: '10 GbE', level: 3, cost: 500, income: 0.3, powerDraw: 0, heat: 0 },
+  { id: 'net_25g_cx4', slot: 'network', gbps: 25, brand: 'Mellanox', model: 'ConnectX-4 Lx', specs: '25 GbE', level: 7, cost: 1300, income: 0.7, powerDraw: 0.05, heat: 0 },
+  { id: 'net_100g_cx6', slot: 'network', gbps: 100, brand: 'Mellanox', model: 'ConnectX-6', specs: '100 GbE', level: 13, cost: 3200, income: 1.3, powerDraw: 0.15, heat: 0.01 },
+  { id: 'net_200g_cx7', slot: 'network', gbps: 200, brand: 'NVIDIA', model: 'ConnectX-7', specs: '200 GbE', level: 19, cost: 7000, income: 2.0, powerDraw: 0.25, heat: 0.02 },
+  { id: 'net_400g_cx7', slot: 'network', gbps: 400, brand: 'NVIDIA', model: 'ConnectX-7 (2 × 200G)', specs: '400 GbE', level: 25, cost: 13000, income: 2.8, powerDraw: 0.35, heat: 0.03 },
 
   // GPU (GPU compute racks only; the rack's base numbers include the stock T4)
   { id: 'gpu_t4', slot: 'gpu', brand: 'NVIDIA', model: 'T4', specs: '16 GB', level: 22, cost: 0, income: 0, powerDraw: 0, heat: 0 },

@@ -5,6 +5,7 @@ import { CONFIG } from '../config';
 import { CUSTOMER_NAME_PREFIXES, CUSTOMER_TYPES } from './content/customers';
 import type { CustomerType, Range } from './content/types';
 import { isUnlocked, levelOf } from './progression';
+import { dismissClient, spawnClients } from './people';
 import { prestigeExtraOffers, prestigePayBonus } from './prestige';
 import { pick, randomInt, randomRange } from './rng';
 import { type ContractTerms, dayOf, type GameState } from './state';
@@ -68,10 +69,15 @@ export function refreshOffers(state: GameState): void {
   if (state.contracts.offersDay === day) return;
 
   const types = availableCustomerTypes(levelOf(state));
+  // Yesterday's clients who didn't sign go home.
+  for (const old of state.contracts.offers) dismissClient(state, old.id, false);
   state.contracts.offers = [];
   const count = CONFIG.contracts.offersPerDay + prestigeExtraOffers(state);
   for (let i = 0; i < count && types.length > 0; i++) {
-    state.contracts.offers.push(rollOffer(state, pick(state, types)));
+    // With people simulated, an offer can only be signed once its client
+    // has walked in and reached reception.
+    state.contracts.offers.push({ ...rollOffer(state, pick(state, types)), arrived: !state.staffSim });
   }
+  spawnClients(state, state.contracts.offers.map((o) => o.id));
   state.contracts.offersDay = day;
 }

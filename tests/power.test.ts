@@ -59,6 +59,8 @@ describe('power', () => {
     const count = Math.ceil(CONFIG.power.baseSupply / B.rack_basic.powerDraw) + 2;
     for (let i = 0; i < count; i++) placeBuilding(state, 'rack_basic', i, 2);
     state.tick = CONFIG.economy.rackRampTicks;
+    // Fresh hardware, so ageing doesn't blur the brownout maths.
+    for (const b of state.buildings) b.refreshedAtTick = state.tick;
 
     const efficiency = CONFIG.power.baseSupply / (count * B.rack_basic.powerDraw);
     expect(powerEfficiency(state)).toBeCloseTo(efficiency);

@@ -9,6 +9,7 @@ import { totalXpForLevel } from '../src/sim/progression';
 import { nextRandom, randomInt } from '../src/sim/rng';
 import { type ContractTerms, createInitialState, type GameState, getBuildingAt } from '../src/sim/state';
 import { tick } from '../src/sim/tick';
+import { fastNetwork } from './helpers';
 
 const DAY = CONFIG.time.ticksPerDay;
 const BOARD_LEVEL = 6;
@@ -19,6 +20,7 @@ function boardState(racks = 4, seed = 1): GameState {
   const state = createInitialState(20, 14, seed);
   state.cash = 1_000_000;
   state.progress.xp = totalXpForLevel(BOARD_LEVEL);
+  fastNetwork(state);
   placeBuilding(state, 'power_basic', 19, 13);
   placeBuilding(state, 'power_basic', 18, 13);
   for (let i = 0; i < racks; i++) placeBuilding(state, 'rack_basic', 1 + (i % 5) * 4, 1 + Math.floor(i / 5) * 4);

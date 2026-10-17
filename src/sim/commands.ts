@@ -12,21 +12,27 @@ import {
   isWallKind,
   type PartSlot,
   type Speed,
+  type StaffRole,
   type WallKind,
+  type ZoneKind,
 } from '../config';
-import { isInteriorEdge, isRoomBoundaryEdge, wallAt } from './walls';
+import { isRoomBoundaryEdge, isValidWallEdge, wallAt } from './walls';
+import { nextUplink } from './network';
+import { dismissClient, entrance } from './people';
 import { isOwnedTile, nextLotPrice, purchasableLots } from './lots';
 import { ROOM_STYLES } from './content/styles';
 import { contractBoardOpen, refreshOffers } from './contractBoard';
 import { cancelActiveContract, canTakeOffer } from './contracts';
 import { canAfford, repairCost } from './economy';
-import { investedValue, nextPart, partCost, slotsOf, upgradeCost } from './buildings';
+import { buildTicks, investedValue, nextPart, partCost, refurbishCost, slotsOf, upgradeCost } from './buildings';
 import { awardBuildXp, checkProgress, isUnlocked, levelOf, upgradeCap } from './progression';
 import { categoryOf, floorAt, type GameState, getBuildingAt, isInBounds } from './state';
 
 export type CommandResult = { ok: true } | { ok: false; reason: string };
 
-export function placeBuilding(state: GameState, kind: BuildingKind, x: number, y: number): CommandResult {
+// With staff simulated, a new building waits for an engineer to come and
+// build it; otherwise it's ready at once. rot is the facing in quarter turns.
+export function placeBuilding(state: GameState, kind: BuildingKind, x: number, y: number, rot = 0): CommandResult {
   if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
   if (!isBuildingKind(kind)) return { ok: false, reason: 'unknown_kind' };
   if (!isUnlocked(state, kind)) return { ok: false, reason: 'locked' };
@@ -42,10 +48,14 @@ export function placeBuilding(state: GameState, kind: BuildingKind, x: number, y
     x,
     y,
     builtAtTick: state.tick,
-    status: 'ok',
+    status: state.staffSim ? 'building' : 'ok',
     repairDoneTick: null,
     upgrade: 0,
     parts: {},
+    rot: ((Math.round(rot) % 4) + 4) % 4,
+    refreshedAtTick: state.tick,
+    lastServicedTick: state.tick,
+    buildRemaining: state.staffSim ? buildTicks(kind) : 0,
   });
   state.nextBuildingId += 1;
   state.progress.stats.built += 1;
@@ -100,7 +110,8 @@ export function repairRack(state: GameState, x: number, y: number): CommandResul
 
   state.cash -= repairCost(rack);
   rack.status = 'repairing';
-  rack.repairDoneTick = state.tick + CONFIG.economy.repairTicks;
+  // With staff simulated an engineer comes and does the repair; otherwise it's on a timer.
+  rack.repairDoneTick = state.staffSim ? null : state.tick + CONFIG.economy.repairTicks;
   state.progress.stats.repairs += 1;
   afterProgress(state);
   return { ok: true };
@@ -121,6 +132,8 @@ export function upgradePart(state: GameState, x: number, y: number, slot: PartSl
 
   state.cash -= cost;
   rack.parts[slot] = part.id;
+  // A new CPU resets hardware ageing.
+  if (slot === 'cpu') rack.refreshedAtTick = state.tick;
   state.progress.stats.upgrades += 1;
   awardBuildXp(state);
   afterProgress(state);
@@ -211,20 +224,34 @@ export function removeFloor(state: GameState, x: number, y: number): CommandResu
   return { ok: true };
 }
 
-// Builds a wall on an interior edge between two tiles.
+// What placing this wall kind on this edge would cost: the price, less a
+// refund for any different wall it replaces. null when it can't go there.
+export function wallPlacementCost(state: GameState, kind: WallKind, x: number, y: number, dir: 'h' | 'v'): number | null {
+  if (!isValidWallEdge(state, kind, x, y, dir)) return null;
+  const existing = wallAt(state, x, y, dir);
+  if (existing?.kind === kind) return null;
+  // There's already a wall between rooms; only a doorway or glass can replace it.
+  if (!existing && kind === 'wall_basic' && isRoomBoundaryEdge(state, x, y, dir)) return null;
+  const refund = existing ? CONFIG.walls[existing.kind].cost * CONFIG.economy.sellRefund : 0;
+  return Math.max(0, CONFIG.walls[kind].cost - refund);
+}
+
+// Builds a wall on an edge between two tiles. Placing a different kind on
+// an existing wall swaps it (e.g. a door into a wall). Front doors go in the
+// building's outside walls.
 export function placeWall(state: GameState, kind: WallKind, x: number, y: number, dir: 'h' | 'v'): CommandResult {
   if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
   if (!isWallKind(kind)) return { ok: false, reason: 'unknown_kind' };
   if (!isUnlocked(state, kind)) return { ok: false, reason: 'locked' };
-  if (!isInteriorEdge(state, x, y, dir)) return { ok: false, reason: 'out_of_bounds' };
-  if (wallAt(state, x, y, dir)) return { ok: false, reason: 'occupied' };
-  // There's already a wall between rooms; only a doorway or glass can replace it.
-  if (kind === 'wall_basic' && isRoomBoundaryEdge(state, x, y, dir)) return { ok: false, reason: 'occupied' };
-  const cost = CONFIG.walls[kind].cost;
+  if (!isValidWallEdge(state, kind, x, y, dir)) return { ok: false, reason: 'out_of_bounds' };
+  const cost = wallPlacementCost(state, kind, x, y, dir);
+  if (cost === null) return { ok: false, reason: 'occupied' };
   if (state.cash < cost) return { ok: false, reason: 'insufficient_funds' };
 
   state.cash -= cost;
+  state.walls = state.walls.filter((w) => !(w.x === x && w.y === y && w.dir === dir));
   state.walls.push({ kind, x, y, dir });
+  afterProgress(state);
   return { ok: true };
 }
 
@@ -282,6 +309,7 @@ export function signContract(state: GameState, offerId: number): CommandResult {
   if (!contractBoardOpen(state)) return { ok: false, reason: 'locked' };
   const offer = state.contracts.offers.find((o) => o.id === offerId);
   if (!offer) return { ok: false, reason: 'no_offer' };
+  if (state.staffSim && !offer.arrived) return { ok: false, reason: 'client_not_here' };
   if (!canTakeOffer(state, offer)) return { ok: false, reason: 'not_enough_racks' };
 
   state.contracts.offers = state.contracts.offers.filter((o) => o.id !== offerId);
@@ -293,6 +321,7 @@ export function signContract(state: GameState, offerId: number): CommandResult {
     promisedRackTicks: 0,
   });
   state.progress.stats.contractsSigned += 1;
+  dismissClient(state, offerId, true);
   afterProgress(state);
   return { ok: true };
 }
@@ -302,6 +331,77 @@ export function cancelContract(state: GameState, contractId: number): CommandRes
   if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
   if (!cancelActiveContract(state, contractId)) return { ok: false, reason: 'no_contract' };
   afterProgress(state);
+  return { ok: true };
+}
+
+// Turns a building a quarter turn. Free; visual, except that a reception
+// desk's queue forms in front of it.
+export function rotateBuilding(state: GameState, x: number, y: number): CommandResult {
+  const building = getBuildingAt(state, x, y);
+  if (!building) return { ok: false, reason: 'empty' };
+  building.rot = (building.rot + 1) % 4;
+  return { ok: true };
+}
+
+// Resets a rack's hardware age without buying a new CPU.
+export function refurbishRack(state: GameState, x: number, y: number): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  const rack = getBuildingAt(state, x, y);
+  if (!rack || categoryOf(rack) !== 'rack') return { ok: false, reason: 'no_rack' };
+  if (rack.status !== 'ok') return { ok: false, reason: 'not_working' };
+  const cost = refurbishCost(rack);
+  if (state.cash < cost) return { ok: false, reason: 'insufficient_funds' };
+  state.cash -= cost;
+  rack.refreshedAtTick = state.tick;
+  state.progress.stats.refurbishes += 1;
+  afterProgress(state);
+  return { ok: true };
+}
+
+// Switches to the next faster internet line.
+export function upgradeUplink(state: GameState): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  const next = nextUplink(state);
+  if (!next) return { ok: false, reason: 'best_installed' };
+  if (next.level > levelOf(state)) return { ok: false, reason: 'locked' };
+  if (state.cash < next.cost) return { ok: false, reason: 'insufficient_funds' };
+  state.cash -= next.cost;
+  state.uplink = next.id;
+  afterProgress(state);
+  return { ok: true };
+}
+
+// Hires a staff member: pays the hiring fee now, and their wage every tick.
+export function hireStaff(state: GameState, role: StaffRole): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  if (!state.staffSim) return { ok: false, reason: 'no_staff' };
+  if (!isUnlocked(state, 'staff')) return { ok: false, reason: 'locked' };
+  const def = CONFIG.staff.roles[role];
+  if (!def) return { ok: false, reason: 'unknown_role' };
+  if (state.cash < def.hireFee) return { ok: false, reason: 'insufficient_funds' };
+  state.cash -= def.hireFee;
+  const [x, y] = entrance(state);
+  state.staff.push({ id: state.nextStaffId++, role, founder: false, x, y, path: [], task: null });
+  state.progress.stats.staffHired += 1;
+  afterProgress(state);
+  return { ok: true };
+}
+
+// Lets a staff member go: their wage stops; the hiring fee isn't refunded.
+export function fireStaff(state: GameState, staffId: number): CommandResult {
+  const member = state.staff.find((s) => s.id === staffId);
+  if (!member) return { ok: false, reason: 'no_staff' };
+  if (member.founder) return { ok: false, reason: 'founder' };
+  state.staff = state.staff.filter((s) => s !== member);
+  return { ok: true };
+}
+
+// Paints (or, with null, clears) a zone on an owned tile. Free.
+export function paintZone(state: GameState, kind: ZoneKind | null, x: number, y: number): CommandResult {
+  if (!isInBounds(state, x, y) || !isOwnedTile(state, x, y)) return { ok: false, reason: 'not_owned' };
+  if (kind !== null && !isUnlocked(state, 'zones')) return { ok: false, reason: 'locked' };
+  state.zones = state.zones.filter((z) => !(z.x === x && z.y === y));
+  if (kind !== null) state.zones.push({ kind, x, y });
   return { ok: true };
 }
 

@@ -26,6 +26,8 @@ export interface Part {
   heatReduction?: number;
   // CPU slot only: cores per server.
   cores?: number;
+  // Network slot only: card speed in Gbps.
+  gbps?: number;
 }
 
 // What a rack must have to serve a contract. All given fields must be met.
@@ -36,6 +38,17 @@ export interface ContractRequirement {
   minCores?: number;
   // Rack must have a GPU slot.
   gpu?: boolean;
+}
+
+// An internet line speed (content/uplinks.ts).
+export interface Uplink {
+  // Stable id, stored in saves.
+  id: string;
+  name: string;
+  mbps: number;
+  level: number;
+  cost: number;
+  rentalPerTick: number;
 }
 
 // A room-sized plot on the map grid.

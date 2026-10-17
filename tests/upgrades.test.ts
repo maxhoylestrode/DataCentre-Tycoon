@@ -22,7 +22,7 @@ function upgradeTimes(state: GameState, x: number, y: number, n: number): void {
 }
 
 describe('upgrade levels', () => {
-  it('power and cooling units get 15% stronger per level with no downside', () => {
+  it('power units get 15% stronger per level; cooling units too, but draw more power', () => {
     const state = stateAtLevel(10);
     placeBuilding(state, 'power_basic', 0, 0);
     placeBuilding(state, 'cooling_fan', 2, 0);
@@ -31,7 +31,7 @@ describe('upgrade levels', () => {
     upgradeTimes(state, 0, 0, 2);
     upgradeTimes(state, 2, 0, 2);
     expect(powerSupply(state)).toBeCloseTo(supplyBefore + 2 * B.power_basic.powerSupply * B.power_basic.upgrade.output);
-    expect(powerDraw(state)).toBe(drawBefore);
+    expect(powerDraw(state)).toBeCloseTo(drawBefore + 2 * B.cooling_fan.powerDraw * B.cooling_fan.upgrade.powerDraw);
     expect(buildingStats(getBuildingAt(state, 2, 0)!).coolingStrength).toBeCloseTo(
       B.cooling_fan.coolingStrength * (1 + 2 * B.cooling_fan.upgrade.output),
     );

@@ -6,14 +6,18 @@ import {
   type FloorKind,
   type PartSlot,
   type Speed,
+  type StaffRole,
   type WallKind,
+  type ZoneKind,
 } from '../config';
 import { STARTING_LOT } from './content/lots';
+import { UPLINKS } from './content/uplinks';
 import type { ContractRequirement } from './content/types';
 import { MAP_HEIGHT, MAP_WIDTH } from './lots';
 
-// Only racks use 'failed' and 'repairing'; other buildings stay 'ok'.
-export type BuildingStatus = 'ok' | 'failed' | 'repairing';
+// 'building': waiting for (or being built by) an engineer; not running yet.
+// Only racks use 'failed' and 'repairing'.
+export type BuildingStatus = 'building' | 'ok' | 'failed' | 'repairing';
 
 export interface Building {
   id: number;
@@ -29,6 +33,55 @@ export interface Building {
   upgrade: number;
   // Racks only: installed part id per slot. A missing slot means the stock part.
   parts: Partial<Record<PartSlot, string>>;
+  // Facing, in quarter turns (0-3). Visual only.
+  rot: number;
+  // Racks: when the CPU was last replaced or refurbished (hardware ageing).
+  refreshedAtTick: number;
+  // Racks: when a technician last serviced it (maintenance).
+  lastServicedTick: number;
+  // Engineer work left before it's built (status 'building'), in ticks.
+  buildRemaining: number;
+}
+
+export type StaffTaskKind = 'build' | 'repair' | 'service';
+
+export interface StaffTask {
+  kind: StaffTaskKind;
+  buildingId: number;
+  // Work left once on site, in ticks.
+  workLeft: number;
+}
+
+export interface StaffMember {
+  id: number;
+  role: StaffRole;
+  // The starting engineer: free, can't be fired.
+  founder: boolean;
+  // Position in tile units (tile centres are x + 0.5).
+  x: number;
+  y: number;
+  // Remaining waypoints (tile coordinates) to walk through.
+  path: [number, number][];
+  task: StaffTask | null;
+}
+
+export interface Client {
+  id: number;
+  // The offer this client is bringing.
+  offerId: number;
+  x: number;
+  y: number;
+  path: [number, number][];
+  state: 'entering' | 'waiting' | 'leaving';
+  // Tick this client walks in (they arrive one after another).
+  spawnTick: number;
+}
+
+// A painted zone tile (see sim/zones.ts).
+export interface ZoneTile {
+  kind: ZoneKind;
+  x: number;
+  y: number;
 }
 
 // Something painted on the floor layer; it can sit under a building.
@@ -85,6 +138,10 @@ export interface Stats {
   perfectContracts: number;
   contractIncome: number;
   upgrades: number;
+  staffHired: number;
+  services: number;
+  refurbishes: number;
+  clientsServed: number;
 }
 
 // What a customer is offering. Rolled once when the offer is made, then
@@ -104,6 +161,8 @@ export interface ContractTerms {
   xp: number;
   // Copied from the customer type when offered. Missing means any rack will do.
   requirement?: ContractRequirement;
+  // Offers only: whether the client has reached reception (can be signed).
+  arrived?: boolean;
 }
 
 export interface Contract extends ContractTerms {
@@ -166,6 +225,10 @@ export function createProgress(): Progress {
       perfectContracts: 0,
       contractIncome: 0,
       upgrades: 0,
+      staffHired: 0,
+      services: 0,
+      refurbishes: 0,
+      clientsServed: 0,
     },
   };
 }
@@ -191,11 +254,33 @@ export interface GameState {
   contracts: ContractsState;
   // Seeded RNG state (see rng.ts).
   rngSeed: number;
+  // Internet line id (content/uplinks.ts).
+  uplink: string;
+  zones: ZoneTile[];
+  staff: StaffMember[];
+  nextStaffId: number;
+  clients: Client[];
+  nextClientId: number;
+  // Whether people are simulated: engineers build and repair, technicians
+  // service racks, clients walk in. On in real games; engine tests leave it
+  // off so they can test other systems on their own.
+  staffSim: boolean;
+}
+
+export interface NewGameOptions {
+  // See GameState.staffSim.
+  staffSim?: boolean;
 }
 
 // The seed defaults to 1 so tests are repeatable; the game passes a random one.
 // Defaults to the full map; tests pass small grids, which act as one room.
-export function createInitialState(width: number = MAP_WIDTH, height: number = MAP_HEIGHT, seed = 1): GameState {
+export function createInitialState(
+  width: number = MAP_WIDTH,
+  height: number = MAP_HEIGHT,
+  seed = 1,
+  options: NewGameOptions = {},
+): GameState {
+  const staffSim = options.staffSim ?? false;
   return {
     width,
     height,
@@ -214,6 +299,14 @@ export function createInitialState(width: number = MAP_WIDTH, height: number = M
     progress: createProgress(),
     contracts: createContractsState(),
     rngSeed: seed | 0,
+    uplink: UPLINKS[0]!.id,
+    zones: [],
+    // Every game starts with the founder: a free engineer in the first room.
+    staff: staffSim ? [{ id: 1, role: 'engineer', founder: true, x: 1, y: 1, path: [], task: null }] : [],
+    nextStaffId: 2,
+    clients: [],
+    nextClientId: 1,
+    staffSim,
   };
 }
 
@@ -232,6 +325,10 @@ export function getBuildingAt(state: GameState, x: number, y: number): Building 
 
 export function categoryOf(building: Building): BuildingCategory {
   return buildingDef(building.kind).category;
+}
+
+export function zoneAt(state: GameState, x: number, y: number): ZoneTile | undefined {
+  return state.zones.find((z) => z.x === x && z.y === y);
 }
 
 export function floorAt(state: GameState, x: number, y: number): FloorTile | undefined {

@@ -3,12 +3,14 @@ import { CONFIG } from '../src/config';
 import { placeBuilding } from '../src/sim/commands';
 import { createInitialState, type GameState, getBuildingAt } from '../src/sim/state';
 import { tick } from '../src/sim/tick';
+import { UPLINKS } from '../src/sim/content/uplinks';
 
 const B = CONFIG.buildings;
 const E = CONFIG.economy;
 const DAY = CONFIG.time.ticksPerDay;
-// Rent for the one room a new game owns, after the running-cost multiplier.
-const RENT = E.rentPerTick * E.runningCostMultiplier;
+// A new, empty game's costs: rent for its one room (after the running-cost
+// multiplier) plus the starting internet line's rental.
+const RENT = E.rentPerTick * E.runningCostMultiplier + UPLINKS[0]!.rentalPerTick;
 
 function runTicks(state: GameState, n: number): void {
   for (let i = 0; i < n; i++) tick(state);
@@ -80,10 +82,11 @@ describe('balance', () => {
     expect(B.rack_basic.incomePerTick - B.rack_basic.upkeepPerTick).toBeGreaterThan(E.rentPerTick * 2);
   });
 
-  it('a single rack never goes negative and pays for itself within 2 days', () => {
+  // Was 2 days; electricity and the internet line make the start a little slower.
+  it('a single rack never goes negative and pays for itself within 3 days', () => {
     const state = createInitialState(10, 10);
     placeBuilding(state, 'rack_basic', 5, 5);
-    expect(runTracking(state, DAY * 2)).toBeGreaterThan(0);
+    expect(runTracking(state, DAY * 3)).toBeGreaterThan(0);
     expect(state.cash).toBeGreaterThan(E.startingCash);
   });
 
