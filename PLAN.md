@@ -184,8 +184,26 @@ Problem: income grows with every rack and upgrade, but costs are flat per item, 
 - *Ask:* the target margin; the tariff tiers; how fast ageing runs; whether saturation is per room or for the whole company.
 
 **A. Power, network and cooling depth**
-- **Network bandwidth:** the building has a limited uplink (like power supply vs draw). Racks use bandwidth, and network upgrades (switches, fibre uplinks, "power-ups") raise the cap. Overloaded bandwidth slows income the way brownouts do.
-  - *Ask:* bandwidth per rack fixed or tied to the network part? Is the uplink a building or a room upgrade?
+- **Network bandwidth:** the building has a limited internet uplink (like power supply vs draw). Racks use bandwidth, and overloaded bandwidth slows income the way brownouts do.
+  - **Upgradable uplink speeds:** you start on a **100 Mbps** line and upgrade step by step to hundreds of Gbps. A draft ladder:
+
+    | Uplink | Rough unlock |
+    |---|---|
+    | 100 Mbps business broadband | start |
+    | 1 Gbps fibre | early |
+    | 10 Gbps leased line | |
+    | 40 Gbps | mid |
+    | 100 Gbps | |
+    | 400 Gbps | late |
+    | 800 Gbps (multiple 400G links) | very late |
+
+    Each step costs more to buy and has a monthly line rental (another running cost that scales with size, which helps late-game balance A0). Steps are data (`sim/content/uplinks.ts`), gated by level, so more can be added.
+  - **Demand:** each rack uses bandwidth based on its network part (1 GbE stock up to 400 GbE) and how busy it is, so upgrading rack NICs raises both income and bandwidth need. The two systems have to grow together.
+  - **HUD:** a bandwidth bar next to power, e.g. "Network: 740 Mbps / 1 Gbps", turning amber and red as it fills.
+  - *Ask:*
+    - Is the uplink one per building, or one per room (each room needs its own line)?
+    - Does running out of bandwidth slow income (like a brownout), count against contract uptime, or both?
+    - Should some contracts (streaming, AI lab) also require a minimum uplink speed?
 - **Upgrades draw more power:** rack parts already add some power; make upgrades noticeably hungrier (and power/cooling levels too?), so expanding needs more power units.
   - *Ask:* how much more?
 - **Upgradable chiller:** levels that raise how many vents it feeds and/or its range.
