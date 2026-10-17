@@ -143,7 +143,7 @@ describe('staff', () => {
     expect(staffSpeedFactor(state)).toBe(1);
   });
 
-  it('technicians service racks before they go overdue; without them racks earn less', () => {
+  it('staff service racks before they go overdue; with nobody to do it racks earn less', () => {
     const lazy = game();
     const kept = game();
     hireStaff(kept, 'technician');
@@ -151,6 +151,8 @@ describe('staff', () => {
       placeBuilding(s, 'rack_basic', 8, 6);
       runUntil(s, () => getBuildingAt(s, 8, 6)!.status === 'ok');
     }
+    // Nobody left to service the lazy company's rack (the founder would).
+    lazy.staff = [];
     for (let i = 0; i < CONFIG.maintenance.intervalTicks + 200; i++) {
       tick(lazy);
       tick(kept);
@@ -158,6 +160,17 @@ describe('staff', () => {
     expect(isOverdue(lazy, getBuildingAt(lazy, 8, 6)!)).toBe(true);
     expect(isOverdue(kept, getBuildingAt(kept, 8, 6)!)).toBe(false);
     expect(kept.progress.stats.services).toBeGreaterThan(0);
+  });
+});
+
+describe('founder', () => {
+  it('services racks when there is nothing to build or repair', () => {
+    const state = game();
+    placeBuilding(state, 'rack_basic', 8, 6);
+    runUntil(state, () => getBuildingAt(state, 8, 6)!.status === 'ok');
+    for (let i = 0; i < CONFIG.maintenance.intervalTicks + 200; i++) tick(state);
+    expect(state.progress.stats.services).toBeGreaterThan(0);
+    expect(isOverdue(state, getBuildingAt(state, 8, 6)!)).toBe(false);
   });
 });
 

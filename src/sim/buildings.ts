@@ -109,11 +109,9 @@ export function chillerRange(chiller: Building): number {
   return (buildingDef(chiller.kind).chillerRange ?? 0) + Math.floor(chiller.upgrade / 3);
 }
 
-// Bandwidth a running rack uses, in Mbps: card speed × utilisation × servers.
+// Bandwidth a running rack uses, in Mbps: more earning power, more traffic.
 export function rackBandwidth(rack: Building): number {
-  const nic = installedPart(rack, 'network');
-  const gbps = nic?.gbps ?? 1;
-  return gbps * 1000 * CONFIG.network.utilisation * (buildingDef(rack.kind).partMultiplier ?? 1);
+  return buildingStats(rack).income * CONFIG.network.mbpsPerIncome;
 }
 
 export function buildingStats(building: Building, level: number = building.upgrade): BuildingStats {

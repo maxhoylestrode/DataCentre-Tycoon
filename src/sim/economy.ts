@@ -69,8 +69,9 @@ export function wagesPerTick(state: GameState): number {
 export function costBreakdown(state: GameState): CostBreakdown {
   const m = E.runningCostMultiplier;
   const rent = E.rentPerTick * roomsOwned(state) * m;
+  // Nothing is charged while it's still being built.
   const upkeep =
-    state.buildings.reduce((sum, b) => sum + buildingStats(b).upkeep, 0) +
+    state.buildings.reduce((sum, b) => sum + (b.status === 'building' ? 0 : buildingStats(b).upkeep), 0) +
     state.floor.reduce((sum, f) => sum + floorDef(f.kind).upkeepPerTick * m, 0);
   const electricity = electricityCost(state);
   const network = uplinkOf(state).rentalPerTick;

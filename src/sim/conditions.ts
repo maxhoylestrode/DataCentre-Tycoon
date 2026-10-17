@@ -2,12 +2,16 @@
 // To add a condition type: add it to the Condition union, add one evaluator
 // to EVALUATORS, and add one test in tests/progression.test.ts.
 
-import { isBuildingKind } from '../config';
+import { CONFIG, isBuildingKind, ZONE_KINDS, type ZoneKind } from '../config';
 import { installedPart, slotsOf } from './buildings';
 import { netIncomePerTick } from './economy';
 import { feedVents } from './floor';
 import { levelInfo } from './levels';
 import { roomsOwned } from './lots';
+import { uplinkOf } from './network';
+import { frontDoors } from './paths';
+import { receptionDesks } from './people';
+import { powerMultiblocks } from './power';
 import { prestigeOf } from './prestige';
 import { dayOf, type GameState, racksOf } from './state';
 
@@ -31,7 +35,15 @@ export type Condition =
   | { type: 'prestige'; min: number }
   | { type: 'fedVents'; min: number }
   | { type: 'liquidCooledRacks'; min: number }
-  | { type: 'roomsOwned'; min: number };
+  | { type: 'roomsOwned'; min: number }
+  | { type: 'staffCount'; min: number; role?: string }
+  | { type: 'uplinkMbps'; min: number }
+  | { type: 'multiblocks'; min: number }
+  | { type: 'zoneTiles'; zone: string; min: number }
+  | { type: 'clientsServed'; min: number }
+  | { type: 'services'; min: number }
+  | { type: 'refurbishes'; min: number }
+  | { type: 'receptionReady'; min: number };
 
 export type ConditionType = Condition['type'];
 
@@ -67,6 +79,16 @@ const EVALUATORS: Evaluators = {
   liquidCooledRacks: (s) =>
     s.buildings.filter((b) => slotsOf(b).includes('cooling') && (installedPart(b, 'cooling')?.heatReduction ?? 0) > 0).length,
   roomsOwned: (s) => roomsOwned(s),
+  // Hired staff, not counting the founder.
+  staffCount: (s, c) => s.staff.filter((m) => !m.founder && (!c.role || m.role === c.role)).length,
+  uplinkMbps: (s) => uplinkOf(s).mbps,
+  multiblocks: (s) => powerMultiblocks(s).corners.length,
+  zoneTiles: (s, c) => s.zones.filter((z) => z.kind === c.zone).length,
+  clientsServed: (s) => s.progress.stats.clientsServed,
+  services: (s) => s.progress.stats.services,
+  refurbishes: (s) => s.progress.stats.refurbishes,
+  // 1 when clients can reach a reception desk through a front door.
+  receptionReady: (s) => (frontDoors(s).length > 0 && receptionDesks(s).length > 0 ? 1 : 0),
 };
 
 export function isConditionType(type: string): type is ConditionType {
@@ -90,6 +112,12 @@ export function validateCondition(condition: Condition): string[] {
   if (typeof condition.min !== 'number' || !Number.isFinite(condition.min)) problems.push('min must be a number');
   if (condition.type === 'buildingCount' && !isBuildingKind(condition.kind)) {
     problems.push(`unknown building kind "${condition.kind}"`);
+  }
+  if (condition.type === 'zoneTiles' && !ZONE_KINDS.includes(condition.zone as ZoneKind)) {
+    problems.push(`unknown zone "${condition.zone}"`);
+  }
+  if (condition.type === 'staffCount' && condition.role !== undefined && !Object.hasOwn(CONFIG.staff.roles, condition.role)) {
+    problems.push(`unknown staff role "${condition.role}"`);
   }
   return problems;
 }

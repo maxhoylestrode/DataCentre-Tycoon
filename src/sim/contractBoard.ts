@@ -8,7 +8,7 @@ import { isUnlocked, levelOf } from './progression';
 import { dismissClient, spawnClients } from './people';
 import { prestigeExtraOffers, prestigePayBonus } from './prestige';
 import { pick, randomInt, randomRange } from './rng';
-import { type ContractTerms, dayOf, type GameState } from './state';
+import { type ContractTerms, dayOf, type GameState, racksOf } from './state';
 
 export function contractBoardOpen(state: GameState): boolean {
   return isUnlocked(state, 'contract_board');
@@ -32,12 +32,20 @@ function companyName(state: GameState, type: CustomerType): string {
   return /^[a-z]/.test(suffix) ? `${prefix}${suffix}` : `${prefix} ${suffix}`;
 }
 
+// Offers pay less per rack the more racks you run (see config volumeDiscount).
+export function volumeDiscount(state: GameState): number {
+  const V = CONFIG.contracts.volumeDiscount;
+  const racks = racksOf(state).length;
+  if (racks <= V.freeRacks) return 1;
+  return Math.max(V.minFactor, (V.freeRacks / racks) ** V.exponent);
+}
+
 export function rollOffer(state: GameState, type: CustomerType): ContractTerms {
   const racks = randomInt(state, type.racks[0], type.racks[1]);
   const days = randomInt(state, type.days[0], type.days[1]);
   const prestige = 1 + prestigePayBonus(state);
   const payPerRackPerTick = roundTo(
-    CONFIG.contracts.basePayPerRackPerTick * rollRange(state, type.payMultiplier) * prestige,
+    CONFIG.contracts.basePayPerRackPerTick * rollRange(state, type.payMultiplier) * prestige * volumeDiscount(state),
     0.01,
   );
   // SLA in 0.5% steps so it reads cleanly (95%, 97.5%...).

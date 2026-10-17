@@ -50,7 +50,7 @@ const SECTIONS: Section[] = [
     title: 'Internet',
     html: `
       <p>Every running rack uses bandwidth on your internet line, which starts at <b>100 Mbps</b>. When the line is full, income slows and contracts lose uptime.</p>
-      <p>Click the <b>Network</b> bar in the HUD to upgrade, up to 800 Gbps. Faster network cards in racks earn more but need more bandwidth.</p>`,
+      <p>Click the <b>Network</b> bar in the HUD to upgrade, up to 800 Gbps. Every upgrade that makes a rack earn more also makes it use more bandwidth.</p>`,
   },
   {
     id: 'upgrades',

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { ageFactor, chillerCapacity, chillerRange, rackBandwidth, refurbishCost } from '../src/sim/buildings';
+import { ageFactor, buildingStats, chillerCapacity, chillerRange, rackBandwidth, refurbishCost } from '../src/sim/buildings';
 import { placeBuilding, placeFloor, refurbishRack, upgradeBuilding, upgradePart, upgradeUplink } from '../src/sim/commands';
+import { volumeDiscount } from '../src/sim/contractBoard';
 import { UPLINKS } from '../src/sim/content/uplinks';
 import { costBreakdown, incomeBreakdown, marketFactor } from '../src/sim/economy';
 import { feedVents } from '../src/sim/floor';
@@ -13,6 +14,17 @@ import { createInitialState, type GameState, getBuildingAt, tempAt } from '../sr
 import { fastNetwork } from './helpers';
 
 const M = CONFIG.ageing.ticksPerMonth;
+
+// Places `n` entry racks on owned tiles (every tile, densest first).
+function fillRacks(state: GameState, n: number): void {
+  let placed = 0;
+  for (let y = 0; y < state.height && placed < n; y++) {
+    for (let x = 0; x < state.width && placed < n; x++) {
+      if (placeBuilding(state, 'rack_basic', x, y).ok) placed++;
+    }
+  }
+  expect(placed).toBe(n);
+}
 
 function game(level = 40, w = 20, h = 14): GameState {
   const state = createInitialState(w, h);
@@ -61,14 +73,26 @@ describe('market saturation', () => {
   it('only counts walk-in racks: contracted racks relieve saturation', () => {
     const state = game(40, 60, 42);
     fastNetwork(state);
-    for (let i = 0; i < 20; i++) placeBuilding(state, 'power_basic', i, 41);
-    for (let i = 0; i < 30; i++) placeBuilding(state, 'rack_basic', (i % 15) * 2, Math.floor(i / 15) * 2);
+    fillRacks(state, CONFIG.market.freeRacks + 10);
+    for (let i = 0; i < 20; i++) placeBuilding(state, 'power_basic', i, 13);
     const before = incomeBreakdown(state).market;
     state.contracts.active.push({
       id: 1, customerType: 'startup', name: 'A', racks: 10, days: 5, payPerRackPerTick: 4, sla: 0.9,
       bonus: 0, penalty: 0, xp: 0, startTick: 0, endTick: 99999, servedRackTicks: 0, promisedRackTicks: 0,
     });
     expect(incomeBreakdown(state).market).toBeGreaterThan(before);
+  });
+});
+
+describe('contract volume discount', () => {
+  it('offers pay full rate for small companies and less per rack for big ones', () => {
+    const { freeRacks, minFactor } = CONFIG.contracts.volumeDiscount;
+    const small = game(40, 60, 42);
+    expect(volumeDiscount(small)).toBe(1);
+    const big = game(40, 60, 42);
+    fillRacks(big, freeRacks * 2);
+    expect(volumeDiscount(big)).toBeLessThan(1);
+    expect(volumeDiscount(big)).toBeGreaterThanOrEqual(minFactor);
   });
 });
 
@@ -105,16 +129,17 @@ describe('hardware ageing', () => {
 });
 
 describe('internet line', () => {
-  it('starts at 100 Mbps; racks use bandwidth by network card and size', () => {
+  it('starts at 100 Mbps; racks use bandwidth in step with their earning power', () => {
     const state = game();
     expect(uplinkOf(state).mbps).toBe(100);
     placeBuilding(state, 'rack_basic', 1, 1);
     placeBuilding(state, 'rack_performance', 3, 1);
     const [entry, perf] = [getBuildingAt(state, 1, 1)!, getBuildingAt(state, 3, 1)!];
-    expect(rackBandwidth(perf)).toBeCloseTo(rackBandwidth(entry) * CONFIG.buildings.rack_performance.partMultiplier);
+    expect(rackBandwidth(entry)).toBeCloseTo(buildingStats(entry).income * CONFIG.network.mbpsPerIncome);
+    expect(rackBandwidth(perf)).toBeGreaterThan(rackBandwidth(entry));
     const before = rackBandwidth(entry);
-    upgradePart(state, 1, 1, 'network'); // 1 GbE -> 10 GbE
-    expect(rackBandwidth(entry)).toBeCloseTo(before * 10);
+    upgradePart(state, 1, 1, 'network');
+    expect(rackBandwidth(entry)).toBeGreaterThan(before);
     expect(bandwidthDemand(state)).toBeCloseTo(rackBandwidth(entry) + rackBandwidth(perf));
   });
 

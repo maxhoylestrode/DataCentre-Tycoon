@@ -67,7 +67,7 @@ export class NetworkPanel {
         <div class="ct-bar"><div class="ct-fill ${eff < 1 ? 'bad' : pct > 85 ? 'time' : 'good'}" style="width:${pct}%"></div></div>
       </div>
       ${eff < 1 ? `<div class="ct-alert">Your line is full: everything runs at ${Math.floor(eff * 100)}% and contracts lose uptime. Upgrade the line.</div>` : ''}
-      <p class="muted">Racks use bandwidth by their network card (1 GbE to 400 GbE) and size. Faster cards earn more but need a faster line.</p>
+      <p class="muted">Racks use bandwidth in step with what they earn, so every upgrade needs a bit more line. Over the limit, racks slow down like in a power cut.</p>
       ${rows.join('')}`;
     if (html !== this.lastHtml) {
       this.lastHtml = html;

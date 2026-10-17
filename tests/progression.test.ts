@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { placeBuilding, placeFloor, repairRack } from '../src/sim/commands';
+import {
+  hireStaff,
+  paintZone,
+  placeBuilding,
+  placeFloor,
+  placeWall,
+  repairRack,
+  upgradeUplink,
+} from '../src/sim/commands';
+import { lotSize } from '../src/sim/lots';
 import { evaluate, isMet } from '../src/sim/conditions';
 import { GOALS } from '../src/sim/content/goals';
 import { TIERS } from '../src/sim/content/tiers';
@@ -268,5 +277,41 @@ describe('conditions', () => {
     it('contractsFailed', () => expect(evaluate(s, { type: 'contractsFailed', min: 1 }).current).toBe(1));
     it('activeContracts', () => expect(evaluate(s, { type: 'activeContracts', min: 1 }).current).toBe(1));
     it('perfectContracts', () => expect(evaluate(s, { type: 'perfectContracts', min: 1 }).current).toBe(2));
+  });
+
+  describe('staff, network and building conditions', () => {
+    const s = createInitialState(undefined, undefined, 1, { staffSim: true });
+    s.cash = 1_000_000;
+    s.progress.xp = totalXpForLevel(30);
+    hireStaff(s, 'engineer');
+    hireStaff(s, 'technician');
+    hireStaff(s, 'technician');
+    upgradeUplink(s);
+    for (const [x, y] of [[4, 4], [5, 4], [4, 5], [5, 5]] as const) {
+      placeBuilding(s, 'power_basic', x, y);
+      getBuildingAt(s, x, y)!.status = 'ok'; // skip construction
+    }
+    for (const x of [1, 2, 3]) paintZone(s, 'staff', x, 8);
+    Object.assign(s.progress.stats, { clientsServed: 6, services: 7, refurbishes: 2 });
+
+    it('staffCount (the founder does not count)', () => expect(evaluate(s, { type: 'staffCount', min: 1 }).current).toBe(3));
+    it('staffCount by role', () => {
+      expect(evaluate(s, { type: 'staffCount', role: 'technician', min: 1 }).current).toBe(2);
+    });
+    it('uplinkMbps', () => expect(evaluate(s, { type: 'uplinkMbps', min: 1 }).current).toBe(1_000));
+    it('multiblocks', () => expect(evaluate(s, { type: 'multiblocks', min: 1 }).current).toBe(1));
+    it('zoneTiles', () => expect(evaluate(s, { type: 'zoneTiles', zone: 'staff', min: 1 }).current).toBe(3));
+    it('clientsServed', () => expect(evaluate(s, { type: 'clientsServed', min: 1 }).current).toBe(6));
+    it('services', () => expect(evaluate(s, { type: 'services', min: 1 }).current).toBe(7));
+    it('refurbishes', () => expect(evaluate(s, { type: 'refurbishes', min: 1 }).current).toBe(2));
+    it('receptionReady needs both a front door and a desk', () => {
+      expect(evaluate(s, { type: 'receptionReady', min: 1 }).current).toBe(0);
+      const { h } = lotSize(s);
+      placeWall(s, 'door_outside', 8, h, 'h');
+      placeBuilding(s, 'desk_reception', 8, h - 2);
+      expect(evaluate(s, { type: 'receptionReady', min: 1 }).current).toBe(0); // desk still being built
+      getBuildingAt(s, 8, h - 2)!.status = 'ok';
+      expect(evaluate(s, { type: 'receptionReady', min: 1 }).current).toBe(1);
+    });
   });
 });

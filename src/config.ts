@@ -30,8 +30,9 @@ export const CONFIG = {
     // one full rack's profit, or a single rack can never pay its way.
     rentPerTick: 0.25,
     // Multiplies rent and every building's and floor tile's upkeep. Raised
-    // from 1 to 1.1, then by another 30% to 1.43, when money piled up too fast.
-    runningCostMultiplier: 1.43,
+    // from 1 to 1.1, then by another 30% to 1.43, when money piled up too fast;
+    // eased to 1.3 once electricity, saturation and wages took over braking.
+    runningCostMultiplier: 1.3,
     // Cash may go this far below zero before bankruptcy. Purchases still need
     // enough positive cash.
     overdraftLimit: 500,
@@ -47,15 +48,15 @@ export const CONFIG = {
     bands: [
       { aboveKw: 0, perKwTick: 0.03 },
       { aboveKw: 60, perKwTick: 0.05 },
-      { aboveKw: 200, perKwTick: 0.08 },
-      { aboveKw: 600, perKwTick: 0.12 },
+      { aboveKw: 150, perKwTick: 0.08 },
+      { aboveKw: 400, perKwTick: 0.12 },
     ],
   },
   // Market saturation: walk-in customers run out as you grow. Walk-in racks
   // beyond `freeRacks` earn less: factor = (freeRacks / n) ^ exponent, never
   // below `minFactor`. Racks serving contracts don't count.
   market: {
-    freeRacks: 12,
+    freeRacks: 20,
     exponent: 0.45,
     minFactor: 0.3,
   },
@@ -70,11 +71,12 @@ export const CONFIG = {
     refurbishFraction: 0.3,
   },
   // Network: one internet line (uplink) for the whole company, see
-  // content/uplinks.ts. Each running rack uses bandwidth: its network card's
-  // Gbps × average utilisation × servers in the rack. Demand over the line's
-  // speed slows income and contract service like a brownout.
+  // content/uplinks.ts. Each running rack uses bandwidth in step with what it
+  // can earn: `mbpsPerIncome` Mbps per £/tick of income. A stock entry rack
+  // (£2.40/tick) uses about 29 Mbps. Demand over the line's speed slows
+  // income and contract service like a brownout.
   network: {
-    utilisation: 0.03,
+    mbpsPerIncome: 12,
   },
   // Power units in a full 2×2 square form a multiblock, each producing this
   // much more.
@@ -90,6 +92,8 @@ export const CONFIG = {
     },
     // Tiles per tick at full speed. 0.15 = 1.5 tiles a second at 1x.
     walkSpeed: 0.15,
+    // Idle staff look for a new job this often (ticks).
+    jobSearchTicks: 5,
     // Staff the company can house without a staff room; each break table in
     // a staff room (with a coffee machine) adds `perBreakTable`.
     baseCapacity: 2,
@@ -368,6 +372,10 @@ export const CONFIG = {
     // Contract pay per rack per tick = this * the customer's pay multiplier.
     // Matches a full walk-in rack so multipliers read as "x times walk-in".
     basePayPerRackPerTick: 2.4,
+    // Big clients negotiate harder with big providers: once you run more than
+    // `freeRacks` racks, new offers pay (freeRacks / racks) ^ exponent as much
+    // per rack, never below `minFactor`. Shown in the offer's rate.
+    volumeDiscount: { freeRacks: 40, exponent: 0.45, minFactor: 0.45 },
     // Past contracts remembered for the UI.
     historyLength: 10,
   },

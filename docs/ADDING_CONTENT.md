@@ -89,6 +89,14 @@ Code that implements the mechanic checks `isUnlocked(state, 'contract_board')`.
 | `prestige` | `min` | prestige is at least `min` |
 | `fedVents` | `min` | at least `min` floor vents are fed by a chiller |
 | `liquidCooledRacks` | `min` | at least `min` racks have a non-stock cooling part |
+| `staffCount` | `min`, optional `role` | at least `min` hired staff (of that role); the founder doesn't count |
+| `uplinkMbps` | `min` | your internet line is at least `min` Mbps |
+| `multiblocks` | `min` | at least `min` 2×2 power multiblocks are running |
+| `zoneTiles` | `zone`, `min` | at least `min` tiles are painted as that zone (`server`, `staff`, `storage`) |
+| `clientsServed` | `min` | at least `min` clients signed at reception |
+| `services` | `min` | racks have been serviced at least `min` times |
+| `refurbishes` | `min` | at least `min` racks refurbished |
+| `receptionReady` | `min: 1` | there's a front door and a finished reception desk |
 
 **Adding a condition type** is engine work, but small: in `src/sim/conditions.ts` add it to the `Condition` union and add one evaluator (a function returning the current value) to `EVALUATORS`. TypeScript won't compile until both are there. Then add a test for it in the `conditions` block of `tests/progression.test.ts`.
 
@@ -138,6 +146,20 @@ Real product names are fine (names only, never logos); the in-game note covers t
 ## Add a decoration
 
 Add it to `CONFIG.buildings` with `category: 'decor'` and a `prestige` value, an unlock entry, and a model in `FACTORIES` (`src/render/models.ts`). It shows up in the Decor menu automatically.
+
+## Add zone furniture
+
+Add it to `CONFIG.buildings` with `category: 'furniture'` and `zone: 'staff' | 'storage' | 'server'`, an unlock entry, a model in `FACTORIES` and an icon. It appears in the Zones menu. Furniture only has an effect if `src/sim/zones.ts` reads it (e.g. `staffCapacity` counts `break_table` and needs `coffee_machine`; `hasStorage` needs `shelving`). A new zone kind goes in `ZONE_KINDS` in `config.ts`, with a colour in `src/render/zones.ts` and a tool in `src/input/tools.ts`.
+
+## Add an internet line speed
+
+`src/sim/content/uplinks.ts`, slowest first; the first is what every game starts with. Players can only step up one line at a time, so insert new speeds in order.
+
+```ts
+{ id: 'uplink_1600g', name: 'Quad 400G backbone', mbps: 1_600_000, level: 38, cost: 2_500_000, rentalPerTick: 90 },
+```
+
+Never remove or rename an id: saves store the current line's id. Racks use `CONFIG.network.mbpsPerIncome` Mbps per £/tick they can earn.
 
 ## Add a room style
 

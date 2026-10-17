@@ -55,12 +55,16 @@ function needsService(state: GameState, b: Building): boolean {
   return categoryOf(b) === 'rack' && isRunning(b) && state.tick - b.lastServicedTick > CONFIG.maintenance.intervalTicks * 0.8;
 }
 
+// Engineers build and repair; when there's nothing to build or repair they
+// service racks too, so a small company run by the founder still copes.
+// Technicians only service.
 function jobsFor(state: GameState, member: StaffMember, taken: Set<number>): Building[] {
-  return state.buildings.filter((b) => {
-    if (taken.has(b.id)) return false;
-    if (member.role === 'engineer') return b.status === 'building' || (b.status === 'repairing' && b.repairDoneTick === null);
-    return needsService(state, b);
-  });
+  const open = state.buildings.filter((b) => !taken.has(b.id));
+  if (member.role === 'engineer') {
+    const engineering = open.filter((b) => b.status === 'building' || (b.status === 'repairing' && b.repairDoneTick === null));
+    if (engineering.length > 0) return engineering;
+  }
+  return open.filter((b) => needsService(state, b));
 }
 
 function taskFor(b: Building): StaffTask {
@@ -145,7 +149,9 @@ export function stepStaff(state: GameState): void {
       }
     }
     if (!member.task) {
-      assignJob(grid, state, member, taken);
+      // Idle staff look for work every few ticks, not every tick (searching is
+      // the expensive part with a big team).
+      if ((state.tick + member.id) % S.jobSearchTicks === 0) assignJob(grid, state, member, taken);
       if (!member.task) {
         walk(member, speed);
         continue;

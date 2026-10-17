@@ -8,7 +8,8 @@ import { createInitialState, type GameState, getBuildingAt } from '../src/sim/st
 function game(level: number, cash: number): GameState {
   const state = createInitialState(12, 10);
   state.progress.xp = totalXpForLevel(level);
-  state.cash = 10_000_000;
+  // Enough to build, but under £100k so cash achievements don't add levels.
+  state.cash = 50_000;
   placeBuilding(state, 'power_basic', 0, 0);
   placeBuilding(state, 'rack_basic', 2, 0);
   state.cash = cash;

@@ -171,87 +171,42 @@ The player's ideas: better racks unlocked by level, racks with real specs whose 
 3. **Underfloor cooling:** a separate floor layer (more depth, more UI), or simpler "cooled floor" buildings?
 4. **Order:** probably racks + parts first, then cooling types, then cosmetics, each playable on its own.
 
-### Backlog (requested 2026-10-17, not started)
-The user's list, grouped. Each group gets a detailed plan and its open questions answered before any code, like earlier milestones. Order is a suggestion.
+### Milestone 8: Running a real business (built 2026-10-17, awaiting confirmation)
+The whole 2026-10-17 backlog (A0–F), built in one go with Claude choosing the open answers ("build all now in the best way you think"). Save v8, with a migration that switches staff and clients on for existing real-size saves.
 
-**A0. Late-game balance** (requested 2026-10-17: "it gets to a point where you're just making so much money it's impossible to lose")
-Problem: income grows with every rack and upgrade, but costs are flat per item, power use is free, nothing risky happens once cooling is sorted, and late cash has nothing to go on. At the time, margins were about 70% (£40 in, £12 out); real datacentres run at about 20–30%. Fix it with costs that **scale with size automatically**, so it doesn't need endless manual retuning:
-- **Electricity bill:** pay £ per kW drawn every minute, shown in the HUD's "out" figure. Optionally tiered tariffs (the rate rises above certain total draws). Upgraded racks become a real trade-off, and the existing power and heat downsides of upgrades now cost money too.
-- **Market saturation:** walk-in income per rack falls as your total rack count grows (the local market is used up), e.g. a smooth curve rather than steps. Contracts, with their SLA risk, become the main way to grow big. Shown in the HUD so it's not a hidden penalty.
-- **Hardware ageing:** each installed part slowly loses earning power as newer tech arrives (e.g. -X% per game month, with a floor), so replacing old parts is worth doing. The rack panel shows each part's age and current value.
-- **Balance bot test:** a scripted test that plays a sensible strategy for 30+ game days (builds, upgrades, signs contracts, expands) and fails if the profit margin goes above a target (e.g. 35%) at any stage, or if a careful player goes bankrupt. Balance can't silently drift again.
-- **Also in the backlog and helping here:** incidents that scale with size, plus staff wages (C); a research tree and prestige/reset as late-game money sinks.
-- *Ask:* the target margin; the tariff tiers; how fast ageing runs; whether saturation is per room or for the whole company.
+**A0. Late-game balance.** Costs now grow with size by themselves:
+- **Electricity bill** with marginal bands (like tax bands): £0.03 per kW/min up to 60 kW, £0.05 to 150, £0.08 to 400, £0.12 above.
+- **Market saturation** on walk-in racks only, for the whole company: past 20 walk-in racks each earns `(20/n)^0.45` as much (floor 30%). The HUD shows it.
+- **Contract volume discount:** past 40 racks, new offers pay `(40/racks)^0.45` per rack (floor 45%). It shows in the offer's rate, so nothing is hidden. This stops contracts becoming an unlimited escape from saturation.
+- **Hardware ageing** per rack, based on its CPU: -6% earning power per game month, floor 55%. A CPU upgrade or **Refurbish** (30% of rack + CPU price) resets it.
+- **Balance bot** (`tests/bot.ts`, `tests/balance.test.ts`): a scripted sensible player runs 30 days with every system on. It must never go bankrupt, income must keep growing, and from day 8 the margin must stay under 40%. Current run: about 25–37% late game.
+- Running-cost multiplier eased from 1.43 to 1.3, since the new costs do the braking. Buildings under construction pay no upkeep.
 
-**A. Power, network and cooling depth**
-- **Network bandwidth:** the building has a limited internet uplink (like power supply vs draw). Racks use bandwidth, and overloaded bandwidth slows income the way brownouts do.
-  - **Upgradable uplink speeds:** you start on a **100 Mbps** line and upgrade step by step to hundreds of Gbps. A draft ladder:
+**A. Power, network, cooling.**
+- **One internet line for the company** (`content/uplinks.ts`): 100 Mbps → 1, 10, 40, 100, 400 → 800 Gbps, gated by level, each with a buy price and a line rental. Racks use bandwidth in step with their earning power (12 Mbps per £/tick), so every upgrade needs a bit more line. Over the limit counts like a brownout, for income and contract uptime. Click the HUD's Network bar to upgrade.
+- Rack parts draw 1.6× the power they did. Cooling-unit levels draw more power too.
+- **Chiller levels:** +3 vents per level, +1 range every 3 levels.
+- **Room AC unit** (L18): cools the whole room.
+- **Power multiblocks:** 4 running units in a 2×2 square give +25% each, stacking with their levels. Selling one breaks the block. Shown with an outline.
 
-    | Uplink | Rough unlock |
-    |---|---|
-    | 100 Mbps business broadband | start |
-    | 1 Gbps fibre | early |
-    | 10 Gbps leased line | |
-    | 40 Gbps | mid |
-    | 100 Gbps | |
-    | 400 Gbps | late |
-    | 800 Gbps (multiple 400G links) | very late |
+**B. Editing.** Q rotates the next placement, or the selected building. Every building stores `rot`, and reception desks queue clients in front. Placing a different wall type on a wall swaps it for the price difference. 6 new decorations.
 
-    Each step costs more to buy and has a monthly line rental (another running cost that scales with size, which helps late-game balance A0). Steps are data (`sim/content/uplinks.ts`), gated by level, so more can be added.
-  - **Demand:** each rack uses bandwidth based on its network part (1 GbE stock up to 400 GbE) and how busy it is, so upgrading rack NICs raises both income and bandwidth need. The two systems have to grow together.
-  - **HUD:** a bandwidth bar next to power, e.g. "Network: 740 Mbps / 1 Gbps", turning amber and red as it fills.
-  - *Ask:*
-    - Is the uplink one per building, or one per room (each room needs its own line)?
-    - Does running out of bandwidth slow income (like a brownout), count against contract uptime, or both?
-    - Should some contracts (streaming, AI lab) also require a minimum uplink speed?
-- **Upgrades draw more power:** rack parts already add some power; make upgrades noticeably hungrier (and power/cooling levels too?), so expanding needs more power units.
-  - *Ask:* how much more?
-- **Upgradable chiller:** levels that raise how many vents it feeds and/or its range.
-- **Full AC:** a room-wide air-conditioning unit that cools a whole room (bounded by walls), expensive, high level.
-- **Power multiblocks:** 4 power units in a 2×2 square merge into a multiblock producing +25% power, shown as one bigger model. Multiblocks are upgradable.
-  - *Ask:* does the bonus stack with unit levels? What happens when one unit in the block is sold?
+**C0. Zones.** Paint tiles (drag a rectangle) as Server, Staff or Storage. Zones need their furniture to work: a staff room needs a coffee machine, and each break table houses 4 staff (2 without). Storage needs shelving; without it engineers work 1.5× slower. Server-room racks earn +5%. Zones unlock at L4.
 
-**B. Building and editing**
-- **Rotate all objects:** a rotate key/button while placing, saved per building. Mostly visual, but in-row coolers and racks could face aisles.
-- **Walls and doors replace each other:** placing a door or glass on an existing wall swaps it (paying the difference) instead of being blocked.
-- **More decoration types.**
+**C. Staff.** Hiring unlocks at L3. Each hire has a fee plus a wage per minute; the founder engineer is free and can't be fired.
+- **Engineers** walk to new buildings and build them: about 5–10 s at 1×, longer for bigger racks. Buildings are inactive until finished. Engineers also do repairs (a repaired rack waits for one), and service racks when there's nothing else to do.
+- **Technicians** service racks every 3 game days; overdue racks earn 75%.
+- More staff than the staff rooms house makes everyone 30% slower.
+- No random incidents: maintenance is predictable.
 
-**C0. Room zoning** (needed by staff, so it comes before C)
-- **Zones:** paint a zone onto a walled-off room (or an area of tiles): **Server room**, **Staff room**, **Storage room**, later others such as Reception, Office and Security. Zones are a tile layer like floor vents, so they can sit under buildings.
-- **Each zone has requirements and items:** a Staff room needs e.g. a break table, coffee machine and lockers; a Storage room needs shelving. New decoration-style items fit each zone.
-- **Effects:**
-  - Staff need a staff room to rest in. Too small, or too far away, and they work slower.
-  - Engineers fetch parts from storage. No storage room, or storage too far away, means slower builds and repairs.
-  - Racks outside a server room could earn less, or count against uptime.
-- Shown with a coloured floor tint and a label, with a toggle like the heat map.
-- *Ask:*
-  - Zones by painting tiles, or by clicking inside a walled room to zone the whole room?
-  - Minimum sizes?
-  - Should a zone only count when fully enclosed by walls and doors?
-  - Which zones are required to hire staff at all?
+**D. Clients.** Each contract offer is a client who walks in through a **front door** (a new outside-wall item) and queues at a reception desk. Only clients who have arrived can be signed. The desk moved to L6 with the contract board, and the panel says what's missing.
 
-**C. Staff and build time** (expands the old Milestone 8, "Staff and random incidents"; needs C0)
-- **Engineers build servers:** placing a rack starts a 5–10 second build (it isn't live until finished), done by an engineer who walks to it. More engineers means more builds at once.
-- **Maintenance staff:** servers need periodic maintenance by staff; too few staff and racks degrade or fail more often, so you hire more as you grow. Wages are a running cost.
-- **Staff cost money twice:**
-  - **Hiring fee:** a one-off cost to bring a staff member on (recruitment), paid when they appear.
-  - **Wage:** an ongoing cost per minute for as long as they're employed, shown in the HUD's "out" figure next to rent and upkeep. Firing stops the wage, and the hiring fee isn't refunded.
-  - Fee and wage both vary by role (e.g. engineer vs maintenance tech) and live in `config.ts` like other balance numbers.
-  - *Ask:* do wages rise with staff level or experience? Should a staff member go unpaid (and quit) if cash goes negative?
-- **Staff use the zones:** they take breaks in the staff room and collect parts from the storage room, so where those rooms sit in your layout matters.
-  - *Ask:* do staff show as little people walking around? Is build time in real seconds or game minutes (it must scale with speed)?
+**E. Content.** +35 goals and +16 achievements, with 8 new condition types (`staffCount`, `uplinkMbps`, `multiblocks`, `zoneTiles`, `clientsServed`, `services`, `refurbishes`, `receptionReady`).
 
-**D. Clients as people**
-- Contract clients appear as little people who walk in through a door to "outside" and queue at the reception desk.
-  - *Ask:* is a reception desk plus an outside door required to get contract offers, or just flavour? Can a queue get too long (clients leave)?
-
-**E. Content**
-- **+50 goals and achievements** spread across all tiers (data only, `sim/content/`).
-- **More decorations** (also listed under B).
-
-**F. UI and help**
-- **How-to guide:** an in-game help panel (and first-time tips) explaining power, heat, cooling, contracts, rooms, upgrades.
-- **Clean up the HUD:** redesign the money, power, time and speed area in the hotbar's style (tiles/chips, clearer power bar, compact warnings).
+**F. UI.**
+- A how-to guide (G, opens once on first play).
+- A redesigned HUD: cash with a hover breakdown of income and costs, clock and speed control, power and network meters, chips, and coloured warnings.
+- Staff panel (T) and network panel.
 
 ### Later milestones (outline only, replan before starting)
 5. ✅ (done 2026-10-16) Local save/load: versioned saves in localStorage, export/import save file, settings. Done early because progression needs persistence.
@@ -360,6 +315,16 @@ Done when: I can create an account, play on one device, log in on another and co
 ## Decisions log
 
 (Claude Code: add dated entries here when a decision changes the plan.)
+
+- 2026-10-17: Milestone 8 (the whole backlog) built. The user asked Claude to decide the open questions; the answers are in the Milestone 8 section. The ones that change how the game feels:
+  - **One line for the company.** Bandwidth follows earning power, not NIC speed: tying it to NIC speed made NIC upgrades throttle you.
+  - **Saturation hits walk-in racks only**; contracts get a visible volume discount instead.
+  - **Clients need a front door plus a reception desk** to be signed.
+  - **Construction is building-only** (walls and floor stay instant), with no upkeep while building.
+  - **The founder engineer is free**, and also services racks when idle, so a solo start never stalls.
+  - **No random incidents.**
+  - **Balance tuned with the bot:** freeRacks 12→20, running-cost multiplier 1.43→1.3, electricity bands at 150/400 kW. The first bot runs showed a new player choking on the 100 Mbps line and margins hitting 53% from contracts.
+  - **Engine tests run without staff** (`staffSim` off). Real games and migrated real-size saves have it on.
 
 - 2026-10-16: Chose browser + Three.js, datacentre theme, primitives-only art.
 - 2026-10-16: Wants accounts and a database to play anywhere. Chose Supabase (auth + Postgres), local-first with cloud sync, built as Milestone 9 after local saves (Milestone 5) are solid.

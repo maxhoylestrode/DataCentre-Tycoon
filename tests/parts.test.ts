@@ -71,6 +71,8 @@ describe('rack parts', () => {
 
   it('are locked entirely until upgrades unlock', () => {
     const state = stateAtLevel(1);
+    // Under £100k, so cash achievements don't level us past the lock.
+    state.cash = 50_000;
     placeBuilding(state, 'rack_basic', 0, 0);
     expect(upgradePart(state, 0, 0, 'cpu')).toEqual({ ok: false, reason: 'locked' });
   });
