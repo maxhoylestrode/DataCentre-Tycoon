@@ -174,6 +174,15 @@ The player's ideas: better racks unlocked by level, racks with real specs whose 
 ### Backlog (requested 2026-10-17, not started)
 The user's list, grouped. Each group gets a detailed plan and its open questions answered before any code, like earlier milestones. Order is a suggestion.
 
+**A0. Late-game balance** (requested 2026-10-17: "it gets to a point where you're just making so much money it's impossible to lose")
+Problem: income grows with every rack and upgrade, but costs are flat per item, power use is free, nothing risky happens once cooling is sorted, and late cash has nothing to go on. At the time, margins were about 70% (£40 in, £12 out); real datacentres run at about 20–30%. Fix it with costs that **scale with size automatically**, so it doesn't need endless manual retuning:
+- **Electricity bill:** pay £ per kW drawn every minute, shown in the HUD's "out" figure. Optionally tiered tariffs (the rate rises above certain total draws). Upgraded racks become a real trade-off, and the existing power and heat downsides of upgrades now cost money too.
+- **Market saturation:** walk-in income per rack falls as your total rack count grows (the local market is used up), e.g. a smooth curve rather than steps. Contracts, with their SLA risk, become the main way to grow big. Shown in the HUD so it's not a hidden penalty.
+- **Hardware ageing:** each installed part slowly loses earning power as newer tech arrives (e.g. -X% per game month, with a floor), so replacing old parts is worth doing. The rack panel shows each part's age and current value.
+- **Balance bot test:** a scripted test that plays a sensible strategy for 30+ game days (builds, upgrades, signs contracts, expands) and fails if the profit margin goes above a target (e.g. 35%) at any stage, or if a careful player goes bankrupt. Balance can't silently drift again.
+- **Also in the backlog and helping here:** incidents that scale with size, plus staff wages (C); a research tree and prestige/reset as late-game money sinks.
+- *Ask:* the target margin; the tariff tiers; how fast ageing runs; whether saturation is per room or for the whole company.
+
 **A. Power, network and cooling depth**
 - **Network bandwidth:** the building has a limited uplink (like power supply vs draw). Racks use bandwidth, and network upgrades (switches, fibre uplinks, "power-ups") raise the cap. Overloaded bandwidth slows income the way brownouts do.
   - *Ask:* bandwidth per rack fixed or tied to the network part? Is the uplink a building or a room upgrade?
