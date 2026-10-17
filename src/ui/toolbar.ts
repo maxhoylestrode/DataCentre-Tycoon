@@ -34,6 +34,7 @@ const GROUPS: Group[] = [
   { id: 'decor', label: 'Decor', tools: byCategory('decor') },
   { id: 'zones', label: 'Zones', tools: [...ZONE_TOOLS, ...byCategory('furniture')], hotkey: TOOL_HOTKEYS.zone_server },
   { id: 'walls', label: 'Walls', tools: [...WALL_KINDS], hotkey: TOOL_HOTKEYS.wall_basic },
+  { id: 'move', label: 'Move', tools: ['move'], hotkey: TOOL_HOTKEYS.move },
   { id: 'sell', label: 'Sell', tools: ['sell'], hotkey: TOOL_HOTKEYS.sell },
 ];
 
@@ -54,6 +55,7 @@ const money = (n: number): string => `£${n.toLocaleString('en-GB')}`;
 // The headline number for a stock (un-upgraded) building on its card.
 function stat(tool: Tool): string {
   if (tool === 'sell') return `${CONFIG.economy.sellRefund * 100}% refund`;
+  if (tool === 'move') return 'Free · keeps upgrades';
   if (isFloorKind(tool)) return 'Under racks · needs chiller';
   if (isZoneTool(tool)) return ZONE_HINTS[tool] ?? '';
   if (isWallTool(tool)) {
@@ -90,7 +92,8 @@ const FURNITURE_HINTS: Record<string, string> = {
 };
 
 // The unlock id gating a tool: zone tools share the "zones" mechanic.
-const unlockIdOf = (tool: Tool): string | null => (tool === 'sell' ? null : isZoneTool(tool) ? 'zones' : tool);
+const unlockIdOf = (tool: Tool): string | null =>
+  tool === 'sell' || tool === 'move' ? null : isZoneTool(tool) ? 'zones' : tool;
 
 export function toolUnlocked(state: GameState, tool: Tool): boolean {
   const id = unlockIdOf(tool);

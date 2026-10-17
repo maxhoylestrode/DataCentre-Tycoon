@@ -12,6 +12,7 @@ export const ICONS = {
   cooling: svg('<path d="M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7"/><path d="m9.5 3.5 2.5 2 2.5-2M9.5 20.5l2.5-2 2.5 2"/>'),
   decor: svg('<path d="M7 21h10l-1.5-6h-7z"/><path d="M12 15c0-4-1-7-5-9 3 0 5 1.5 5 4 0-3.5 2-6 6-6-3 2.5-4 5.5-6 11"/>'),
   sell: svg('<path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
+  move: svg('<path d="M12 2v20M2 12h20"/><path d="m9 5 3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3"/>'),
   heat: svg('<path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0z"/><path d="M12 9v8"/>'),
   contracts: svg('<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>'),
   style: svg('<path d="M18 3l3 3-9.5 9.5-3-3z"/><path d="M8.5 12.5c-2 0-3.5 1.5-3.5 3.5 0 1.5-1 2.5-2 3 3 1 7 .5 8.5-3"/>'),
@@ -95,6 +96,7 @@ const ITEM_ICONS: Record<string, string> = {
   zone_storage: svg('<rect x="3" y="3" width="18" height="18" rx="2" fill="#ffb347" fill-opacity=".25" stroke="#ffb347"/><path d="M7 10l5-3 5 3v6l-5 3-5-3zM7 10l5 3 5-3M12 13v6"/>'),
   zone_clear: svg('<rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="3 2"/><path d="M8 8l8 8M16 8l-8 8"/>'),
   sell: ICONS.sell,
+  move: ICONS.move,
 };
 
 export function itemIcon(id: string): string {

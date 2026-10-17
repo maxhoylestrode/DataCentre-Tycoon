@@ -833,6 +833,12 @@ interface PlacedView extends BuildingView {
 export class BuildingLayer {
   readonly group = new THREE.Group();
   private readonly views = new Map<number, PlacedView>();
+  // A building being carried by the move tool: drawn lifted at the cursor.
+  private carried: { id: number; x: number; y: number; rot: number } | null = null;
+
+  carry(carried: { id: number; x: number; y: number; rot: number } | null): void {
+    this.carried = carried;
+  }
 
   sync(state: GameState, dt: number): void {
     const alive = new Set<number>();
@@ -848,8 +854,14 @@ export class BuildingLayer {
         this.views.set(building.id, view);
         this.group.add(holder);
       }
+      // Buildings can move, so follow the sim every frame (or the cursor while carried).
+      const carried = this.carried?.id === building.id ? this.carried : null;
+      view.group.position.copy(
+        tileToWorld(state.width, state.height, carried ? carried.x : building.x, carried ? carried.y : building.y),
+      );
+      if (carried) view.group.position.y = 0.25 + Math.sin(performance.now() / 180) * 0.05;
       // rot 0 faces +z (towards the camera); each step turns a quarter clockwise from above.
-      view.model.rotation.y = (building.rot * Math.PI) / 2;
+      view.model.rotation.y = ((carried ? carried.rot : building.rot) * Math.PI) / 2;
 
       if (building.status === 'building') {
         if (!view.scaffold) {

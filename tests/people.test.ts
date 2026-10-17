@@ -4,12 +4,14 @@ import { buildTicks, isOverdue } from '../src/sim/buildings';
 import {
   fireStaff,
   hireStaff,
+  moveBuilding,
   paintZone,
   placeBuilding,
   placeWall,
   repairRack,
   rotateBuilding,
   signContract,
+  upgradePart,
 } from '../src/sim/commands';
 import { refreshOffers } from '../src/sim/contractBoard';
 import { costBreakdown, incomeBreakdown } from '../src/sim/economy';
@@ -38,6 +40,46 @@ function runUntil(state: GameState, done: () => boolean, max = 5000): number {
   }
   throw new Error('took too long');
 }
+
+describe('moving buildings', () => {
+  it('moves a building for free, keeping its id, parts, upgrades and age', () => {
+    const state = game();
+    placeBuilding(state, 'rack_basic', 3, 3);
+    const rack = getBuildingAt(state, 3, 3)!;
+    rack.status = 'ok';
+    upgradePart(state, 3, 3, 'cpu');
+    const before = { ...rack, parts: { ...rack.parts } };
+    const cash = state.cash;
+    expect(moveBuilding(state, 3, 3, 8, 5, 2).ok).toBe(true);
+    expect(getBuildingAt(state, 3, 3)).toBeUndefined();
+    const moved = getBuildingAt(state, 8, 5)!;
+    expect(moved.id).toBe(before.id);
+    expect(moved.parts).toEqual(before.parts);
+    expect(moved.refreshedAtTick).toBe(before.refreshedAtTick);
+    expect(moved.rot).toBe(2);
+    expect(state.cash).toBe(cash);
+  });
+
+  it('refuses occupied tiles, unowned tiles and empty sources', () => {
+    const state = game();
+    placeBuilding(state, 'rack_basic', 3, 3);
+    placeBuilding(state, 'rack_basic', 5, 3);
+    expect(moveBuilding(state, 3, 3, 5, 3)).toEqual({ ok: false, reason: 'occupied' });
+    expect(moveBuilding(state, 3, 3, 30, 3)).toMatchObject({ ok: false });
+    expect(moveBuilding(state, 9, 9, 10, 10)).toEqual({ ok: false, reason: 'empty' });
+    // Dropping it back on its own tile is fine (just a rotate).
+    expect(moveBuilding(state, 3, 3, 3, 3, 1).ok).toBe(true);
+  });
+
+  it('an engineer on the way to build it re-routes to the new spot', () => {
+    const state = game();
+    placeBuilding(state, 'rack_basic', 12, 8);
+    runUntil(state, () => state.staff[0]!.task !== null);
+    moveBuilding(state, 12, 8, 4, 4);
+    expect(state.staff[0]!.task).toBeNull();
+    runUntil(state, () => getBuildingAt(state, 4, 4)!.status === 'ok');
+  });
+});
 
 describe('construction', () => {
   it('a new game has the founder engineer, who is free', () => {

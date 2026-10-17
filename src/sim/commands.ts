@@ -343,6 +343,36 @@ export function rotateBuilding(state: GameState, x: number, y: number): CommandR
   return { ok: true };
 }
 
+// Moves a building to another free tile, keeping everything about it (parts,
+// upgrades, age, contracts). Free. rot sets its new facing if given.
+export function moveBuilding(
+  state: GameState,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  rot?: number,
+): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  const building = getBuildingAt(state, fromX, fromY);
+  if (!building) return { ok: false, reason: 'empty' };
+  if (!isInBounds(state, toX, toY)) return { ok: false, reason: 'out_of_bounds' };
+  if (!isOwnedTile(state, toX, toY)) return { ok: false, reason: 'not_owned' };
+  const there = getBuildingAt(state, toX, toY);
+  if (there && there !== building) return { ok: false, reason: 'occupied' };
+  building.x = toX;
+  building.y = toY;
+  if (rot !== undefined) building.rot = ((Math.round(rot) % 4) + 4) % 4;
+  // Anyone walking to it needs a new route.
+  for (const member of state.staff) {
+    if (member.task?.buildingId === building.id) {
+      member.task = null;
+      member.path = [];
+    }
+  }
+  return { ok: true };
+}
+
 // Resets a rack's hardware age without buying a new CPU.
 export function refurbishRack(state: GameState, x: number, y: number): CommandResult {
   if (state.bankrupt) return { ok: false, reason: 'bankrupt' };

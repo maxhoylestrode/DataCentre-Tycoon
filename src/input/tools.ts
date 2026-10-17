@@ -17,13 +17,13 @@ import { placeBuilding, placeFloor, removeFloor, repairRack, sellBuilding } from
 import { canAfford, repairCost } from '../sim/economy';
 import { isOwnedTile, lotAt, nextLotPrice, purchasableLots } from '../sim/lots';
 import { isUnlocked, unlockFor } from '../sim/progression';
-import { categoryOf, floorAt, type GameState, getBuildingAt } from '../sim/state';
+import { type Building, categoryOf, floorAt, type GameState, getBuildingAt } from '../sim/state';
 
 // Zone tools paint a dragged rectangle of tiles; zone_clear erases zones.
 export type ZoneTool = 'zone_server' | 'zone_staff' | 'zone_storage' | 'zone_clear';
 export const ZONE_TOOLS: ZoneTool[] = ['zone_server', 'zone_staff', 'zone_storage', 'zone_clear'];
 
-export type Tool = BuildingKind | FloorKind | WallKind | ZoneTool | 'sell';
+export type Tool = BuildingKind | FloorKind | WallKind | ZoneTool | 'sell' | 'move';
 // inspect: clicking opens the building panel (stats, upgrades, sell).
 // draw: wall and zone tools, which drag instead of clicking tiles.
 export type ToolAction = 'place' | 'sell' | 'repair' | 'inspect' | 'blocked' | 'draw';
@@ -36,10 +36,11 @@ export const TOOL_HOTKEYS: Partial<Record<Tool, string>> = {
   zone_server: 'Z',
   wall_basic: 'B',
   sell: 'X',
+  move: 'M',
 };
 
 export function isWallTool(tool: Tool): tool is WallKind {
-  return tool !== 'sell' && isWallKind(tool);
+  return tool !== 'sell' && tool !== 'move' && isWallKind(tool);
 }
 
 export function isZoneTool(tool: Tool): tool is ZoneTool {
@@ -67,13 +68,14 @@ const money = (n: number): string => `£${Math.round(n).toLocaleString('en-GB')}
 
 export function toolName(tool: Tool): string {
   if (tool === 'sell') return 'Sell';
+  if (tool === 'move') return 'Move';
   if (isZoneTool(tool)) return ZONE_NAMES[tool];
   if (isWallTool(tool)) return CONFIG.walls[tool].name;
   return isFloorKind(tool) ? floorDef(tool).name : buildingDef(tool).name;
 }
 
 export function toolCost(tool: Tool): number {
-  if (tool === 'sell' || isZoneTool(tool)) return 0;
+  if (tool === 'sell' || tool === 'move' || isZoneTool(tool)) return 0;
   if (isWallTool(tool)) return CONFIG.walls[tool].cost;
   return isFloorKind(tool) ? floorDef(tool).cost : buildingDef(tool).cost;
 }
@@ -100,6 +102,12 @@ export function previewTool(state: GameState, tool: Tool, x: number, y: number):
       return { action: 'sell', text: `Remove ${def.name}: +${money(def.cost * CONFIG.economy.sellRefund)}` };
     }
     return { action: 'blocked', text: 'Nothing to sell here' };
+  }
+
+  // The move tool's second step (carrying a building) is previewMove.
+  if (tool === 'move') {
+    if (building) return { action: 'inspect', text: `Pick up ${buildingDef(building.kind).name} to move it (free)` };
+    return { action: 'blocked', text: 'Click a building to pick it up' };
   }
 
   if (isWallTool(tool)) {
@@ -143,9 +151,20 @@ export function previewTool(state: GameState, tool: Tool, x: number, y: number):
   return { action: 'place', text: `Build ${def.name}: ${money(def.cost)}` };
 }
 
+// Where a carried building would go.
+export function previewMove(state: GameState, carried: Building, x: number, y: number): ToolPreview {
+  const name = buildingDef(carried.kind).name;
+  if (!isOwnedTile(state, x, y)) return { action: 'blocked', text: `Can't move ${name} outside your rooms` };
+  if (carried.x === x && carried.y === y) return { action: 'place', text: `Put ${name} back · Q to turn · Esc to cancel` };
+  if (getBuildingAt(state, x, y)) return { action: 'blocked', text: 'Something is already here' };
+  return { action: 'place', text: `Move ${name} here (free) · Q to turn · Esc to cancel` };
+}
+
 // Returns what the click did, so the caller can open the building panel on
-// 'inspect'. rot is the facing for new buildings.
+// 'inspect'. rot is the facing for new buildings. The move tool is handled
+// by the caller, which knows what is being carried.
 export function applyTool(state: GameState, tool: Tool, x: number, y: number, rot = 0): ToolAction | null {
+  if (tool === 'move') return null;
   const preview = previewTool(state, tool, x, y);
   if (!preview) return null;
   if (preview.action === 'place') {

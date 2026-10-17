@@ -103,6 +103,7 @@ const SECTIONS: Section[] = [
         <tr><td>Wheel / pinch</td><td>Zoom</td></tr>
         <tr><td>Space, 1 2 3</td><td>Pause, speed</td></tr>
         <tr><td>R P C Z B X</td><td>Racks, Power, Cooling, Zones, Walls, Sell</td></tr>
+        <tr><td>M</td><td>Move: click a building to pick it up, click to put it down (free; Q turns it, Esc cancels)</td></tr>
         <tr><td>Q</td><td>Rotate what you're placing</td></tr>
         <tr><td>H K T L V G</td><td>Heat, Contracts, Staff, Style, Tall walls, Guide</td></tr>
         <tr><td>Esc</td><td>Cancel / close panels</td></tr>

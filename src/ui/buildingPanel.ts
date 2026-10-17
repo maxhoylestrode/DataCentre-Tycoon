@@ -37,6 +37,7 @@ export interface BuildingPanelHandlers {
   onSell(buildingId: number): void;
   onRepair(buildingId: number): void;
   onRotate(buildingId: number): void;
+  onMove(buildingId: number): void;
   onRefurbish(buildingId: number): void;
 }
 
@@ -96,6 +97,7 @@ export class BuildingPanel {
       else if (act === 'max') handlers.onUpgradeMax(id);
       else if (act === 'repair') handlers.onRepair(id);
       else if (act === 'rotate') handlers.onRotate(id);
+      else if (act === 'move') handlers.onMove(id);
       else if (act === 'refurbish') handlers.onRefurbish(id);
       else if (act === 'sell') {
         if (this.confirmSell) {
@@ -183,6 +185,7 @@ export class BuildingPanel {
       ${levelled ? this.upgradeButton(state, b, upgradeCap(state), b.upgrade >= max) : ''}
       ${b.status === 'failed' ? `<button data-act="repair" ${state.cash < repairCost(b) ? 'disabled' : ''}>Repair (${money(repairCost(b))})</button>` : ''}
       <button data-act="rotate" title="Rotate (Q while placing)">⟳ Rotate</button>
+      <button data-act="move" title="Pick it up and place it somewhere else (M)">✥ Move</button>
       <button data-act="sell" class="danger">${this.confirmSell ? `Click again to sell for ${money(investedValue(b) * CONFIG.economy.sellRefund)}` : 'Sell'}</button>
       ${isRack ? `<div class="fine">${TRADEMARK_NOTE}</div>` : ''}`;
   }

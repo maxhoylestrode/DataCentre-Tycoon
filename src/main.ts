@@ -6,6 +6,7 @@ import {
   cancelContract,
   fireStaff,
   hireStaff,
+  moveBuilding,
   paintZone,
   placeWall,
   refurbishRack,
@@ -25,7 +26,7 @@ import {
 import { wallAt } from './sim/walls';
 import { type Edge, edgesBetween, nearestCorner, nearestEdge } from './input/walls';
 import { WallLayer } from './render/walls';
-import { createInitialState, type GameState } from './sim/state';
+import { type Building, createInitialState, type GameState, getBuildingAt } from './sim/state';
 import { CameraRig } from './render/camera';
 import { HoverHighlight, LotsLayer, type Tile, TilePicker, tileToWorld } from './render/grid';
 import { HeatOverlay } from './render/heatmap';
@@ -38,6 +39,7 @@ import {
   applyTool,
   isWallTool,
   isZoneTool,
+  previewMove,
   previewTool,
   type Tool,
   type ToolPreview,
@@ -116,6 +118,15 @@ let hoverGrid: { gx: number; gy: number } | null = null;
 let wallDrag: { start: { x: number; y: number }; end: { x: number; y: number } } | null = null;
 // Tiles a zone drag started and ended on.
 let zoneDrag: { start: Tile; end: Tile } | null = null;
+// The building the move tool is carrying, by id.
+let carriedId: number | null = null;
+const carriedBuilding = (): Building | undefined =>
+  carriedId === null ? undefined : state.buildings.find((b) => b.id === carriedId);
+const pickUp = (b: Building): void => {
+  tool = 'move';
+  carriedId = b.id;
+  placeRot = b.rot;
+};
 
 // How close (in tiles) the cursor must be to a grid line to pick that edge.
 const EDGE_PICK = 0.3;
@@ -164,7 +175,9 @@ function zoneRect(): { x0: number; y0: number; x1: number; y1: number } | null {
 
 // Locked tools and the locked heat map can't be selected.
 const selectTool = (t: Tool): void => {
-  if (toolUnlocked(state, t)) tool = t;
+  if (!toolUnlocked(state, t)) return;
+  tool = t;
+  carriedId = null;
 };
 const toggleHeat = (): void => {
   if (isUnlocked(state, 'heat_map')) heat.visible = !heat.visible;
@@ -192,6 +205,12 @@ const buildingPanel = new BuildingPanel(document.body, {
   onSell: (id) => withBuilding(id, (x, y) => sellBuilding(state, x, y)),
   onRepair: (id) => withBuilding(id, (x, y) => repairRack(state, x, y)),
   onRotate: (id) => withBuilding(id, (x, y) => rotateBuilding(state, x, y)),
+  onMove: (id) => {
+    const b = state.buildings.find((x) => x.id === id);
+    if (!b) return;
+    pickUp(b);
+    buildingPanel.close();
+  },
   onRefurbish: (id) => withBuilding(id, (x, y) => refurbishRack(state, x, y)),
 });
 const stylePanel = new StylePanel(document.body, { onChoose: (id) => buyStyle(state, id) });
@@ -300,6 +319,7 @@ const toolbar = new Toolbar(document.body, {
 });
 
 function closePanels(): void {
+  carriedId = null;
   toolbar.close();
   buildingPanel.close();
   contracts.toggle(false);
@@ -357,12 +377,17 @@ const updateInput = attachInput(renderer.domElement, rig, {
   onToggleStaff: () => staffPanel.toggle(),
   onToggleGuide: () => guide.toggle(),
   onRotate: () => {
-    // Rotates the building whose panel is open, otherwise the next placement.
-    const selected = buildingPanel.update(state);
+    // Rotates the building whose panel is open, otherwise the next placement
+    // (or the building being carried).
+    const selected = carriedId === null ? buildingPanel.update(state) : null;
     if (selected) rotateBuilding(state, selected.x, selected.y);
     else placeRot = (placeRot + 1) % 4;
   },
-  onEscape: closePanels,
+  // Esc first drops a carried building back where it was, then closes panels.
+  onEscape: () => {
+    if (carriedId !== null) carriedId = null;
+    else closePanels();
+  },
   onClick: (cx, cy) => {
     if (tool === 'sell') {
       const wall = wallUnderCursor();
@@ -373,6 +398,16 @@ const updateInput = attachInput(renderer.domElement, rig, {
     }
     const tile = picker.pick(cx, cy);
     if (!tile) return;
+    if (tool === 'move') {
+      const carried = carriedBuilding();
+      if (!carried) {
+        const b = getBuildingAt(state, tile.x, tile.y);
+        if (b) pickUp(b);
+      } else if (moveBuilding(state, carried.x, carried.y, tile.x, tile.y, placeRot).ok) {
+        carriedId = null;
+      }
+      return;
+    }
     // Clicking a room for sale offers to buy it.
     if (!isOwnedTile(state, tile.x, tile.y)) {
       const lot = lotAt(state, tile.x, tile.y);
@@ -429,8 +464,17 @@ function frame(now: number): void {
   updateInput(dt);
   advanceClock(clock, state, dt);
 
-  let preview: ToolPreview | null = hoveredTile ? previewTool(state, tool, hoveredTile.x, hoveredTile.y) : null;
-  if (preview?.action === 'place' && !isZoneTool(tool)) preview = { ...preview, text: `${preview.text} · facing ${FACING[placeRot]} (Q)` };
+  const carried = tool === 'move' ? carriedBuilding() : undefined;
+  if (!carried) carriedId = null; // e.g. it was sold or the game restarted
+  let preview: ToolPreview | null = null;
+  if (hoveredTile && carried) preview = previewMove(state, carried, hoveredTile.x, hoveredTile.y);
+  else if (hoveredTile) preview = previewTool(state, tool, hoveredTile.x, hoveredTile.y);
+  if (preview?.action === 'place' && !isZoneTool(tool) && !carried) {
+    preview = { ...preview, text: `${preview.text} · facing ${FACING[placeRot]} (Q)` };
+  }
+  buildings.carry(
+    carried ? { id: carried.id, x: hoveredTile?.x ?? carried.x, y: hoveredTile?.y ?? carried.y, rot: placeRot } : null,
+  );
 
   // Walls and zones get their own previews: a ghost wall or a painted
   // rectangle, with a cost summary instead of a tile highlight.
