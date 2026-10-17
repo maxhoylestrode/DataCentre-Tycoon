@@ -33,6 +33,7 @@ export const TOOL_HOTKEYS: Partial<Record<Tool, string>> = {
   rack_basic: 'R',
   power_basic: 'P',
   cooling_fan: 'C',
+  ups_battery: 'F',
   zone_server: 'Z',
   wall_basic: 'B',
   sell: 'X',

@@ -5,7 +5,15 @@ export interface MenuHandlers {
   onImportFile(file: File): Promise<string | null>;
   onConfirmImport(): void;
   onSetAutosave(on: boolean): void;
+  onSetSound(on: boolean): void;
+  onSetVolume(volume: number): void;
   onNewGame(): void;
+}
+
+export interface MenuSettings {
+  autosave: boolean;
+  sound: boolean;
+  volume: number;
 }
 
 // Save/settings menu, opened from a button in the top-right corner.
@@ -20,7 +28,7 @@ export class Menu {
   private confirmingNewGame = false;
   private lastSavedAt: Date | null = null;
 
-  constructor(parent: HTMLElement, autosave: boolean, handlers: MenuHandlers) {
+  constructor(parent: HTMLElement, settings: MenuSettings, handlers: MenuHandlers) {
     const toggle = document.createElement('button');
     toggle.className = 'menu-toggle';
     toggle.textContent = '⚙ Menu';
@@ -37,6 +45,8 @@ export class Menu {
         <div class="row"><button data-act="import-yes">Replace</button><button data-act="import-no">Cancel</button></div>
       </div>
       <label class="row"><input type="checkbox" data-act="autosave"> Autosave (every 30s and when you leave)</label>
+      <label class="row"><input type="checkbox" data-act="sound"> Sound</label>
+      <label class="row volume">Volume <input type="range" min="0" max="100" step="5" data-act="volume"></label>
       <div class="row"><button data-act="new" class="danger">New game</button></div>
       <div class="message"></div>
       <input type="file" accept=".json,application/json" hidden>
@@ -50,7 +60,13 @@ export class Menu {
     this.newGameButton = q<HTMLButtonElement>('[data-act="new"]');
     const fileInput = q<HTMLInputElement>('input[type="file"]');
     const autosaveBox = q<HTMLInputElement>('[data-act="autosave"]');
-    autosaveBox.checked = autosave;
+    autosaveBox.checked = settings.autosave;
+    const soundBox = q<HTMLInputElement>('[data-act="sound"]');
+    soundBox.checked = settings.sound;
+    soundBox.addEventListener('change', () => handlers.onSetSound(soundBox.checked));
+    const volume = q<HTMLInputElement>('[data-act="volume"]');
+    volume.value = String(Math.round(settings.volume * 100));
+    volume.addEventListener('input', () => handlers.onSetVolume(Number(volume.value) / 100));
 
     toggle.addEventListener('click', () => {
       this.panel.classList.toggle('open');

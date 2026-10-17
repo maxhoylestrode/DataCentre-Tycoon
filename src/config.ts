@@ -36,6 +36,9 @@ export const CONFIG = {
     // Cash may go this far below zero before bankruptcy. Purchases still need
     // enough positive cash.
     overdraftLimit: 500,
+    // How long (ticks) you can stay below the overdraft limit before going
+    // bankrupt: 12 game hours to sell something or cancel a contract.
+    bankruptcyGraceTicks: 720,
     // Repairing a failed rack costs this fraction of the rack's price...
     repairCostFraction: 0.25,
     // ...and keeps it offline for this many ticks (3 game hours).
@@ -129,6 +132,54 @@ export const CONFIG = {
   zones: {
     serverRoomBonus: 0.05,
   },
+  // Random events (sim/events.ts), once the 'events' mechanic unlocks. The
+  // chance is per game day and grows with the number of racks; it's rolled
+  // hourly. Durations are ranges in ticks.
+  events: {
+    chancePerDay: 0.3,
+    chancePerRack: 0.006,
+    maxChancePerDay: 0.9,
+    // Kinds and how often each is picked (relative weights).
+    weights: { power_cut: 3, heatwave: 2, fire: 2, ddos: 2, rush_order: 2, press_visit: 1 },
+    // Share of grid-fed supply lost in a power cut (UPS batteries cover it).
+    powerCutLoss: 0.7,
+    powerCutTicks: [90, 300],
+    // Extra ambient temperature (°C) during a heatwave.
+    heatwaveBoost: 5,
+    heatwaveTicks: [480, 1440],
+    // Share of the internet line an attack takes, before firewalls.
+    ddosLoss: 0.7,
+    ddosTicks: [60, 240],
+    // A fire takes out the rack and up to this many racks next to it,
+    // unless fire suppression covers it.
+    fireSpread: 2,
+    // A rush job pays this many minutes of your current income.
+    rushOrderMinutes: 120,
+    // A press visit pays this per prestige point, plus XP.
+    pressCashPerPrestige: 60,
+    pressXp: 150,
+    // Past events remembered for the UI.
+    historyLength: 12,
+  },
+  // Research (content/research.ts): one project at a time, paid upfront.
+  research: {
+    // Speeds up every project (1 = as listed).
+    speed: 1,
+  },
+  // Selling the company: resets the game for legacy points, which carry over.
+  legacy: {
+    minLevel: 15,
+    // Points = floor(perSqrtMillion * sqrt(company value in £m)).
+    perSqrtMillion: 4,
+    // Each point: more income and more starting cash, forever.
+    incomePerPoint: 0.02,
+    startingCashPerPoint: 1000,
+  },
+  // Stats history: one sample per game hour, kept for this many samples.
+  history: {
+    sampleTicks: 60,
+    maxSamples: 24 * 14,
+  },
   // Every buildable thing, keyed by a stable id that saves and unlocks refer
   // to. Never rename an id once released; add a new one instead.
   // category decides behaviour: racks earn, power units supply, cooling cools.
@@ -189,7 +240,51 @@ export const CONFIG = {
     power_basic: {
       name: 'Power unit', category: 'power', cost: 1500, upkeepPerTick: 0.3, incomePerTick: 0,
       powerDraw: 0, powerSupply: 20, heatPerTick: 0.3, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0.15, powerDraw: 0, heat: 0 }, gridFed: true,
+    },
+    // Bigger power sources: more kW per tile and less upkeep per kW as they go
+    // up. Four of the same kind in a 2×2 square form a multiblock.
+    power_gas: {
+      name: 'Gas generator', category: 'power', cost: 5500, upkeepPerTick: 0.75, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 60, heatPerTick: 0.5, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0.15, powerDraw: 0, heat: 0 },
+    },
+    power_solar: {
+      // Renewable: its output is free, so it comes off the electricity bill.
+      name: 'Solar array', category: 'power', cost: 15000, upkeepPerTick: 0.3, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 20, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0.15, powerDraw: 0, heat: 0 }, renewable: true,
+    },
+    power_fuelcell: {
+      name: 'Fuel cell stack', category: 'power', cost: 12500, upkeepPerTick: 1.4, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 130, heatPerTick: 0.4, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0.15, powerDraw: 0, heat: 0 },
+    },
+    power_substation: {
+      name: 'Grid substation', category: 'power', cost: 30000, upkeepPerTick: 3, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 320, heatPerTick: 0.6, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0.15, powerDraw: 0, heat: 0 }, gridFed: true,
+    },
+    power_reactor: {
+      name: 'Micro reactor', category: 'power', cost: 95000, upkeepPerTick: 8, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 1000, heatPerTick: 1.2, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0.15, powerDraw: 0, heat: 0 },
+    },
+    // Safety: protection against random events (sim/events.ts).
+    ups_battery: {
+      name: 'UPS battery bank', category: 'safety', cost: 4000, upkeepPerTick: 0.15, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0.05, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, backupKw: 40,
+    },
+    fire_suppression: {
+      name: 'Fire suppression', category: 'safety', cost: 6000, upkeepPerTick: 0.1, incomePerTick: 0,
+      powerDraw: 0.1, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, suppressionRadius: 4,
+    },
+    firewall: {
+      name: 'Firewall appliance', category: 'safety', cost: 9000, upkeepPerTick: 0.25, incomePerTick: 0,
+      powerDraw: 0.5, powerSupply: 0, heatPerTick: 0.1, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, ddosShield: 0.35,
     },
     cooling_fan: {
       name: 'Cooling unit', category: 'cooling', cost: 1200, upkeepPerTick: 0.4, incomePerTick: 0,
@@ -521,7 +616,7 @@ export const CONFIG = {
 
 export type Speed = (typeof CONFIG.time.speeds)[number];
 export type BuildingKind = keyof typeof CONFIG.buildings;
-export type BuildingCategory = 'rack' | 'power' | 'cooling' | 'chiller' | 'decor' | 'furniture';
+export type BuildingCategory = 'rack' | 'power' | 'cooling' | 'chiller' | 'decor' | 'furniture' | 'safety';
 // Zones are painted onto tiles; see sim/zones.ts.
 export type ZoneKind = 'server' | 'staff' | 'storage';
 export const ZONE_KINDS: ZoneKind[] = ['server', 'staff', 'storage'];
@@ -563,6 +658,15 @@ export interface BuildingDef {
   readonly chillerCapacityPerLevel?: number;
   // Furniture only: the zone it serves.
   readonly zone?: ZoneKind;
+  // Power only: output that isn't billed as electricity (e.g. solar).
+  readonly renewable?: boolean;
+  // Power only: fed from the grid, so a power cut hits it.
+  readonly gridFed?: boolean;
+  // Safety buildings: UPS backup kW during power cuts, fire suppression
+  // radius (square, in tiles), and share of an attack a firewall blocks.
+  readonly backupKw?: number;
+  readonly suppressionRadius?: number;
+  readonly ddosShield?: number;
 }
 
 export interface FloorDef {

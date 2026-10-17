@@ -4,6 +4,7 @@ import { allocateRacks, contractIncomePerTick, type RackAllocation } from './con
 import { roomsOwned } from './lots';
 import { networkEfficiency, uplinkOf } from './network';
 import { electricityCost, powerEfficiency } from './power';
+import { researchBonus } from './research';
 import type { Building, GameState } from './state';
 import { inServerZone } from './zones';
 
@@ -26,10 +27,17 @@ export interface IncomeBreakdown {
 
 // Walk-in customers run out as you grow: past `freeRacks` walk-in racks,
 // each earns less.
-export function marketFactor(walkInRacks: number): number {
+// extraFree: more racks before saturation starts (marketing research).
+export function marketFactor(walkInRacks: number, extraFree = 0): number {
   const M = CONFIG.market;
-  if (walkInRacks <= M.freeRacks) return 1;
-  return Math.max(M.minFactor, (M.freeRacks / walkInRacks) ** M.exponent);
+  const free = M.freeRacks + extraFree;
+  if (walkInRacks <= free) return 1;
+  return Math.max(M.minFactor, (free / walkInRacks) ** M.exponent);
+}
+
+// Permanent income bonus from selling earlier companies.
+export function legacyIncomeFactor(state: GameState): number {
+  return 1 + state.legacy.points * CONFIG.legacy.incomePerPoint;
 }
 
 // What one walk-in rack earns this tick, before market saturation.
@@ -43,9 +51,13 @@ export function walkInRackIncome(state: GameState, b: Building, efficiency: numb
 export function incomeBreakdown(state: GameState): IncomeBreakdown {
   const efficiency = powerEfficiency(state) * networkEfficiency(state);
   const allocation = allocateRacks(state);
-  const market = marketFactor(allocation.walkIn.length);
-  const walkIn = allocation.walkIn.reduce((sum, b) => sum + walkInRackIncome(state, b, efficiency), 0) * market;
-  return { walkIn, contracts: contractIncomePerTick(state, allocation, efficiency), allocation, efficiency, market };
+  const market = marketFactor(allocation.walkIn.length, researchBonus(state, 'marketRacks'));
+  const legacy = legacyIncomeFactor(state);
+  const walkInBoost = 1 + researchBonus(state, 'walkInIncome');
+  const walkIn =
+    allocation.walkIn.reduce((sum, b) => sum + walkInRackIncome(state, b, efficiency), 0) * market * walkInBoost * legacy;
+  const contracts = contractIncomePerTick(state, allocation, efficiency) * (1 + researchBonus(state, 'contractPay')) * legacy;
+  return { walkIn, contracts, allocation, efficiency, market };
 }
 
 export function incomePerTick(state: GameState): number {
@@ -69,10 +81,11 @@ export function wagesPerTick(state: GameState): number {
 export function costBreakdown(state: GameState): CostBreakdown {
   const m = E.runningCostMultiplier;
   const rent = E.rentPerTick * roomsOwned(state) * m;
-  // Nothing is charged while it's still being built.
+  // Nothing is charged while it's still being built. Automation research cuts upkeep.
   const upkeep =
-    state.buildings.reduce((sum, b) => sum + (b.status === 'building' ? 0 : buildingStats(b).upkeep), 0) +
-    state.floor.reduce((sum, f) => sum + floorDef(f.kind).upkeepPerTick * m, 0);
+    (state.buildings.reduce((sum, b) => sum + (b.status === 'building' ? 0 : buildingStats(b).upkeep), 0) +
+      state.floor.reduce((sum, f) => sum + floorDef(f.kind).upkeepPerTick * m, 0)) *
+    (1 - researchBonus(state, 'upkeepDiscount'));
   const electricity = electricityCost(state);
   const network = uplinkOf(state).rentalPerTick;
   const wages = wagesPerTick(state);

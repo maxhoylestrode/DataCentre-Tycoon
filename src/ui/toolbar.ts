@@ -14,6 +14,9 @@ export interface ToolbarHandlers {
   onToggleWallHeight(): void;
   onToggleStaff(): void;
   onToggleGuide(): void;
+  onToggleResearch(): void;
+  onToggleStats(): void;
+  onUndo(): void;
 }
 
 interface Group {
@@ -31,6 +34,7 @@ const GROUPS: Group[] = [
   { id: 'racks', label: 'Racks', tools: byCategory('rack'), hotkey: TOOL_HOTKEYS.rack_basic },
   { id: 'power', label: 'Power', tools: byCategory('power'), hotkey: TOOL_HOTKEYS.power_basic },
   { id: 'cooling', label: 'Cooling', tools: [...byCategory('cooling', 'chiller'), ...FLOOR_KINDS], hotkey: TOOL_HOTKEYS.cooling_fan },
+  { id: 'safety', label: 'Safety', tools: byCategory('safety'), hotkey: TOOL_HOTKEYS.ups_battery },
   { id: 'decor', label: 'Decor', tools: byCategory('decor') },
   { id: 'zones', label: 'Zones', tools: [...ZONE_TOOLS, ...byCategory('furniture')], hotkey: TOOL_HOTKEYS.zone_server },
   { id: 'walls', label: 'Walls', tools: [...WALL_KINDS], hotkey: TOOL_HOTKEYS.wall_basic },
@@ -69,13 +73,30 @@ function stat(tool: Tool): string {
   });
   switch (def.category) {
     case 'rack': return `£${s.income.toFixed(1)}/min · ${kw(s.powerDraw)}`;
-    case 'power': return `+${kw(s.powerSupply)} · 2×2 = +${CONFIG.multiblock.bonus * 100}%`;
+    case 'power':
+      if (def.renewable) return `+${kw(s.powerSupply)} · free electricity`;
+      return `+${kw(s.powerSupply)} · 2×2 = +${CONFIG.multiblock.bonus * 100}%${def.gridFed ? '' : ' · on-site'}`;
+    case 'safety':
+      if (def.backupKw) return `${kw(def.backupKw)} backup in power cuts`;
+      if (def.suppressionRadius) return `Stops fires · ${def.suppressionRadius * 2 + 1}×${def.suppressionRadius * 2 + 1} area`;
+      return `Blocks ${Math.round((def.ddosShield ?? 0) * 100)}% of attacks`;
     case 'cooling': return s.coolingRadius > 20 ? `Whole room · ${kw(s.powerDraw)}` : `${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} area · ${kw(s.powerDraw)}`;
     case 'chiller': return `Feeds ${def.chillerCapacity} vents · ${def.chillerRange} tiles`;
     case 'decor': return `+${s.prestige} prestige`;
     case 'furniture': return FURNITURE_HINTS[tool] ?? '';
   }
 }
+
+// One line under each menu's title.
+const GROUP_HINTS: Partial<Record<GroupIcon, string>> = {
+  racks: 'Servers that earn money · drag to place rows with aisles',
+  power: 'Keep supply above draw · 4 of a kind in a 2×2 square = +25%',
+  cooling: 'Keep racks under 45°C · press H for the heat map',
+  safety: 'Protection against power cuts, fires and cyber attacks',
+  decor: 'Prestige: better contract pay and more offers',
+  zones: 'Drag to paint rooms, then add their furniture',
+  walls: 'Drag along grid lines · walls block heat',
+};
 
 const ZONE_HINTS: Record<string, string> = {
   zone_server: 'Racks here earn +5%',
@@ -123,15 +144,22 @@ export class Toolbar {
     parent.appendChild(wrap);
 
     // pointerdown so a re-render between press and release never loses a click.
-    const button = (icon: GroupIcon, label: string, hotkey: string | undefined, onClick: () => void): HTMLButtonElement => {
+    const button = (
+      icon: GroupIcon,
+      label: string,
+      hotkey: string | undefined,
+      onClick: () => void,
+      into: HTMLElement = bar,
+      small = false,
+    ): HTMLButtonElement => {
       const b = document.createElement('button');
-      b.className = 'hb-btn';
+      b.className = small ? 'hb-btn hb-small' : 'hb-btn';
       b.title = hotkey ? `${label} (${hotkey})` : label;
       b.innerHTML = `${ICONS[icon]}<span class="hb-label">${label}</span>${hotkey ? `<span class="hb-key">${hotkey}</span>` : ''}`;
       b.addEventListener('pointerdown', (e) => {
         if (e.button === 0) onClick();
       });
-      bar.appendChild(b);
+      into.appendChild(b);
       return b;
     };
 
@@ -156,12 +184,19 @@ export class Toolbar {
       { id: 'heat', label: 'Heat', hotkey: 'H', unlockId: 'heat_map', onClick: handlers.onToggleHeat },
       { id: 'contracts', label: 'Contracts', hotkey: 'K', unlockId: 'contract_board', onClick: handlers.onToggleContracts },
       { id: 'staff', label: 'Staff', hotkey: 'T', unlockId: 'rack_basic', onClick: handlers.onToggleStaff },
+      { id: 'research', label: 'Research', hotkey: 'Y', unlockId: 'research', onClick: handlers.onToggleResearch },
+      { id: 'stats', label: 'Stats', hotkey: 'N', unlockId: 'rack_basic', onClick: handlers.onToggleStats },
       { id: 'style', label: 'Style', hotkey: 'L', unlockId: 'room_styles', onClick: handlers.onToggleStyle },
       { id: 'wallHeight', label: 'Tall walls', hotkey: 'V', unlockId: 'wall_basic', onClick: handlers.onToggleWallHeight },
       { id: 'guide', label: 'Guide', hotkey: 'G', unlockId: 'rack_basic', onClick: handlers.onToggleGuide },
+      { id: 'undo', label: 'Undo', hotkey: '⌃Z', unlockId: 'rack_basic', onClick: handlers.onUndo },
     ];
+    // Panels and views: a compact grid of small icon buttons (names on hover).
+    const tools = document.createElement('div');
+    tools.className = 'hb-tools';
+    bar.appendChild(tools);
     for (const toggle of toggles) {
-      this.toggleButtons.push({ button: button(toggle.id, toggle.label, toggle.hotkey, toggle.onClick), toggle });
+      this.toggleButtons.push({ button: button(toggle.id, toggle.label, toggle.hotkey, toggle.onClick, tools, true), toggle });
     }
 
     this.panel.addEventListener('pointerdown', (e) => {
@@ -170,6 +205,11 @@ export class Toolbar {
       if (!target) return;
       if (target.dataset.act === 'close') {
         this.openGroup = null;
+        return;
+      }
+      if (target.dataset.act === 'left' || target.dataset.act === 'right') {
+        const cards = this.panel.querySelector<HTMLElement>('.hb-cards');
+        if (cards) cards.scrollBy({ left: (target.dataset.act === 'left' ? -1 : 1) * cards.clientWidth * 0.8 });
         return;
       }
       if (target.classList.contains('locked')) return;
@@ -187,6 +227,17 @@ export class Toolbar {
       },
       { passive: false },
     );
+    // Scroll events don't bubble; capture them to update the edge fades.
+    this.panel.addEventListener('scroll', () => this.updateScrollHints(), true);
+  }
+
+  // Shows the fades and arrows on whichever side has more cards.
+  private updateScrollHints(): void {
+    const cards = this.panel.querySelector<HTMLElement>('.hb-cards');
+    const scroller = this.panel.querySelector<HTMLElement>('.hb-scroller');
+    if (!cards || !scroller) return;
+    scroller.classList.toggle('more-left', cards.scrollLeft > 4);
+    scroller.classList.toggle('more-right', cards.scrollLeft + cards.clientWidth < cards.scrollWidth - 4);
   }
 
   close(): void {
@@ -196,7 +247,9 @@ export class Toolbar {
   update(
     state: GameState,
     tool: Tool,
-    open: { heat: boolean; contracts: boolean; staff: boolean; style: boolean; tallWalls: boolean; guide: boolean },
+    // Which toggle buttons show as on, by toggle id (e.g. heat, contracts);
+    // undo shows as available or not.
+    open: Partial<Record<GroupIcon, boolean>>,
   ): void {
     for (const group of GROUPS) {
       const b = this.groupButtons.get(group.id)!;
@@ -205,14 +258,17 @@ export class Toolbar {
       // Grey a group out only if nothing in it is unlocked yet.
       b.classList.toggle('locked', !group.tools.some((t) => toolUnlocked(state, t)));
     }
-    const states = [open.heat, open.contracts, open.staff, open.style, open.tallWalls, open.guide];
-    this.toggleButtons.forEach(({ button, toggle }, i) => {
-      const locked = !isUnlocked(state, toggle.unlockId);
+    this.toggleButtons.forEach(({ button, toggle }) => {
+      // Undo greys out when there's nothing to undo.
+      const locked = !isUnlocked(state, toggle.unlockId) || (toggle.id === 'undo' && !open.undo);
       button.classList.toggle('locked', locked);
-      button.classList.toggle('active', states[i]!);
-      button.title = locked
-        ? `${toggle.label}: unlocks at level ${unlockFor(toggle.unlockId)?.level ?? '?'}`
-        : `${toggle.label} (${toggle.hotkey})`;
+      button.classList.toggle('active', toggle.id !== 'undo' && open[toggle.id] === true);
+      button.title =
+        toggle.id === 'undo'
+          ? open.undo ? 'Undo the last change (Ctrl+Z)' : 'Nothing to undo'
+          : locked
+            ? `${toggle.label}: unlocks at level ${unlockFor(toggle.unlockId)?.level ?? '?'}`
+            : `${toggle.label} (${toggle.hotkey})`;
     });
     this.renderPanel(state, tool);
   }
@@ -235,9 +291,20 @@ export class Toolbar {
           <div class="hb-stat">${stat(t)}</div>
         </div>`;
     });
+    const unlocked = group.tools.filter((t) => toolUnlocked(state, t)).length;
     const html = `
-      <div class="hb-head">${ICONS[group.id]}<span>${group.label}</span><button data-act="close" aria-label="Close">✕</button></div>
-      <div class="hb-cards">${cards.join('')}</div>`;
+      <div class="hb-head">
+        <div class="hb-head-icon">${ICONS[group.id]}</div>
+        <div><div class="hb-title">${group.label}</div><div class="hb-sub">${GROUP_HINTS[group.id] ?? ''}</div></div>
+        <span class="hb-count">${unlocked} / ${group.tools.length} unlocked</span>
+        <button data-act="close" aria-label="Close">✕</button>
+      </div>
+      <div class="hb-scroller">
+        <button class="hb-arrow left" data-act="left" aria-label="Scroll left">‹</button>
+        <div class="hb-cards">${cards.join('')}</div>
+        <button class="hb-arrow right" data-act="right" aria-label="Scroll right">›</button>
+      </div>`;
+    this.panel.dataset.group = group.id;
     if (html !== this.lastPanelHtml) {
       // Re-rendering (e.g. cash changed) must not jump the scroll back to the start,
       // but switching groups should.
@@ -251,5 +318,6 @@ export class Toolbar {
       cards.style.scrollBehavior = '';
     }
     this.panel.classList.add('open');
+    this.updateScrollHints();
   }
 }

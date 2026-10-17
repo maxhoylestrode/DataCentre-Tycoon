@@ -89,92 +89,191 @@
       .guide-layout table.keys td:first-child { color: #fff; font-weight: 600; white-space: nowrap; }
       @media (max-width: 600px) { .guide-layout { flex-direction: column; } .guide-layout nav { flex-direction: row; flex-wrap: wrap; } }
       .network-panel .net-current { background: rgba(74, 168, 255, 0.08); border-radius: 8px; }
+      /* Research */
+      .research-panel, .stats-panel { width: min(760px, calc(100vw - 24px)); }
+      .rs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; margin: 8px 0 14px; }
+      .rs-card {
+        display: flex; flex-direction: column; gap: 3px; padding: 9px 10px; border-radius: 10px;
+        background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .rs-card.done { border-color: rgba(76, 195, 138, 0.45); background: rgba(76, 195, 138, 0.07); }
+      .rs-card.running { border-color: rgba(74, 168, 255, 0.6); background: rgba(74, 168, 255, 0.08); }
+      .rs-card.locked_level, .rs-card.locked_requires { opacity: 0.55; }
+      .rs-top { display: flex; justify-content: space-between; gap: 6px; font-size: 12.5px; }
+      .rs-top b { color: #fff; }
+      .rs-top span { font-size: 11px; white-space: nowrap; }
+      .rs-effect { color: #7fe0a8; font-size: 12px; font-weight: 600; }
+      .rs-desc { font-size: 11.5px; line-height: 1.35; }
+      .rs-action { margin-top: auto; padding-top: 4px; font-size: 11.5px; }
+      .rs-action button { width: 100%; }
+      /* Stats */
+      .st-tabs { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+      .st-tabs button { padding: 3px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); border: 0; color: #b6c2d1; }
+      .st-tabs button.active { background: var(--hb-accent, #4aa8ff); color: #fff; }
+      .st-tabs .muted { margin-left: auto; font-size: 11px; }
+      .st-totals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+      .st-totals div { display: flex; flex-direction: column; padding: 7px 9px; border-radius: 9px; background: rgba(255, 255, 255, 0.04); }
+      .st-totals span { font-size: 11px; }
+      .st-totals b { font-size: 15px; color: #fff; }
+      .st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; margin-bottom: 12px; }
+      .st-chart { padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.035); }
+      .st-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12.5px; font-weight: 600; color: #fff; margin-bottom: 4px; flex-wrap: wrap; }
+      .st-legend { display: flex; gap: 10px; font-size: 11px; font-weight: 400; color: #8a94a3; }
+      .st-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+      .st-legend b { color: #dfe6ee; font-weight: 600; }
+      .st-svg { width: 100%; height: 110px; display: block; }
+      .st-svg text { fill: #8a94a3; font-size: 9px; font-family: system-ui, sans-serif; }
+      .st-empty { font-size: 12px; padding: 30px 0; text-align: center; }
+      @media (max-width: 600px) { .st-totals { grid-template-columns: repeat(2, 1fr); } }
+      .menu .volume input { flex: 1; }
       .network-panel .ct-hist button { margin-left: auto; }
       .staff-panel .ct-hist button { margin-left: auto; }
       .building-panel .rack-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 3px 0; font-size: 12px; }
       .building-panel .rack-row button { font-size: 11.5px; margin: 0; }
       .building-panel .warn { color: #ffb347; }
       /* Hotbar, in the style of Cities: Skylines 2: a frosted dark bar of icon
-         buttons, with a panel of item cards rising above it. */
-      :root { --hb-bg: rgba(22, 26, 32, 0.88); --hb-edge: rgba(255, 255, 255, 0.07); --hb-accent: #4aa8ff; }
+         buttons, with a panel of item cards rising above it. The wrapper is
+         click-through so the map beside the panel still takes clicks and drags. */
+      :root { --hb-bg: rgba(20, 24, 31, 0.9); --hb-edge: rgba(255, 255, 255, 0.08); --hb-accent: #4aa8ff; }
       .hotbar-wrap {
         position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 1;
-        display: flex; flex-direction: column; align-items: center; gap: 8px;
+        display: flex; flex-direction: column; align-items: center; gap: 10px;
         max-width: calc(100vw - 24px); width: max-content; font-family: system-ui, sans-serif;
+        pointer-events: none;
       }
+      .hotbar, .hb-panel.open { pointer-events: auto; }
       .hotbar {
-        display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; padding: 6px;
-        background: var(--hb-bg); border: 1px solid var(--hb-edge); border-radius: 14px;
-        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+        display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 3px; padding: 6px;
+        background: var(--hb-bg); border: 1px solid var(--hb-edge); border-radius: 16px;
+        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
       }
       .hotbar .hb-btn {
-        position: relative; width: 62px; height: 58px; padding: 6px 0 4px; border: 0; border-radius: 10px;
+        position: relative; width: 60px; height: 56px; padding: 6px 0 4px; border: 0; border-radius: 11px;
         background: transparent; color: #c9d2dc; display: flex; flex-direction: column; align-items: center;
-        justify-content: center; gap: 3px; transition: background 0.12s, color 0.12s;
+        justify-content: center; gap: 3px; transition: background 0.12s, color 0.12s, transform 0.12s;
       }
-      .hotbar .hb-btn svg { width: 26px; height: 26px; }
-      .hotbar .hb-btn:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
-      .hotbar .hb-btn.open { background: rgba(255, 255, 255, 0.1); color: #fff; }
+      .hotbar .hb-btn svg { width: 25px; height: 25px; }
+      .hotbar .hb-btn:hover { background: rgba(255, 255, 255, 0.07); color: #fff; transform: translateY(-1px); }
+      .hotbar .hb-btn.open { background: rgba(255, 255, 255, 0.11); color: #fff; }
       .hotbar .hb-btn.active { background: rgba(74, 168, 255, 0.16); color: var(--hb-accent); }
       .hotbar .hb-btn.active::after {
         content: ''; position: absolute; bottom: 2px; left: 22px; right: 22px; height: 3px;
         border-radius: 2px; background: var(--hb-accent);
       }
       .hotbar .hb-btn.locked { opacity: 0.35; cursor: not-allowed; }
+      /* Panel toggles (heat, contracts, staff...) are a compact icon-only cluster. */
+      .hotbar .hb-btn.hb-small { width: 40px; height: 40px; padding: 0; }
+      .hotbar .hb-btn.hb-small svg { width: 20px; height: 20px; }
+      .hotbar .hb-btn.hb-small .hb-label, .hotbar .hb-btn.hb-small .hb-key { display: none; }
+      .hotbar .hb-btn.hb-small.active::after { left: 13px; right: 13px; }
+      .hb-tools { display: grid; grid-template-columns: repeat(5, 40px); grid-auto-rows: 26px; gap: 2px; }
+      .hb-tools .hb-btn.hb-small { height: 26px; border-radius: 8px; }
+      .hb-tools .hb-btn.hb-small svg { width: 17px; height: 17px; }
       .hb-label { font-size: 10.5px; letter-spacing: 0.02em; }
       .hb-key {
         position: absolute; top: 3px; right: 5px; font-size: 9px; line-height: 13px; min-width: 13px;
         border-radius: 3px; background: rgba(255, 255, 255, 0.1); color: #9aa6b4;
       }
-      .hb-divider { width: 1px; height: 38px; margin: 0 6px; background: var(--hb-edge); }
+      .hb-divider { width: 1px; height: 40px; margin: 0 5px; background: var(--hb-edge); }
+
+      /* The item panel. --cat is the category's accent colour. */
       .hb-panel {
-        display: none; padding: 10px 12px 12px; background: var(--hb-bg); border: 1px solid var(--hb-edge);
-        border-radius: 14px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); color: #d8dee6;
-        max-width: min(820px, calc(100vw - 24px)); box-sizing: border-box;
+        --cat: var(--hb-accent);
+        display: none; position: relative; padding: 12px 14px 12px; background: var(--hb-bg);
+        border: 1px solid var(--hb-edge); border-top: 2px solid color-mix(in srgb, var(--cat) 70%, transparent);
+        border-radius: 16px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); color: #d8dee6;
+        width: max-content; min-width: min(420px, calc(100vw - 24px)); max-width: min(860px, calc(100vw - 24px));
+        box-sizing: border-box; animation: hb-rise 0.16s ease-out;
       }
+      @keyframes hb-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
       .hb-panel.open { display: block; }
-      .hb-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 14px; font-weight: 600; color: #fff; }
-      .hb-head svg { width: 18px; height: 18px; color: var(--hb-accent); }
-      .hb-head button { margin-left: auto; padding: 0 8px; background: transparent; border: 0; color: #8a94a3; }
-      .hb-head button:hover { color: #fff; background: transparent; }
+      .hb-panel[data-group="racks"] { --cat: #4aa8ff; }
+      .hb-panel[data-group="power"] { --cat: #ffc53a; }
+      .hb-panel[data-group="cooling"] { --cat: #38d4e0; }
+      .hb-panel[data-group="safety"] { --cat: #ff6a5a; }
+      .hb-panel[data-group="decor"] { --cat: #5fd38a; }
+      .hb-panel[data-group="zones"] { --cat: #b28cff; }
+      .hb-panel[data-group="walls"] { --cat: #aab4c0; }
+      .hb-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; color: #fff; }
+      .hb-head .hb-head-icon {
+        width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+        background: color-mix(in srgb, var(--cat) 18%, transparent); color: var(--cat);
+      }
+      .hb-head .hb-head-icon svg { width: 18px; height: 18px; }
+      .hb-head .hb-title { font-size: 15px; font-weight: 700; }
+      .hb-head .hb-sub { font-size: 11.5px; color: #8a94a3; }
+      .hb-head .hb-count { margin-left: auto; font-size: 11px; color: #8a94a3; background: rgba(255, 255, 255, 0.06); padding: 2px 8px; border-radius: 10px; }
+      .hb-head button {
+        padding: 0; width: 28px; height: 28px; border-radius: 8px; background: rgba(255, 255, 255, 0.05);
+        border: 0; color: #9aa6b4; font-size: 13px;
+      }
+      .hb-head button:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
+      .hb-scroller { position: relative; }
       /* Always two rows; extra items continue sideways and scroll. */
       .hb-cards {
-        display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: 118px;
+        display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: 124px;
         gap: 8px; overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; touch-action: pan-x;
-        scroll-behavior: smooth; padding-bottom: 6px; justify-content: safe center;
-        scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+        scroll-behavior: smooth; padding: 2px 2px 8px; justify-content: safe center;
+        scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
       }
       .hb-cards::-webkit-scrollbar { height: 6px; }
-      .hb-cards::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.25); border-radius: 3px; }
+      .hb-cards::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
       .hb-cards::-webkit-scrollbar-track { background: transparent; }
-      .hb-card {
-        width: 118px; min-height: 132px; padding: 8px; border-radius: 10px; cursor: pointer; box-sizing: border-box;
-        background: rgba(255, 255, 255, 0.04); border: 1px solid transparent; transition: background 0.12s, border-color 0.12s;
+      /* Edge fades and arrows when there's more to scroll to. */
+      .hb-scroller::before, .hb-scroller::after {
+        content: ''; position: absolute; top: 0; bottom: 8px; width: 34px; pointer-events: none; z-index: 1;
+        opacity: 0; transition: opacity 0.15s;
       }
-      .hb-card:hover { background: rgba(255, 255, 255, 0.08); }
-      .hb-card.active { border-color: var(--hb-accent); background: rgba(74, 168, 255, 0.12); }
+      .hb-scroller::before { left: 0; background: linear-gradient(90deg, rgba(20, 24, 31, 0.95), transparent); }
+      .hb-scroller::after { right: 0; background: linear-gradient(-90deg, rgba(20, 24, 31, 0.95), transparent); }
+      .hb-scroller.more-left::before, .hb-scroller.more-right::after { opacity: 1; }
+      .hb-arrow {
+        position: absolute; top: calc(50% - 22px); z-index: 2; width: 30px; height: 30px; border-radius: 50%;
+        border: 1px solid var(--hb-edge); background: rgba(30, 35, 44, 0.95); color: #fff; display: none;
+        place-items: center; padding: 0; font-size: 15px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+      }
+      .hb-arrow:hover { background: color-mix(in srgb, var(--cat) 35%, #1e232c); }
+      .hb-arrow.left { left: -6px; }
+      .hb-arrow.right { right: -6px; }
+      .hb-scroller.more-left .hb-arrow.left, .hb-scroller.more-right .hb-arrow.right { display: grid; }
+      .hb-card {
+        position: relative; width: 124px; min-height: 140px; padding: 7px; border-radius: 12px; cursor: pointer; box-sizing: border-box;
+        background: rgba(255, 255, 255, 0.035); border: 1px solid rgba(255, 255, 255, 0.05);
+        transition: background 0.12s, border-color 0.12s, transform 0.12s, box-shadow 0.12s;
+      }
+      .hb-card:hover { background: rgba(255, 255, 255, 0.07); transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35); }
+      .hb-card.active {
+        border-color: var(--cat); background: color-mix(in srgb, var(--cat) 13%, transparent);
+        box-shadow: 0 0 0 1px var(--cat), 0 6px 18px color-mix(in srgb, var(--cat) 25%, transparent);
+      }
       .hb-card.locked { cursor: not-allowed; }
+      .hb-card.locked:hover { transform: none; box-shadow: none; }
       .hb-card.locked .hb-thumb svg, .hb-card.locked .hb-name, .hb-card.locked .hb-cost, .hb-card.locked .hb-stat { opacity: 0.35; }
       .hb-thumb {
-        position: relative; height: 62px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
-        background: linear-gradient(160deg, #2c3440, #1b2028); color: #dfe6ee; margin-bottom: 6px;
+        position: relative; height: 64px; border-radius: 9px; display: flex; align-items: center; justify-content: center;
+        background:
+          radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--cat) 30%, transparent), transparent 70%),
+          linear-gradient(160deg, #2c3440, #181c23);
+        color: #e6ecf2; margin-bottom: 7px; overflow: hidden;
       }
-      .hb-thumb svg { width: 38px; height: 38px; }
+      .hb-thumb svg { width: 38px; height: 38px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4)); transition: transform 0.15s; }
+      .hb-card:hover:not(.locked) .hb-thumb svg { transform: scale(1.08); }
       .hb-lock {
         position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-        gap: 2px; color: #ffd23a; font-size: 11px; font-weight: 600; opacity: 1;
+        gap: 2px; color: #ffd23a; font-size: 11px; font-weight: 700; background: rgba(10, 12, 16, 0.45);
       }
       .hb-card.locked .hb-lock svg { width: 18px; height: 18px; opacity: 1; }
-      .hb-name { font-size: 12px; font-weight: 600; color: #fff; line-height: 1.25; }
-      .hb-cost { font-size: 12px; color: #7fe0a8; margin-top: 2px; }
+      .hb-name { font-size: 12px; font-weight: 650; color: #fff; line-height: 1.25; }
+      .hb-cost { display: inline-block; font-size: 11.5px; font-weight: 600; color: #7fe0a8; margin-top: 4px; }
       .hb-cost.bad { color: #ff7a7f; }
-      .hb-stat { font-size: 10.5px; color: #8a94a3; margin-top: 2px; line-height: 1.3; }
+      .hb-stat { font-size: 10.5px; color: #8a94a3; margin-top: 3px; line-height: 1.3; }
       @media (max-width: 600px) {
-        .hotbar .hb-btn { width: 52px; height: 52px; }
-        .hb-card { width: 100px; }
-        .hb-cards { grid-auto-columns: 100px; }
+        .hotbar .hb-btn { width: 50px; height: 50px; }
+        .hb-card { width: 104px; }
+        .hb-cards { grid-auto-columns: 104px; }
+        .hb-head .hb-sub { display: none; }
       }
       .menu-toggle { position: fixed; top: 12px; right: 12px; font: 13px system-ui, sans-serif; padding: 6px 12px; }
       .menu {

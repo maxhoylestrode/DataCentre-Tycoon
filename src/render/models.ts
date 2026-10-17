@@ -178,6 +178,144 @@ function createPowerView(): BuildingView {
   return { group, update: (_state, building) => showUpgrade(building.upgrade) };
 }
 
+// An upgradable power source: model plus the usual upgrade trim.
+function powerSource(top: number, build: (g: THREE.Group) => void): () => BuildingView {
+  return () => {
+    const group = new THREE.Group();
+    build(group);
+    const showUpgrade = addUpgradeMarks(group, top, 0.88, 0.88);
+    return { group, update: (_state, building) => showUpgrade(building.upgrade) };
+  };
+}
+
+const createGasGenerator = powerSource(0.75, (g) => {
+  g.add(box(0.88, 0.75, 0.88, mat(0x3f7a4a, { metalness: 0.3 })));
+  for (let i = 0; i < 4; i++) g.add(at(box(0.9, 0.03, 0.3, darkMat, 0.2 + i * 0.13), 0, 0.3));
+  const stack = cylinder(0.07, 0.45, capMat, 0.95, 12);
+  stack.position.set(0.25, 0.95, -0.25);
+  g.add(stack);
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.5, 14), mat(0xd0d6dc, { metalness: 0.3 }));
+  tank.rotation.z = Math.PI / 2;
+  tank.position.set(-0.05, 0.9, 0.1);
+  g.add(tank);
+});
+
+const createSolarArray = powerSource(0.32, (g) => {
+  g.add(box(0.12, 0.3, 0.12, metal));
+  const panelMat = mat(0x1d3a6a, { roughness: 0.25, metalness: 0.3, emissive: 0x0a1a3a, emissiveIntensity: 0.4 });
+  const frame = new THREE.Group();
+  frame.position.y = 0.42;
+  frame.rotation.x = -0.45;
+  const panel = box(0.92, 0.04, 0.8, mat(0xc8ced6), 0);
+  frame.add(panel);
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 4; c++) {
+      const cell = box(0.2, 0.02, 0.24, panelMat, 0.025);
+      cell.position.set(-0.33 + c * 0.22, 0.025, -0.26 + r * 0.26);
+      frame.add(cell);
+    }
+  }
+  g.add(frame);
+});
+
+const createFuelCell = powerSource(1.1, (g) => {
+  g.add(box(0.88, 1.1, 0.7, mat(0xe8ecf0, { roughness: 0.4 })));
+  for (let i = 0; i < 5; i++) {
+    const fin = box(0.03, 0.8, 0.02, mat(0x3a8fd0), 0.6);
+    fin.position.set(-0.3 + i * 0.15, 0.6, 0.36);
+    g.add(fin);
+  }
+  const light = box(0.5, 0.06, 0.02, glow(0x4fb3ff, 1.2), 1.0);
+  light.position.z = 0.36;
+  g.add(light);
+  g.add(cylinder(0.1, 0.25, mat(0x3a8fd0, { metalness: 0.4 }), 1.22, 12));
+});
+
+const createSubstation = powerSource(0.5, (g) => {
+  g.add(box(0.92, 0.5, 0.92, mat(0x6b7280)));
+  const ceramic = mat(0xa0522d, { roughness: 0.4 });
+  for (const x of [-0.28, 0, 0.28]) {
+    const post = cylinder(0.05, 0.6, ceramic, 0.8, 10);
+    post.position.x = x;
+    g.add(post);
+    for (let i = 0; i < 3; i++) {
+      const disc = cylinder(0.09, 0.03, ceramic, 0.65 + i * 0.15, 12);
+      disc.position.x = x;
+      g.add(disc);
+    }
+  }
+  g.add(box(0.8, 0.04, 0.06, metal, 1.12));
+  const sign = box(0.18, 0.18, 0.01, mat(0xffd23a), 0.3);
+  sign.position.z = 0.465;
+  g.add(sign);
+});
+
+const createReactor = powerSource(0.35, (g) => {
+  g.add(box(0.94, 0.35, 0.94, mat(0x30343a)));
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.4, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat(0xdfe6ee, { roughness: 0.3 }));
+  dome.position.y = 0.35;
+  dome.castShadow = true;
+  g.add(dome);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.41, 0.03, 8, 32), glow(0x3fe0c0, 1.4));
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.37;
+  g.add(ring);
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 10), glow(0x3fe0c0, 2));
+  core.position.y = 0.78;
+  g.add(core);
+});
+
+const createUps = staticView((g) => {
+  g.add(box(0.8, 1.2, 0.6, mat(0x2b2f36)));
+  for (let i = 0; i < 4; i++) {
+    const cell = box(0.66, 0.2, 0.02, mat(0x3a3f48), 0.22 + i * 0.25);
+    cell.position.z = 0.305;
+    g.add(cell);
+    const charge = box(0.36, 0.05, 0.01, glow(0x5dff9a, 1.1), 0.22 + i * 0.25);
+    charge.position.set(-0.12, 0.22 + i * 0.25, 0.32);
+    g.add(charge);
+  }
+  const bolt = box(0.08, 0.08, 0.01, glow(0xffd23a, 1.2), 1.12);
+  bolt.position.z = 0.31;
+  g.add(bolt);
+});
+
+const createFireSuppression = staticView((g) => {
+  const red = mat(0xc62828, { roughness: 0.35 });
+  for (const x of [-0.2, 0.2]) {
+    const tank = cylinder(0.17, 1.1, red, 0.55, 16);
+    tank.position.x = x;
+    g.add(tank);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), red);
+    cap.position.set(x, 1.1, 0);
+    g.add(cap);
+    const valve = cylinder(0.04, 0.12, capMat, 1.3, 8);
+    valve.position.x = x;
+    g.add(valve);
+  }
+  g.add(box(0.5, 0.04, 0.04, capMat, 1.38));
+  const label = box(0.14, 0.2, 0.01, whiteMat, 0.6);
+  label.position.set(-0.2, 0.6, 0.172);
+  g.add(label);
+});
+
+const createFirewall = staticView((g) => {
+  g.add(box(0.8, 0.9, 0.7, mat(0x1d1f26)));
+  for (let i = 0; i < 6; i++) {
+    const unit = box(0.7, 0.1, 0.02, mat(0x2a2d36), 0.12 + i * 0.13);
+    unit.position.z = 0.355;
+    g.add(unit);
+    for (let j = 0; j < 4; j++) {
+      const led = box(0.03, 0.03, 0.01, glow(i % 3 === 0 ? 0xff5a5f : 0xffb347, 1.4), 0.12 + i * 0.13);
+      led.position.set(0.2 + j * 0.04, 0.12 + i * 0.13, 0.37);
+      g.add(led);
+    }
+  }
+  const shield = box(0.22, 0.26, 0.02, glow(0xff8a2a, 0.6), 1.05);
+  shield.position.z = 0.0;
+  g.add(shield);
+});
+
 function spinningFan(radius: number, y: number): THREE.Group {
   const fan = new THREE.Group();
   fan.position.y = y;
@@ -757,6 +895,14 @@ const createGoldenServer = staticView((g) => {
 
 // Every building id has a model. TypeScript enforces that new ids get one.
 const FACTORIES: Record<BuildingKind, () => BuildingView> = {
+  power_gas: createGasGenerator,
+  power_solar: createSolarArray,
+  power_fuelcell: createFuelCell,
+  power_substation: createSubstation,
+  power_reactor: createReactor,
+  ups_battery: createUps,
+  fire_suppression: createFireSuppression,
+  firewall: createFirewall,
   bench: createBench,
   cactus: createCactus,
   bookshelf: createBookshelf,
@@ -833,11 +979,11 @@ interface PlacedView extends BuildingView {
 export class BuildingLayer {
   readonly group = new THREE.Group();
   private readonly views = new Map<number, PlacedView>();
-  // A building being carried by the move tool: drawn lifted at the cursor.
-  private carried: { id: number; x: number; y: number; rot: number } | null = null;
+  // Buildings being carried by the move tool: drawn lifted at the cursor.
+  private carried = new Map<number, { x: number; y: number; rot: number }>();
 
-  carry(carried: { id: number; x: number; y: number; rot: number } | null): void {
-    this.carried = carried;
+  carry(list: { id: number; x: number; y: number; rot: number }[]): void {
+    this.carried = new Map(list.map((c) => [c.id, c]));
   }
 
   sync(state: GameState, dt: number): void {
@@ -855,7 +1001,7 @@ export class BuildingLayer {
         this.group.add(holder);
       }
       // Buildings can move, so follow the sim every frame (or the cursor while carried).
-      const carried = this.carried?.id === building.id ? this.carried : null;
+      const carried = this.carried.get(building.id) ?? null;
       view.group.position.copy(
         tileToWorld(state.width, state.height, carried ? carried.x : building.x, carried ? carried.y : building.y),
       );

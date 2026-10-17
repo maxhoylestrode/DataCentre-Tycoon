@@ -18,6 +18,7 @@ import {
 } from '../config';
 import { isRoomBoundaryEdge, isValidWallEdge, wallAt } from './walls';
 import { nextUplink } from './network';
+import { researchProject, researchStatus, researchTicks } from './research';
 import { dismissClient, entrance } from './people';
 import { isOwnedTile, nextLotPrice, purchasableLots } from './lots';
 import { ROOM_STYLES } from './content/styles';
@@ -373,6 +374,33 @@ export function moveBuilding(
   return { ok: true };
 }
 
+// Moves several buildings together by an offset (all or nothing). Free.
+export function moveGroup(state: GameState, ids: number[], dx: number, dy: number): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  const group = state.buildings.filter((b) => ids.includes(b.id));
+  if (group.length === 0) return { ok: false, reason: 'empty' };
+  const inGroup = new Set(group.map((b) => b.id));
+  for (const b of group) {
+    const x = b.x + dx;
+    const y = b.y + dy;
+    if (!isInBounds(state, x, y)) return { ok: false, reason: 'out_of_bounds' };
+    if (!isOwnedTile(state, x, y)) return { ok: false, reason: 'not_owned' };
+    const there = getBuildingAt(state, x, y);
+    if (there && !inGroup.has(there.id)) return { ok: false, reason: 'occupied' };
+  }
+  for (const b of group) {
+    b.x += dx;
+    b.y += dy;
+  }
+  for (const member of state.staff) {
+    if (member.task && inGroup.has(member.task.buildingId)) {
+      member.task = null;
+      member.path = [];
+    }
+  }
+  return { ok: true };
+}
+
 // Resets a rack's hardware age without buying a new CPU.
 export function refurbishRack(state: GameState, x: number, y: number): CommandResult {
   if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
@@ -398,6 +426,21 @@ export function upgradeUplink(state: GameState): CommandResult {
   state.cash -= next.cost;
   state.uplink = next.id;
   afterProgress(state);
+  return { ok: true };
+}
+
+// Starts a research project: paid now, finished after its game days.
+export function startResearch(state: GameState, id: string): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  if (!isUnlocked(state, 'research')) return { ok: false, reason: 'locked' };
+  const project = researchProject(id);
+  if (!project) return { ok: false, reason: 'unknown_project' };
+  if (state.research.current) return { ok: false, reason: 'busy' };
+  const status = researchStatus(state, project, levelOf(state));
+  if (status !== 'available') return { ok: false, reason: status };
+  if (state.cash < project.cost) return { ok: false, reason: 'insufficient_funds' };
+  state.cash -= project.cost;
+  state.research.current = { id, remaining: researchTicks(project) };
   return { ok: true };
 }
 

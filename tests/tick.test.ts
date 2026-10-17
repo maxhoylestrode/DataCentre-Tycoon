@@ -47,14 +47,29 @@ describe('tick', () => {
     expect(state.bankrupt).toBe(false);
   });
 
-  it('goes bankrupt past the overdraft limit and then stops', () => {
+  it('past the overdraft limit there is a grace period, then bankruptcy, then it stops', () => {
     const state = createInitialState(5, 5);
     state.cash = -E.overdraftLimit;
     tick(state);
+    expect(state.bankrupt).toBe(false);
+    expect(state.overdrawnSince).not.toBeNull();
+    runTicks(state, E.bankruptcyGraceTicks);
     expect(state.bankrupt).toBe(true);
     const frozen = { tick: state.tick, cash: state.cash };
     runTicks(state, 100);
     expect({ tick: state.tick, cash: state.cash }).toEqual(frozen);
+  });
+
+  it('getting back above the limit during the grace period saves the company', () => {
+    const state = createInitialState(5, 5);
+    state.cash = -E.overdraftLimit - 100;
+    runTicks(state, E.bankruptcyGraceTicks / 2);
+    state.cash = 1000;
+    tick(state);
+    expect(state.overdrawnSince).toBeNull();
+    state.cash = -E.overdraftLimit - 100;
+    runTicks(state, E.bankruptcyGraceTicks - 2);
+    expect(state.bankrupt).toBe(false);
   });
 
   it('a repairing rack comes back online after repairTicks', () => {

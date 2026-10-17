@@ -5,7 +5,9 @@
 
 import { CONFIG } from '../config';
 import { buildingStats } from './buildings';
+import { ambientTemp } from './events';
 import { feedVents } from './floor';
+import { researchBonus } from './research';
 import { categoryOf, type GameState, isRunning, tempAt } from './state';
 import { reachableTiles, wallGrid } from './walls';
 
@@ -16,6 +18,9 @@ export function stepHeat(state: GameState, efficiency: number): void {
   const heatIn = new Array<number>(w * h).fill(0);
   const cooling = new Array<number>(w * h).fill(0);
   const walls = wallGrid(state);
+  const coolingBoost = 1 + researchBonus(state, 'coolingStrength');
+  // Heatwaves raise the temperature everything cools towards.
+  const ambient = ambientTemp(state);
 
   for (const b of state.buildings) {
     if (!isRunning(b)) continue;
@@ -26,13 +31,13 @@ export function stepHeat(state: GameState, efficiency: number): void {
 
     if (def.coolingStrength > 0) {
       for (const i of reachableTiles(state, walls, b.x, b.y, def.coolingRadius)) {
-        cooling[i]! += def.coolingStrength * scale;
+        cooling[i]! += def.coolingStrength * scale * coolingBoost;
       }
     }
   }
 
   // Fed floor vents cool their own tile; the chillers feeding them slow in a brownout.
-  const ventStrength = CONFIG.floors.floor_vent.coolingStrength * efficiency;
+  const ventStrength = CONFIG.floors.floor_vent.coolingStrength * efficiency * coolingBoost;
   for (const i of feedVents(state).fed) cooling[i]! += ventStrength;
 
   const next = new Array<number>(w * h);
@@ -48,8 +53,8 @@ export function stepHeat(state: GameState, efficiency: number): void {
       if (y < h - 1 && !walls.up[i + w]) flow += temps[i + w]! - t;
 
       // Capped so many overlapping coolers can't overshoot below ambient.
-      const loss = Math.min(0.9, H.leak + cooling[i]!) * (t - H.ambient);
-      next[i] = Math.max(H.ambient, t + heatIn[i]! + H.diffusion * flow - loss);
+      const loss = Math.min(0.9, H.leak + cooling[i]!) * (t - ambient);
+      next[i] = Math.max(Math.min(ambient, t), t + heatIn[i]! + H.diffusion * flow - loss);
     }
   }
   state.temps = next;

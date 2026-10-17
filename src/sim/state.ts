@@ -233,6 +233,65 @@ export function createProgress(): Progress {
   };
 }
 
+export interface ResearchState {
+  // Finished project ids (content/research.ts).
+  done: string[];
+  // The running project and game ticks of work left.
+  current: { id: string; remaining: number } | null;
+}
+
+export type EventKind = 'power_cut' | 'heatwave' | 'fire' | 'ddos' | 'rush_order' | 'press_visit';
+
+export interface ActiveEvent {
+  kind: EventKind;
+  startTick: number;
+  endTick: number;
+}
+
+export interface EventRecord {
+  kind: EventKind;
+  tick: number;
+  // What happened, for the toast and the stats page.
+  text: string;
+  // Good news or bad.
+  good: boolean;
+}
+
+export interface EventsState {
+  active: ActiveEvent[];
+  // Most recent last.
+  history: EventRecord[];
+}
+
+// Carried over when the company is sold (sim/legacy.ts).
+export interface LegacyState {
+  points: number;
+  sales: number;
+}
+
+// One stats sample, averaged over a game hour (per-tick values).
+export interface HistorySample {
+  tick: number;
+  income: number;
+  costs: number;
+  cash: number;
+  powerDraw: number;
+  powerSupply: number;
+  // Share of work actually done (power × network efficiency), 0..1.
+  uptime: number;
+  racks: number;
+}
+
+export interface HistoryState {
+  samples: HistorySample[];
+  // Running sums for the hour being sampled.
+  acc: { ticks: number; income: number; costs: number; powerDraw: number; powerSupply: number; uptime: number };
+}
+
+export function createHistoryState(): HistoryState {
+  return { samples: [], acc: { ticks: 0, income: 0, costs: 0, powerDraw: 0, powerSupply: 0, uptime: 0 } };
+}
+
 export interface GameState {
   width: number;
   height: number;
@@ -265,11 +324,19 @@ export interface GameState {
   // service racks, clients walk in. On in real games; engine tests leave it
   // off so they can test other systems on their own.
   staffSim: boolean;
+  // Tick cash first went below the overdraft limit (null when it isn't).
+  overdrawnSince: number | null;
+  research: ResearchState;
+  events: EventsState;
+  legacy: LegacyState;
+  history: HistoryState;
 }
 
 export interface NewGameOptions {
   // See GameState.staffSim.
   staffSim?: boolean;
+  // Legacy carried over from a sold company.
+  legacy?: LegacyState;
 }
 
 // The seed defaults to 1 so tests are repeatable; the game passes a random one.
@@ -281,6 +348,7 @@ export function createInitialState(
   options: NewGameOptions = {},
 ): GameState {
   const staffSim = options.staffSim ?? false;
+  const legacy = options.legacy ? { ...options.legacy } : { points: 0, sales: 0 };
   return {
     width,
     height,
@@ -291,7 +359,7 @@ export function createInitialState(
     style: createStyleState(),
     ownedLots: [STARTING_LOT],
     temps: new Array<number>(width * height).fill(CONFIG.heat.ambient),
-    cash: CONFIG.economy.startingCash,
+    cash: CONFIG.economy.startingCash + legacy.points * CONFIG.legacy.startingCashPerPoint,
     tick: 0,
     speed: 1,
     paused: false,
@@ -307,6 +375,11 @@ export function createInitialState(
     clients: [],
     nextClientId: 1,
     staffSim,
+    overdrawnSince: null,
+    research: { done: [], current: null },
+    events: { active: [], history: [] },
+    legacy,
+    history: createHistoryState(),
   };
 }
 

@@ -2,7 +2,10 @@ import { CONFIG } from '../config';
 import { refreshOffers } from './contractBoard';
 import { finishContracts, recordService } from './contracts';
 import { costsPerTick, incomeBreakdown } from './economy';
+import { stepEvents } from './events';
 import { failOverheatedRacks, stepHeat } from './heat';
+import { recordHistory } from './history';
+import { stepResearch } from './research';
 import { stepClients, stepStaff } from './people';
 import { powerEfficiency } from './power';
 import { checkProgress, endDay, recordTick } from './progression';
@@ -30,19 +33,30 @@ export function tick(state: GameState): void {
 
   const income = incomeBreakdown(state);
   const total = income.walkIn + income.contracts;
-  const net = total - costsPerTick(state);
+  const costs = costsPerTick(state);
+  const net = total - costs;
   state.cash += net;
   state.progress.stats.contractIncome += income.contracts;
   recordService(state, income.allocation, income.efficiency);
   recordTick(state, total, net);
+  recordHistory(state, total, costs, income.efficiency);
+  stepResearch(state);
+  stepEvents(state, total);
 
   state.tick += 1;
   finishContracts(state);
   if (state.tick % CONFIG.time.ticksPerDay === 0) endDay(state);
 
+  // Below the overdraft limit you have a grace period to recover (sell
+  // something, cancel a contract); still below at the end of it, you're bankrupt.
   if (state.cash < -CONFIG.economy.overdraftLimit) {
-    state.bankrupt = true;
-    return;
+    state.overdrawnSince ??= state.tick;
+    if (state.tick - state.overdrawnSince >= CONFIG.economy.bankruptcyGraceTicks) {
+      state.bankrupt = true;
+      return;
+    }
+  } else {
+    state.overdrawnSince = null;
   }
   checkProgress(state);
   refreshOffers(state);

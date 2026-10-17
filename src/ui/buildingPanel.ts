@@ -169,11 +169,10 @@ export class BuildingPanel {
     const extra =
       category === 'chiller' ? this.chillerInfo(state, b)
       : isRack ? this.rackInfo(state, b)
-      : b.kind === 'power_basic' && powerMultiblocks(state).members.has(b.id)
-        ? `<div class="good">Part of a power multiblock: +${CONFIG.multiblock.bonus * 100}% output.</div>`
-        : b.kind === 'power_basic' ? '<div class="muted">Tip: four power units in a 2×2 square produce 25% more.</div>'
-        : def.zone ? `<div class="muted">Works on a ${def.zone} room zone (Zones menu).</div>`
-        : '';
+      : category === 'power' ? this.powerInfo(state, b)
+      : category === 'safety' ? this.safetyInfo(b)
+      : def.zone ? `<div class="muted">Works on a ${def.zone} room zone (Zones menu).</div>`
+      : '';
 
     return `
       <h2>${def.name}${levelLine}</h2>
@@ -197,6 +196,30 @@ export class BuildingPanel {
     const n = plan.steps.length;
     if (n === 0) return `<button class="max-btn" disabled>Upgrade max: nothing more right now</button>`;
     return `<button data-act="max" class="primary max-btn">⏫ Upgrade max &middot; ${n} upgrade${n > 1 ? 's' : ''} &middot; ${money(plan.cost)}</button>`;
+  }
+
+  private powerInfo(state: GameState, b: Building): string {
+    const def = buildingDef(b.kind);
+    const lines: string[] = [];
+    if (powerMultiblocks(state).members.has(b.id)) {
+      lines.push(`<div class="good">Part of a power multiblock: +${CONFIG.multiblock.bonus * 100}% output.</div>`);
+    } else {
+      lines.push(`<div class="muted">Tip: four ${def.name.toLowerCase()}s in a 2×2 square produce ${CONFIG.multiblock.bonus * 100}% more.</div>`);
+    }
+    if (def.renewable) lines.push('<div class="good">Renewable: its power is free, so it comes off your electricity bill.</div>');
+    else if (def.gridFed) lines.push('<div class="muted">Grid-fed: loses most of its output in a power cut. UPS batteries cover it.</div>');
+    else lines.push('<div class="muted">On-site generator: keeps running in a power cut.</div>');
+    return lines.join('');
+  }
+
+  private safetyInfo(b: Building): string {
+    const def = buildingDef(b.kind);
+    if (def.backupKw) return `<div class="muted">Gives ${def.backupKw} kW of backup during a power cut. Add more for more backup.</div>`;
+    if (def.suppressionRadius) {
+      const size = def.suppressionRadius * 2 + 1;
+      return `<div class="muted">Puts out fires in racks within a ${size}×${size} area around it.</div>`;
+    }
+    return `<div class="muted">Blocks ${Math.round((def.ddosShield ?? 0) * 100)}% of a cyber attack. Two or more block nearly all of it.</div>`;
   }
 
   private chillerInfo(state: GameState, b: Building): string {

@@ -17,13 +17,15 @@ import {
   type StaffMember,
   type StaffTask,
 } from './state';
+import { researchBonus } from './research';
 import { hasStorage, staffCapacity } from './zones';
 
 const S = CONFIG.staff;
 
 // Everyone slows down when there are more staff than the staff rooms can house.
 export function staffSpeedFactor(state: GameState): number {
-  return state.staff.length > staffCapacity(state) ? S.tiredSpeed : 1;
+  const tired = state.staff.length > staffCapacity(state) ? S.tiredSpeed : 1;
+  return tired * (1 + researchBonus(state, 'staffSpeed'));
 }
 
 // Moves a person along their path. Returns true once the path is used up.

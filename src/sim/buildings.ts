@@ -4,6 +4,7 @@
 import { type BuildingKind, buildingDef, CONFIG, type PartSlot } from '../config';
 import { PARTS } from './content/parts';
 import type { ContractRequirement, Part } from './content/types';
+import { researchBonus } from './research';
 import type { Building, GameState } from './state';
 
 export interface BuildingStats {
@@ -79,7 +80,8 @@ export function buildTicks(kind: BuildingKind): number {
 export function ageFactor(state: GameState, rack: Building): number {
   const A = CONFIG.ageing;
   const months = Math.max(0, state.tick - rack.refreshedAtTick) / A.ticksPerMonth;
-  return Math.max(A.floor, 1 - A.lossPerMonth * months);
+  const slower = 1 - researchBonus(state, 'ageingSlower');
+  return Math.max(A.floor, 1 - A.lossPerMonth * slower * months);
 }
 
 // Price to refurbish a rack (reset its age without a new CPU).

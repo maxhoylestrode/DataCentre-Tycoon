@@ -4,14 +4,15 @@ import { isOverdue } from '../sim/buildings';
 import { contractBoardOpen } from '../sim/contractBoard';
 import { committedRacks } from '../sim/contracts';
 import { costBreakdown, incomeBreakdown, repairCost } from '../sim/economy';
-import { bandwidthDemand, formatMbps, networkEfficiency, uplinkOf } from '../sim/network';
+import { bandwidthDemand, formatMbps, lineCapacity, networkEfficiency } from '../sim/network';
 import { receptionProblem, staffSpeedFactor } from '../sim/people';
-import { powerDraw, powerEfficiency, powerSupply } from '../sim/power';
+import { activeEventText } from '../sim/events';
+import { powerCutLoss, powerDraw, powerEfficiency, powerSupply } from '../sim/power';
 import { prestigeOf } from '../sim/prestige';
 import { levelInfo, tierFor } from '../sim/progression';
 import { type GameState, racksOf, tempAt } from '../sim/state';
 import type { Tile } from '../render/grid';
-import { num } from './format';
+import { clockText, num } from './format';
 import { ICONS } from './icons';
 
 export interface HudHandlers {
@@ -24,15 +25,6 @@ export interface HudHandlers {
 const money = (n: number): string => `${n < 0 ? '-' : ''}£${Math.abs(Math.round(n)).toLocaleString('en-GB')}`;
 const perMin = (n: number): string => `£${n.toFixed(2)}`;
 
-function clockText(tick: number): string {
-  const { ticksPerDay } = CONFIG.time;
-  const day = Math.floor(tick / ticksPerDay) + 1;
-  const minute = tick % ticksPerDay;
-  const hh = String(Math.floor(minute / 60)).padStart(2, '0');
-  const mm = String(minute % 60).padStart(2, '0');
-  return `Day ${day} &middot; ${hh}:${mm}`;
-}
-
 interface Warning {
   level: 'bad' | 'warn' | 'info';
   text: string;
@@ -40,8 +32,16 @@ interface Warning {
 
 function warnings(state: GameState): Warning[] {
   const out: Warning[] = [];
+  if (state.overdrawnSince !== null) {
+    const left = Math.max(0, CONFIG.economy.bankruptcyGraceTicks - (state.tick - state.overdrawnSince));
+    out.push({ level: 'bad', text: `Overdrawn! Bankrupt in ${Math.ceil(left / 60)}h unless cash gets back above -£${CONFIG.economy.overdraftLimit}. Sell something or cancel a contract.` });
+  }
+  for (const text of activeEventText(state)) out.push({ level: 'bad', text });
   const power = powerEfficiency(state);
-  if (power < 1) out.push({ level: 'bad', text: `Power overloaded: running at ${Math.floor(power * 100)}%. Build power units.` });
+  if (power < 1) {
+    const cut = powerCutLoss(state) > 0 ? ' The power cut is to blame: UPS batteries help.' : ' Build more power.';
+    out.push({ level: 'bad', text: `Power overloaded: running at ${Math.floor(power * 100)}%.${cut}` });
+  }
   const net = networkEfficiency(state);
   if (net < 1) out.push({ level: 'bad', text: `Internet line full: running at ${Math.floor(net * 100)}%. Upgrade it (click Network).` });
 
@@ -136,7 +136,7 @@ export class Hud {
     const net = totalIn - costs.total;
     const supply = powerSupply(state);
     const draw = powerDraw(state);
-    const line = uplinkOf(state);
+    const line = { id: Math.round(lineCapacity(state)) };
     const demand = bandwidthDemand(state);
     const temp = hover ? tempAt(state, hover.x, hover.y) : null;
     const warningList = warnings(state);
@@ -172,8 +172,9 @@ export class Hud {
     p['hud-power-text']!.innerHTML = `<span>Power</span><b>${num(draw)} / ${num(supply)} kW</b>`;
     p['hud-power-fill']!.style.width = `${Math.min(100, load * 100)}%`;
     p['hud-power-fill']!.className = `fill hud-power-fill ${load > 1 ? 'over' : load > 0.85 ? 'high' : ''}`;
-    const netLoad = demand / line.mbps;
-    p['hud-net-text']!.innerHTML = `<span>Network</span><b>${formatMbps(demand)} / ${formatMbps(line.mbps)}</b>`;
+    const capacity = Math.max(1, lineCapacity(state));
+    const netLoad = demand / capacity;
+    p['hud-net-text']!.innerHTML = `<span>Network</span><b>${formatMbps(demand)} / ${formatMbps(capacity)}</b>`;
     p['hud-net-fill']!.style.width = `${Math.min(100, netLoad * 100)}%`;
     p['hud-net-fill']!.className = `fill hud-net-fill ${netLoad > 1 ? 'over' : netLoad > 0.85 ? 'high' : ''}`;
 

@@ -147,6 +147,28 @@ Real product names are fine (names only, never logos); the in-game note covers t
 
 Add it to `CONFIG.buildings` with `category: 'decor'` and a `prestige` value, an unlock entry, and a model in `FACTORIES` (`src/render/models.ts`). It shows up in the Decor menu automatically.
 
+## Add a research project
+
+`src/sim/content/research.ts`. Paid upfront, takes `days` game days, needs `level` and every id in `requires` finished first. Effects of the same kind add up (fractions are capped at 90%).
+
+```ts
+{
+  id: 'r_immersion_lab', name: 'Immersion lab', level: 28, cost: 1_500_000, days: 4, requires: ['r_liquid_rd'],
+  description: 'Even better liquid cooling.',
+  effects: [{ kind: 'coolingStrength', value: 0.2 }],
+},
+```
+
+Effect kinds: `powerOutput`, `coolingStrength`, `electricityDiscount`, `contractPay`, `walkInIncome`, `marketRacks` (a number of racks), `staffSpeed`, `ageingSlower`, `bandwidthSaving`, `eventChance`, `upkeepDiscount`. A new kind is engine work: add it to `ResearchEffectKind`, read it with `researchBonus(state, kind)` where it applies, and give it a line in `EFFECT_TEXT` (`src/ui/research.ts`).
+
+## Add a power source
+
+Add it to `CONFIG.buildings` with `category: 'power'` and a `powerSupply`, an unlock entry, a model in `FACTORIES` and an icon. Flags: `renewable: true` (its output comes off the electricity bill) or `gridFed: true` (hit by power cuts); neither means an on-site generator. Four of the same kind in a 2×2 square form a multiblock automatically.
+
+## Add a safety building
+
+`category: 'safety'` with one of `backupKw` (UPS in power cuts), `suppressionRadius` (stops fires) or `ddosShield` (share of a cyber attack blocked). It appears in the Safety menu. New kinds of random event are engine work in `src/sim/events.ts` (numbers in `CONFIG.events`).
+
 ## Add zone furniture
 
 Add it to `CONFIG.buildings` with `category: 'furniture'` and `zone: 'staff' | 'storage' | 'server'`, an unlock entry, a model in `FACTORIES` and an icon. It appears in the Zones menu. Furniture only has an effect if `src/sim/zones.ts` reads it (e.g. `staffCapacity` counts `break_table` and needs `coffee_machine`; `hasStorage` needs `shelving`). A new zone kind goes in `ZONE_KINDS` in `config.ts`, with a colour in `src/render/zones.ts` and a tool in `src/input/tools.ts`.

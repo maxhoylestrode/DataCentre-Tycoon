@@ -1,5 +1,5 @@
 import { UPLINKS } from '../sim/content/uplinks';
-import { bandwidthDemand, formatMbps, networkEfficiency, uplinkOf } from '../sim/network';
+import { bandwidthDemand, formatMbps, lineCapacity, networkEfficiency, uplinkOf } from '../sim/network';
 import { levelOf } from '../sim/progression';
 import type { GameState } from '../sim/state';
 import { ICONS } from './icons';
@@ -60,13 +60,16 @@ export class NetworkPanel {
       } else action = `<span class="muted">Level ${u.level}</span>`;
       return `<div class="ct-hist ${i === current ? 'net-current' : ''}"><b>${formatMbps(u.mbps)}</b><span>${u.name}</span><span class="muted">£${u.rentalPerTick.toFixed(2)}/min</span>${action}</div>`;
     });
-    const pct = Math.min(100, (demand / line.mbps) * 100);
+    const capacity = lineCapacity(state);
+    const attacked = capacity < line.mbps;
+    const pct = Math.min(100, (demand / Math.max(1, capacity)) * 100);
     const html = `
       <div class="ct-meter">
-        <div class="ct-meter-label"><span>Bandwidth</span><b class="${eff < 1 ? 'bad' : 'good'}">${formatMbps(demand)}</b><span class="muted">of ${formatMbps(line.mbps)}</span></div>
+        <div class="ct-meter-label"><span>Bandwidth</span><b class="${eff < 1 ? 'bad' : 'good'}">${formatMbps(demand)}</b><span class="muted">of ${formatMbps(capacity)}</span></div>
         <div class="ct-bar"><div class="ct-fill ${eff < 1 ? 'bad' : pct > 85 ? 'time' : 'good'}" style="width:${pct}%"></div></div>
       </div>
-      ${eff < 1 ? `<div class="ct-alert">Your line is full: everything runs at ${Math.floor(eff * 100)}% and contracts lose uptime. Upgrade the line.</div>` : ''}
+      ${attacked ? `<div class="ct-alert">Cyber attack: only ${formatMbps(capacity)} of your ${formatMbps(line.mbps)} line is getting through. Firewalls (Safety menu) block attacks.</div>` : ''}
+      ${eff < 1 && !attacked ? `<div class="ct-alert">Your line is full: everything runs at ${Math.floor(eff * 100)}% and contracts lose uptime. Upgrade the line.</div>` : ''}
       <p class="muted">Racks use bandwidth in step with what they earn, so every upgrade needs a bit more line. Over the limit, racks slow down like in a power cut.</p>
       ${rows.join('')}`;
     if (html !== this.lastHtml) {

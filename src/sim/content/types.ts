@@ -51,6 +51,35 @@ export interface Uplink {
   rentalPerTick: number;
 }
 
+// What a research project improves. Values are fractions (0.1 = 10%) except
+// marketRacks, which is a number of racks.
+export type ResearchEffectKind =
+  | 'powerOutput'
+  | 'coolingStrength'
+  | 'electricityDiscount'
+  | 'contractPay'
+  | 'walkInIncome'
+  | 'marketRacks'
+  | 'staffSpeed'
+  | 'ageingSlower'
+  | 'bandwidthSaving'
+  | 'eventChance'
+  | 'upkeepDiscount';
+
+export interface ResearchProject {
+  // Stable id, stored in saves.
+  id: string;
+  name: string;
+  description: string;
+  level: number;
+  cost: number;
+  // Game days to finish.
+  days: number;
+  // Projects that must be finished first.
+  requires: string[];
+  effects: { kind: ResearchEffectKind; value: number }[];
+}
+
 // A room-sized plot on the map grid.
 export interface Lot {
   // Stable id, stored in saves.

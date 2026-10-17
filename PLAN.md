@@ -316,6 +316,25 @@ Done when: I can create an account, play on one device, log in on another and co
 
 (Claude Code: add dated entries here when a decision changes the plan.)
 
+- 2026-10-17: Late-game depth, power tiers, bulk editing, stats and sound (user: "add 1,2,3,4,7", plus "better leveled power sources" and a menu fix). Save v9.
+  - **Research** (`content/research.ts`, Y): 19 projects in 4 tiers from L8, £15k up to £5m. One at a time, paid upfront, takes game days. Effects: power, cooling, electricity, contract pay, walk-in income, market size, staff speed, ageing, bandwidth, incident chance, upkeep.
+  - **Selling the company** (bottom of Research, from L15): restart for legacy points = floor(4 × √(value in £m)). Each point gives +2% income and +£1,000 starting cash, forever. Value = cash + building resale + 10 days of profit.
+  - **Incidents** from L7: power cut, heatwave, fire, cyber attack (bad) and rush job, press visit (good). Chance grows with racks (30% a day + 0.6% per rack, cap 90%), rolled hourly with the seeded RNG.
+    - Each bad one has a counter in the new **Safety** menu (F): UPS battery bank (40 kW backup), fire suppression (9×9) and firewall (blocks 35%).
+    - Power cuts hit only grid-fed supply (mains, power units, substations).
+  - **Bankruptcy grace**: below the overdraft you get 12 game hours to recover, with a HUD countdown. Instant bankruptcy felt unfair once random incidents existed.
+  - **Power tiers**: Gas generator 60 kW (L8), Solar array 20 kW (L11; renewable, so off the bill), Fuel cell 130 kW (L15), Grid substation 320 kW (L21), Micro reactor 1000 kW (L30). Multiblocks now need four of the same kind.
+  - **Bulk editing**:
+    - Drag a box with a build tool to place many; wide boxes leave aisles so staff can reach everything.
+    - Drag with Sell to sell a box.
+    - Move tool can carry a box as a group.
+    - Ctrl+Z undo for layout changes, 30 steps, each for 60 seconds. Repairs and refurbishing aren't undoable, as that would be a refund exploit.
+    - On touch, one finger still pans with build tools.
+  - **Stats (N)**: hourly samples kept for 14 days, with SVG graphs and an incident log.
+  - **Sound**: Web Audio synthesis only (no files): action blips, news jingles, alarms and a server-room hum that scales with running racks. On/off and volume are in the menu.
+  - **UI**: the hotbar wrapper is click-through, which fixes the map not responding beside the item panel. Panel toggles became a compact icon grid, and item menus got category colours, a header, edge fades and scroll arrows.
+  - **Balance bot** now builds safety, researches and survives incidents. Late margins are about 22–35%.
+
 - 2026-10-17: Milestone 8 (the whole backlog) built. The user asked Claude to decide the open questions; the answers are in the Milestone 8 section. The ones that change how the game feels:
   - **One line for the company.** Bandwidth follows earning power, not NIC speed: tying it to NIC speed made NIC upgrades throttle you.
   - **Saturation hits walk-in racks only**; contracts get a visible volume discount instead.

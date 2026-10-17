@@ -5,8 +5,11 @@ import { PARTS } from '../sim/content/parts';
 import { ROOM_STYLES } from '../sim/content/styles';
 import type { Unlock } from '../sim/content/types';
 import { levelOf, tierFor, unlocksBetween } from '../sim/progression';
-import type { ContractResult, GameState } from '../sim/state';
+import { EVENT_NAMES } from '../sim/events';
+import { researchProject } from '../sim/research';
+import type { ContractResult, EventRecord, GameState } from '../sim/state';
 import { rewardText } from './goals';
+import { effectsText } from './research';
 import type { Toasts } from './toasts';
 
 function unlockName(unlock: Unlock): string {
@@ -15,16 +18,25 @@ function unlockName(unlock: Unlock): string {
   return unlock.name ?? unlock.id;
 }
 
-// Watches progress and pops up level-ups, goals and achievements. Detects
-// changes by comparing with what it last saw, so the sim needs no events.
+export type Cue = 'goal' | 'achievement' | 'level' | 'good' | 'bad' | 'alarm' | 'research';
+
+// Watches progress and pops up level-ups, goals, achievements, contract
+// results, incidents and finished research. Detects changes by comparing with
+// what it last saw, so the sim needs no events. `cue` plays a sound for each.
 export class Announcer {
   private level = 1;
   private goals = 0;
   private achievements = 0;
-  // History is capped, so track the last result seen rather than a count.
+  // History is capped, so track the last item seen rather than a count.
   private lastResult: ContractResult | undefined;
+  private lastEvent: EventRecord | undefined;
+  private research = 0;
 
-  constructor(private readonly toasts: Toasts, state: GameState) {
+  constructor(
+    private readonly toasts: Toasts,
+    state: GameState,
+    private readonly cue: (cue: Cue) => void = () => {},
+  ) {
     this.reset(state);
   }
 
@@ -34,10 +46,29 @@ export class Announcer {
     this.goals = state.progress.completedGoals.length;
     this.achievements = state.progress.achievements.length;
     this.lastResult = state.contracts.history.at(-1);
+    this.lastEvent = state.events.history.at(-1);
+    this.research = state.research.done.length;
   }
 
   update(state: GameState): void {
     const { completedGoals, achievements } = state.progress;
+
+    const events = state.events.history;
+    if (events.at(-1) !== this.lastEvent) {
+      const seen = this.lastEvent ? events.indexOf(this.lastEvent) : -1;
+      for (const e of events.slice(seen + 1)) {
+        this.toasts.show(`<b>${EVENT_NAMES[e.kind]}</b><br>${e.text}`, e.good ? 'goal' : 'failure');
+        this.cue(e.good ? 'good' : 'alarm');
+      }
+      this.lastEvent = events.at(-1);
+    }
+
+    for (const id of state.research.done.slice(this.research)) {
+      const p = researchProject(id);
+      if (p) this.toasts.show(`<b>Research done:</b> ${p.name}<br>${effectsText(p)}`, 'achievement');
+      this.cue('research');
+    }
+    this.research = state.research.done.length;
 
     const history = state.contracts.history;
     if (history.at(-1) !== this.lastResult) {
@@ -49,12 +80,14 @@ export class Announcer {
     for (const id of completedGoals.slice(this.goals)) {
       const goal = GOALS.find((g) => g.id === id);
       if (goal) this.toasts.show(`<b>Goal complete:</b> ${goal.description}<br>${rewardText(goal.reward)}`, 'goal');
+      this.cue('goal');
     }
     this.goals = completedGoals.length;
 
     for (const id of achievements.slice(this.achievements)) {
       const a = ACHIEVEMENTS.find((x) => x.id === id);
       if (a) this.toasts.show(`<b>Achievement: ${a.name}</b><br>${a.description} &middot; ${rewardText(a.reward)}`, 'achievement');
+      this.cue('achievement');
     }
     this.achievements = achievements.length;
 
@@ -78,6 +111,7 @@ export class Announcer {
         lines.push('<div class="muted">No new unlocks this level. More coming soon.</div>');
       }
       this.toasts.show(lines.join(''), 'level');
+      this.cue('level');
     }
     this.level = level;
   }
@@ -85,6 +119,7 @@ export class Announcer {
   private announceContract(r: ContractResult): void {
     const uptime = `${(r.uptime * 100).toFixed(1)}% uptime`;
     const cash = `£${Math.abs(Math.round(r.cash)).toLocaleString('en-GB')}`;
+    this.cue(r.outcome === 'completed' ? 'good' : 'bad');
     if (r.outcome === 'completed') {
       this.toasts.show(`<b>Contract kept:</b> ${r.name}<br>${uptime} &middot; +${cash} bonus, +${r.xp} XP`, 'goal');
     } else if (r.outcome === 'failed') {

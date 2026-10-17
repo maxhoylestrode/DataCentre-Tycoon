@@ -1,39 +1,68 @@
-import { CONFIG } from '../config';
+import { buildingDef, CONFIG } from '../config';
 import { buildingStats } from './buildings';
-import { type GameState, isRunning } from './state';
+import { researchBonus } from './research';
+import { activeEffect } from './events';
+import { categoryOf, type GameState, isRunning } from './state';
 
-// Power units in a full 2×2 square form a multiblock. Each unit belongs to
-// at most one block; squares are claimed scanning top-left first. Returns
-// the ids of units in a block, and each block's top-left corner.
+// Four power sources of the same kind in a full 2×2 square form a
+// multiblock. Each belongs to at most one block; squares are claimed scanning
+// top-left first. Returns the ids in a block, and each block's top-left corner.
 export function powerMultiblocks(state: GameState): { members: Set<number>; corners: { x: number; y: number }[] } {
-  const at = new Map<string, number>();
+  const at = new Map<string, { id: number; kind: string }>();
   for (const b of state.buildings) {
-    if (b.kind === 'power_basic' && isRunning(b)) at.set(`${b.x},${b.y}`, b.id);
+    if (categoryOf(b) === 'power' && isRunning(b)) at.set(`${b.x},${b.y}`, { id: b.id, kind: b.kind });
   }
   const members = new Set<number>();
   const corners: { x: number; y: number }[] = [];
   const sorted = [...state.buildings].filter((b) => at.has(`${b.x},${b.y}`)).sort((a, b) => a.y - b.y || a.x - b.x);
   for (const b of sorted) {
-    const ids = [
+    const cells = [
       at.get(`${b.x},${b.y}`),
       at.get(`${b.x + 1},${b.y}`),
       at.get(`${b.x},${b.y + 1}`),
       at.get(`${b.x + 1},${b.y + 1}`),
     ];
-    if (ids.some((id) => id === undefined || members.has(id))) continue;
+    if (cells.some((c) => c === undefined || c.kind !== b.kind || members.has(c.id))) continue;
+    const ids = cells.map((c) => c!.id);
     for (const id of ids) members.add(id!);
     corners.push({ x: b.x, y: b.y });
   }
   return { members, corners };
 }
 
-export function powerSupply(state: GameState): number {
+// Supply split by source: grid-fed (the mains connection, power units and
+// substations, hit by power cuts), renewable (not billed) and the rest
+// (on-site generators). Research bonuses included.
+export function supplyBySource(state: GameState): { grid: number; renewable: number; local: number } {
   const { members } = powerMultiblocks(state);
-  return state.buildings.reduce<number>((sum, b) => {
-    if (!isRunning(b)) return sum;
-    const supply = buildingStats(b).powerSupply;
-    return sum + (members.has(b.id) ? supply * (1 + CONFIG.multiblock.bonus) : supply);
-  }, CONFIG.power.baseSupply);
+  const boost = 1 + researchBonus(state, 'powerOutput');
+  const out = { grid: CONFIG.power.baseSupply * boost, renewable: 0, local: 0 };
+  for (const b of state.buildings) {
+    if (!isRunning(b) || categoryOf(b) !== 'power') continue;
+    const def = buildingDef(b.kind);
+    const supply = buildingStats(b).powerSupply * (members.has(b.id) ? 1 + CONFIG.multiblock.bonus : 1) * boost;
+    if (def.renewable) out.renewable += supply;
+    else if (def.gridFed) out.grid += supply;
+    else out.local += supply;
+  }
+  return out;
+}
+
+// kW of backup the UPS batteries can give during a power cut.
+export function backupPower(state: GameState): number {
+  return state.buildings.reduce((sum, b) => sum + (isRunning(b) ? (buildingDef(b.kind).backupKw ?? 0) : 0), 0);
+}
+
+// kW lost right now to a power cut, after UPS batteries cover what they can.
+export function powerCutLoss(state: GameState): number {
+  if (!activeEffect(state, 'power_cut')) return 0;
+  const lost = supplyBySource(state).grid * CONFIG.events.powerCutLoss;
+  return Math.max(0, lost - backupPower(state));
+}
+
+export function powerSupply(state: GameState): number {
+  const s = supplyBySource(state);
+  return s.grid + s.renewable + s.local - powerCutLoss(state);
 }
 
 // What everything that is switched on wants to draw. Failed and repairing racks draw nothing.
@@ -50,10 +79,11 @@ export function powerEfficiency(state: GameState): number {
 }
 
 // The electricity bill per tick for what's actually drawn (capped by supply),
-// using marginal price bands.
+// using marginal price bands. Renewable output is used first and is free.
 export function electricityCost(state: GameState): number {
   const used = Math.min(powerDraw(state), powerSupply(state));
-  return electricityFor(used);
+  const billable = Math.max(0, used - supplyBySource(state).renewable);
+  return electricityFor(billable) * (1 - researchBonus(state, 'electricityDiscount'));
 }
 
 export function electricityFor(kw: number): number {

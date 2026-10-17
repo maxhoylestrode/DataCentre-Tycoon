@@ -11,9 +11,12 @@ export interface Settings {
   autosave: boolean;
   // Whether the how-to guide has been shown once already.
   seenGuide: boolean;
+  sound: boolean;
+  // 0..1
+  volume: number;
 }
 
-const DEFAULT_SETTINGS: Settings = { autosave: true, seenGuide: false };
+const DEFAULT_SETTINGS: Settings = { autosave: true, seenGuide: false, sound: true, volume: 0.5 };
 
 // localStorage can throw (private mode, storage full, blocked site data).
 function read(key: string): string | null {
@@ -55,6 +58,9 @@ export function loadSettings(): Settings {
     return {
       autosave: typeof parsed.autosave === 'boolean' ? parsed.autosave : DEFAULT_SETTINGS.autosave,
       seenGuide: parsed.seenGuide === true,
+      sound: typeof parsed.sound === 'boolean' ? parsed.sound : DEFAULT_SETTINGS.sound,
+      volume:
+        typeof parsed.volume === 'number' && parsed.volume >= 0 && parsed.volume <= 1 ? parsed.volume : DEFAULT_SETTINGS.volume,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

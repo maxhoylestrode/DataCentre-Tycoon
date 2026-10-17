@@ -52,9 +52,13 @@ export class ZonePreview {
   }
 
   show(state: GameState, rect: { x0: number; y0: number; x1: number; y1: number } | null, kind: ZoneKind | null): void {
+    this.showBox(state, rect, kind ? ZONE_COLOURS[kind] : 0xe0565b);
+  }
+
+  // Any dragged box (bulk place, sell or select), in the given colour.
+  showBox(state: GameState, rect: { x0: number; y0: number; x1: number; y1: number } | null, colour: number): void {
     this.mesh.visible = rect !== null;
     if (!rect) return;
-    const colour = kind ? ZONE_COLOURS[kind] : 0xe0565b;
     let m = previewMats.get(String(colour));
     if (!m) {
       m = new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.45, depthWrite: false });

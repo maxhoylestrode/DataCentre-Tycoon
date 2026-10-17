@@ -19,9 +19,13 @@ export interface InputHandlers {
   onToggleStaff(): void;
   onToggleGuide(): void;
   onRotate(): void;
+  onUndo(): void;
+  onToggleResearch(): void;
+  onToggleStats(): void;
   onEscape(): void;
-  // Draw mode (wall tools): left-drag draws instead of panning.
-  isDrawMode(): boolean;
+  // Draw mode: left-drag draws (walls, zones, boxes of buildings) instead of
+  // panning. Gets the pointer type so touch can keep one-finger panning.
+  isDrawMode(pointerType: string): boolean;
   onDrawStart(clientX: number, clientY: number): void;
   onDrawMove(clientX: number, clientY: number): void;
   onDrawEnd(clientX: number, clientY: number, cancelled: boolean): void;
@@ -35,8 +39,9 @@ const TOOL_KEYS: Record<string, Tool> = Object.fromEntries(
 // Left click: use the selected tool on a tile. Drag with any button: pan,
 // except left-drag with a wall tool, which draws walls.
 // Wheel: zoom. WASD / arrow keys: pan. Space: pause. 1/2/3: speed.
-// R/P/C/Z/B/X: select tool. Q: rotate. H: heat map. K: contracts. T: staff.
-// L: room style. V: walls up/down. G: guide. Esc: cancel / close panels.
+// R/P/C/F/Z/B/M/X: select tool. Q: rotate. H: heat map. K: contracts. T: staff.
+// L: room style. V: walls up/down. G: guide. Y: research. N: stats.
+// Ctrl+Z: undo. Esc: cancel / close panels.
 // Returns an update function to call every frame.
 export function attachInput(canvas: HTMLCanvasElement, rig: CameraRig, handlers: InputHandlers): (dt: number) => void {
   let press: {
@@ -73,7 +78,7 @@ export function attachInput(canvas: HTMLCanvasElement, rig: CameraRig, handlers:
     }
     if (press || pinch) return;
     canvas.setPointerCapture(e.pointerId);
-    const drawing = e.button === 0 && handlers.isDrawMode();
+    const drawing = e.button === 0 && handlers.isDrawMode(e.pointerType);
     press = {
       id: e.pointerId, button: e.button, startX: e.clientX, startY: e.clientY,
       lastX: e.clientX, lastY: e.clientY, dragging: false, drawing,
@@ -139,6 +144,16 @@ export function attachInput(canvas: HTMLCanvasElement, rig: CameraRig, handlers:
   );
 
   window.addEventListener('keydown', (e) => {
+    // Don't steal keys from text fields (e.g. the save import box).
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl/Cmd+Z undoes; other shortcuts (reload etc.) stay the browser's.
+      if (e.code === 'KeyZ' && !e.repeat) {
+        e.preventDefault();
+        handlers.onUndo();
+      }
+      return;
+    }
     keys.add(e.code);
     if (e.repeat) return;
     if (e.code === 'Space') {
@@ -156,6 +171,8 @@ export function attachInput(canvas: HTMLCanvasElement, rig: CameraRig, handlers:
     if (e.code === 'KeyT') handlers.onToggleStaff();
     if (e.code === 'KeyG') handlers.onToggleGuide();
     if (e.code === 'KeyQ') handlers.onRotate();
+    if (e.code === 'KeyY') handlers.onToggleResearch();
+    if (e.code === 'KeyN') handlers.onToggleStats();
     if (e.code === 'Escape') {
       // Cancels a wall being drawn; otherwise closes panels.
       if (press?.drawing) {

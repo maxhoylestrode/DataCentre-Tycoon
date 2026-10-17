@@ -23,6 +23,7 @@ import { MAP_HEIGHT, MAP_WIDTH } from './lots';
 import { ACHIEVEMENTS } from './content/achievements';
 import { GOALS } from './content/goals';
 import { PARTS } from './content/parts';
+import { RESEARCH } from './content/research';
 import type { ContractRequirement } from './content/types';
 import { ROOM_STYLES } from './content/styles';
 import {
@@ -39,9 +40,15 @@ import {
   createContractsState,
   createInitialState,
   createProgress,
+  createHistoryState,
   createStyleState,
+  type EventKind,
+  type EventsState,
   type FloorTile,
   type GameState,
+  type HistoryState,
+  type LegacyState,
+  type ResearchState,
   type Progress,
   type Stats,
   type StyleState,
@@ -56,7 +63,8 @@ import {
 // v6: adds interior walls.
 // v7: adds rooms (owned lots); the map grows to fit every lot.
 // v8: staff, clients, zones, internet line, building rotation, ageing, maintenance and construction.
-export const SAVE_VERSION = 8;
+// v9: research, random events, legacy (company sales) and stats history.
+export const SAVE_VERSION = 9;
 
 // Part ids as they were when v5 was introduced. Hard-coded so this migration
 // never changes if the parts catalogue does later.
@@ -141,6 +149,8 @@ const MIGRATIONS: Record<number, (data: Data) => Data> = {
         : data.buildings,
     };
   },
+  // Nothing researched, no events yet, no legacy, empty history.
+  8: (data) => ({ ...data, research: null, events: null, legacy: null, history: null }),
 };
 
 export function serialize(state: GameState, now: Date = new Date()): string {
@@ -205,6 +215,24 @@ export function serialize(state: GameState, now: Date = new Date()): string {
         offersDay: state.contracts.offersDay,
       },
       rngSeed: state.rngSeed,
+      research: { done: [...state.research.done], current: state.research.current ? { ...state.research.current } : null },
+      events: { active: state.events.active.map((e) => ({ ...e })), history: state.events.history.map((e) => ({ ...e })) },
+      legacy: { ...state.legacy },
+      overdrawnSince: state.overdrawnSince,
+      history: {
+        // Rounded: the graphs don't need more.
+        samples: state.history.samples.map((s) => ({
+          tick: s.tick,
+          income: round2(s.income),
+          costs: round2(s.costs),
+          cash: Math.round(s.cash),
+          powerDraw: round2(s.powerDraw),
+          powerSupply: round2(s.powerSupply),
+          uptime: Math.round(s.uptime * 1000) / 1000,
+          racks: s.racks,
+        })),
+        acc: { ...state.history.acc },
+      },
     },
   };
   return JSON.stringify(envelope);
@@ -306,7 +334,83 @@ function readState(data: Data): GameState {
   // Tasks on buildings that no longer exist are dropped.
   const ids = new Set(state.buildings.map((b) => b.id));
   for (const s of state.staff) if (s.task && !ids.has(s.task.buildingId)) s.task = null;
+  state.research = readResearch(data.research);
+  state.events = readEvents(data.events);
+  state.legacy = readLegacy(data.legacy);
+  state.overdrawnSince = intIn(data.overdrawnSince, 0, Number.MAX_SAFE_INTEGER);
+  state.history = readHistory(data.history);
   return state;
+}
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+const RESEARCH_IDS = new Set(RESEARCH.map((r) => r.id));
+const EVENT_KINDS: EventKind[] = ['power_cut', 'heatwave', 'fire', 'ddos', 'rush_order', 'press_visit'];
+
+function readResearch(raw: unknown): ResearchState {
+  if (!isObject(raw)) return { done: [], current: null };
+  const done = uniqueKnown(raw.done, RESEARCH_IDS);
+  const c = isObject(raw.current) ? raw.current : null;
+  const current =
+    c && typeof c.id === 'string' && RESEARCH_IDS.has(c.id) && !done.includes(c.id)
+      ? { id: c.id, remaining: Math.max(1, finite(c.remaining) ?? 1) }
+      : null;
+  return { done, current };
+}
+
+function readEvents(raw: unknown): EventsState {
+  const events: EventsState = { active: [], history: [] };
+  if (!isObject(raw)) return events;
+  for (const e of Array.isArray(raw.active) ? raw.active : []) {
+    if (!isObject(e) || !EVENT_KINDS.includes(e.kind as EventKind)) continue;
+    const startTick = finite(e.startTick);
+    const endTick = finite(e.endTick);
+    if (startTick === null || endTick === null) continue;
+    events.active.push({ kind: e.kind as EventKind, startTick, endTick });
+  }
+  for (const e of Array.isArray(raw.history) ? raw.history : []) {
+    if (!isObject(e) || !EVENT_KINDS.includes(e.kind as EventKind) || typeof e.text !== 'string') continue;
+    events.history.push({ kind: e.kind as EventKind, tick: finite(e.tick) ?? 0, text: e.text, good: e.good === true });
+  }
+  events.history = events.history.slice(-CONFIG.events.historyLength);
+  return events;
+}
+
+function readLegacy(raw: unknown): LegacyState {
+  if (!isObject(raw)) return { points: 0, sales: 0 };
+  return { points: intIn(raw.points, 0, 1_000_000) ?? 0, sales: intIn(raw.sales, 0, 1_000_000) ?? 0 };
+}
+
+function readHistory(raw: unknown): HistoryState {
+  const history = createHistoryState();
+  if (!isObject(raw)) return history;
+  for (const s of Array.isArray(raw.samples) ? raw.samples : []) {
+    if (!isObject(s)) continue;
+    const tick = finite(s.tick);
+    if (tick === null) continue;
+    history.samples.push({
+      tick,
+      income: finite(s.income) ?? 0,
+      costs: finite(s.costs) ?? 0,
+      cash: finite(s.cash) ?? 0,
+      powerDraw: finite(s.powerDraw) ?? 0,
+      powerSupply: finite(s.powerSupply) ?? 0,
+      uptime: clamp(finite(s.uptime) ?? 1, 0, 1),
+      racks: intIn(s.racks, 0, 1_000_000) ?? 0,
+    });
+  }
+  history.samples = history.samples.slice(-CONFIG.history.maxSamples);
+  if (isObject(raw.acc)) {
+    const a = raw.acc;
+    history.acc = {
+      ticks: intIn(a.ticks, 0, CONFIG.history.sampleTicks) ?? 0,
+      income: finite(a.income) ?? 0,
+      costs: finite(a.costs) ?? 0,
+      powerDraw: finite(a.powerDraw) ?? 0,
+      powerSupply: finite(a.powerSupply) ?? 0,
+      uptime: finite(a.uptime) ?? 0,
+    };
+  }
+  return history;
 }
 
 function readZones(raw: unknown, state: GameState): ZoneTile[] {

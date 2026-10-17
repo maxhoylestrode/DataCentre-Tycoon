@@ -12,6 +12,7 @@ import {
   refurbishRack,
   repairRack,
   signContract,
+  startResearch,
   upgradeMax,
   upgradeUplink,
 } from '../src/sim/commands';
@@ -20,7 +21,10 @@ import { canTakeOffer } from '../src/sim/contracts';
 import { costBreakdown, costsPerTick, incomeBreakdown, incomePerTick } from '../src/sim/economy';
 import { isOwnedTile, lotSize, nextLotPrice, purchasableLots } from '../src/sim/lots';
 import { bandwidthDemand, nextUplink, uplinkOf } from '../src/sim/network';
-import { powerDraw, powerSupply } from '../src/sim/power';
+import { RESEARCH } from '../src/sim/content/research';
+import { isProtectedFromFire } from '../src/sim/events';
+import { researchStatus } from '../src/sim/research';
+import { backupPower, powerDraw, powerSupply, supplyBySource } from '../src/sim/power';
 import { isUnlocked, levelOf } from '../src/sim/progression';
 import { categoryOf, createInitialState, type GameState, getBuildingAt, racksOf, tempAt } from '../src/sim/state';
 import { tick } from '../src/sim/tick';
@@ -109,6 +113,33 @@ function decide(state: GameState, did: Set<string>): void {
     if (shortage ? state.cash < buildingDef('power_basic').cost + 200 : !spend(buildingDef('power_basic').cost)) break;
     const spot = powerSpot(state);
     if (!spot || !placeBuilding(state, 'power_basic', spot[0], spot[1]).ok) break;
+  }
+
+  // Safety once incidents can happen: UPS for most of the grid supply, fire
+  // suppression covering every rack, and a couple of firewalls.
+  if (isUnlocked(state, 'events')) {
+    const ups = CONFIG.buildings.ups_battery;
+    const needBackup = supplyBySource(state).grid * CONFIG.events.powerCutLoss * 0.8;
+    if (backupPower(state) + pending('safety') * ups.backupKw < needBackup && spend(ups.cost)) {
+      const spot = powerSpot(state);
+      if (spot) placeBuilding(state, 'ups_battery', spot[0], spot[1]);
+    }
+    const exposed = racksOf(state).find((r) => !isProtectedFromFire(state, r.x, r.y));
+    if (exposed && pending('safety') === 0 && spend(CONFIG.buildings.fire_suppression.cost)) {
+      const spot = coolSpotNear(state, exposed.x, exposed.y);
+      if (spot) placeBuilding(state, 'fire_suppression', spot[0], spot[1]);
+    }
+    const firewalls = state.buildings.filter((b) => b.kind === 'firewall').length;
+    if (isUnlocked(state, 'firewall') && racksOf(state).length > 20 && firewalls < 2 && spend(CONFIG.buildings.firewall.cost)) {
+      const spot = powerSpot(state);
+      if (spot) placeBuilding(state, 'firewall', spot[0], spot[1]);
+    }
+  }
+
+  // Research the cheapest available project when there's spare cash.
+  if (isUnlocked(state, 'research') && !state.research.current) {
+    const next = RESEARCH.filter((p) => researchStatus(state, p, level) === 'available').sort((a, b) => a.cost - b.cost)[0];
+    if (next && spend(next.cost * 1.5)) startResearch(state, next.id);
   }
 
   // Bandwidth headroom.

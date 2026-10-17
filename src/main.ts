@@ -1,4 +1,4 @@
-import { CONFIG } from './config';
+import { CONFIG, isFloorKind } from './config';
 import { advanceClock, createClock } from './sim/clock';
 import {
   buyLot,
@@ -7,15 +7,20 @@ import {
   fireStaff,
   hireStaff,
   moveBuilding,
+  moveGroup,
   paintZone,
+  placeBuilding,
+  placeFloor,
   placeWall,
   refurbishRack,
+  removeFloor,
   removeWall,
   repairRack,
   rotateBuilding,
   sellBuilding,
   setSpeed,
   signContract,
+  startResearch,
   togglePause,
   upgradeBuilding,
   upgradeMax,
@@ -26,7 +31,7 @@ import {
 import { wallAt } from './sim/walls';
 import { type Edge, edgesBetween, nearestCorner, nearestEdge } from './input/walls';
 import { WallLayer } from './render/walls';
-import { type Building, createInitialState, type GameState, getBuildingAt } from './sim/state';
+import { type Building, createInitialState, floorAt, type GameState, getBuildingAt, isRunning, racksOf } from './sim/state';
 import { CameraRig } from './render/camera';
 import { HoverHighlight, LotsLayer, type Tile, TilePicker, tileToWorld } from './render/grid';
 import { HeatOverlay } from './render/heatmap';
@@ -42,12 +47,18 @@ import {
   previewMove,
   previewTool,
   type Tool,
+  toolCost,
+  toolName,
   type ToolPreview,
   zoneOfTool,
 } from './input/tools';
 import { exportSaveFile, loadGame, loadSettings, readSaveFile, saveGame, saveSettings } from './io/storage';
 import { isUnlocked, totalXpForLevel } from './sim/progression';
 import { isOwnedTile, lotAt, lotSize, purchasableLots } from './sim/lots';
+import { investedValue } from './sim/buildings';
+import { sellCompany } from './sim/legacy';
+import { applyUndo, makeEntry, takeSnapshot, type UndoEntry } from './sim/undo';
+import { Sound, type SoundName } from './audio/sound';
 import { RoomSale } from './ui/rooms';
 import { Announcer } from './ui/announcer';
 import { BuildingPanel } from './ui/buildingPanel';
@@ -57,20 +68,24 @@ import { GuidePanel } from './ui/guide';
 import { Hud } from './ui/hud';
 import { Menu } from './ui/menu';
 import { NetworkPanel } from './ui/networkPanel';
+import { ResearchPanel } from './ui/research';
 import { StaffPanel } from './ui/staff';
+import { StatsPanel } from './ui/stats';
 import { StylePanel } from './ui/style';
 import { Toasts } from './ui/toasts';
 import { Toolbar, toolUnlocked } from './ui/toolbar';
 
+const randomSeed = (): number => Math.floor(Math.random() * 2 ** 31);
 // Each new game gets its own random seed (the sim itself never calls
 // Math.random) and simulated staff and clients.
-const newGame = (): GameState =>
-  createInitialState(undefined, undefined, Math.floor(Math.random() * 2 ** 31), { staffSim: true });
+const newGame = (): GameState => createInitialState(undefined, undefined, randomSeed(), { staffSim: true });
 
 const settings = loadSettings();
 const loaded = loadGame();
 let state: GameState = loaded?.ok ? loaded.state : newGame();
 const clock = createClock();
+const sound = new Sound(settings.sound, settings.volume);
+const play = (name: SoundName): void => sound.play(name);
 
 const container = document.getElementById('app') as HTMLElement;
 const { renderer, scene, room } = createScene(container);
@@ -90,13 +105,13 @@ const floor = new FloorLayer();
 const walls = new WallLayer();
 const lots = new LotsLayer();
 const zones = new ZoneLayer();
-const zonePreview = new ZonePreview();
+const boxPreview = new ZonePreview();
 const people = new PeopleLayer();
 const multiblocks = new MultiblockLayer();
 scene.add(
   floor.group,
   zones.group,
-  zonePreview.mesh,
+  boxPreview.mesh,
   walls.group,
   lots.group,
   heat.mesh,
@@ -116,22 +131,53 @@ let hoveredTile: Tile | null = null;
 let hoverGrid: { gx: number; gy: number } | null = null;
 // Corner a wall drag started from, and the corner it's at now.
 let wallDrag: { start: { x: number; y: number }; end: { x: number; y: number } } | null = null;
-// Tiles a zone drag started and ended on.
-let zoneDrag: { start: Tile; end: Tile } | null = null;
-// The building the move tool is carrying, by id.
-let carriedId: number | null = null;
-const carriedBuilding = (): Building | undefined =>
-  carriedId === null ? undefined : state.buildings.find((b) => b.id === carriedId);
-const pickUp = (b: Building): void => {
-  tool = 'move';
-  carriedId = b.id;
-  placeRot = b.rot;
-};
+// Tiles a box drag (zones, bulk place/sell, group select) started and ended on.
+let boxDrag: { start: Tile; end: Tile } | null = null;
+// What the move tool is carrying: building ids, and the tile they were
+// picked up from (the group moves by how far the cursor is from it).
+let carrying: { ids: number[]; anchor: Tile } | null = null;
 
 // How close (in tiles) the cursor must be to a grid line to pick that edge.
 const EDGE_PICK = 0.3;
 const SELL_PICK = 0.2;
 const FACING = ['↓', '→', '↑', '←'];
+
+// --- Undo -------------------------------------------------------------------
+// Layout actions are recorded; Ctrl+Z puts them back. Entries expire so undo
+// stays a quick fix, not a way to rewind time.
+const UNDO_LIMIT = 30;
+const UNDO_SECONDS = 60;
+let undoStack: { entry: UndoEntry; at: number }[] = [];
+
+function record(label: string, action: () => void): boolean {
+  const before = takeSnapshot(state);
+  action();
+  const entry = makeEntry(state, before, label);
+  if (!entry) return false;
+  undoStack.push({ entry, at: performance.now() });
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  return true;
+}
+
+function pruneUndo(): void {
+  const cutoff = performance.now() - UNDO_SECONDS * 1000;
+  undoStack = undoStack.filter((u) => u.at >= cutoff);
+}
+
+function undo(): void {
+  pruneUndo();
+  const last = undoStack.pop();
+  if (!last || state.bankrupt) {
+    play('error');
+    return;
+  }
+  applyUndo(state, last.entry);
+  carrying = null;
+  toasts.show(`Undone: ${last.entry.label}`, 'goal');
+  play('undo');
+}
+
+// --- Walls ------------------------------------------------------------------
 
 // The wall edges a click/drag would build right now. A click (no drag)
 // builds the single edge nearest the cursor.
@@ -167,27 +213,201 @@ function wallUnderCursor(): Edge | null {
   return wallAt(state, near.edge.x, near.edge.y, near.edge.dir) ? near.edge : null;
 }
 
-function zoneRect(): { x0: number; y0: number; x1: number; y1: number } | null {
-  if (!zoneDrag) return null;
-  const [a, b] = [zoneDrag.start, zoneDrag.end];
+// --- Boxes ------------------------------------------------------------------
+
+interface Rect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+function boxRect(): Rect | null {
+  if (!boxDrag) return null;
+  const [a, b] = [boxDrag.start, boxDrag.end];
   return { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
 }
+
+const isSingleTile = (r: Rect): boolean => r.x0 === r.x1 && r.y0 === r.y1;
+
+function tilesIn(r: Rect): Tile[] {
+  const out: Tile[] = [];
+  for (let y = r.y0; y <= r.y1; y++) for (let x = r.x0; x <= r.x1; x++) out.push({ x, y });
+  return out;
+}
+
+// Where a box of buildings goes: every tile for a thin box (1-2 wide), or
+// rows with an aisle between them for a wide one, so staff can reach each one.
+function placementTiles(r: Rect): Tile[] {
+  const w = r.x1 - r.x0 + 1;
+  const h = r.y1 - r.y0 + 1;
+  if (Math.min(w, h) <= 2) return tilesIn(r);
+  const rowsAlongX = w >= h;
+  return tilesIn(r).filter((t) => (rowsAlongX ? (t.y - r.y0) % 2 === 0 : (t.x - r.x0) % 2 === 0));
+}
+
+const isBuildTool = (t: Tool): boolean => t !== 'sell' && t !== 'move' && !isWallTool(t) && !isZoneTool(t);
+
+// What a box would do with the current tool: a summary for the HUD.
+function planBox(r: Rect): { text: string; colour: number } {
+  if (isZoneTool(tool)) {
+    const n = tilesIn(r).length;
+    return { text: `Paint ${n} tile${n > 1 ? 's' : ''}`, colour: 0 };
+  }
+  if (tool === 'sell') {
+    const inside = state.buildings.filter((b) => b.x >= r.x0 && b.x <= r.x1 && b.y >= r.y0 && b.y <= r.y1);
+    const refund = inside.reduce((s, b) => s + investedValue(b) * CONFIG.economy.sellRefund, 0);
+    return { text: `Sell ${inside.length} building${inside.length === 1 ? '' : 's'}: +£${Math.round(refund).toLocaleString('en-GB')} (Ctrl+Z undoes)`, colour: 0xe0565b };
+  }
+  if (tool === 'move') {
+    const n = state.buildings.filter((b) => b.x >= r.x0 && b.x <= r.x1 && b.y >= r.y0 && b.y <= r.y1).length;
+    return { text: `Pick up ${n} building${n === 1 ? '' : 's'} to move together`, colour: 0x4aa8ff };
+  }
+  // Building or floor tool: how many fit and can be afforded.
+  const cost = toolCost(tool);
+  const free = placementTiles(r).filter((t) =>
+    isOwnedTile(state, t.x, t.y) && (isFloorKind(tool) ? !floorAt(state, t.x, t.y) : !getBuildingAt(state, t.x, t.y)),
+  );
+  const affordable = cost > 0 ? Math.min(free.length, Math.floor(state.cash / cost)) : free.length;
+  const total = affordable * cost;
+  const short = affordable < free.length ? ` (cash for ${affordable})` : '';
+  return {
+    text: `${affordable} × ${toolName(tool)}: £${Math.round(total).toLocaleString('en-GB')}${short}`,
+    colour: affordable > 0 ? 0x3fbf6a : 0xe0565b,
+  };
+}
+
+function applyBox(r: Rect): void {
+  if (isZoneTool(tool)) {
+    const kind = zoneOfTool(tool);
+    if (record(kind ? 'paint zone' : 'clear zone', () => tilesIn(r).forEach((t) => paintZone(state, kind, t.x, t.y)))) play('click');
+    return;
+  }
+  if (tool === 'sell') {
+    const inside = state.buildings.filter((b) => b.x >= r.x0 && b.x <= r.x1 && b.y >= r.y0 && b.y <= r.y1);
+    const done = record(`sell ${inside.length} buildings`, () => {
+      for (const b of inside) sellBuilding(state, b.x, b.y);
+      for (const t of tilesIn(r)) if (floorAt(state, t.x, t.y) && !getBuildingAt(state, t.x, t.y)) removeFloor(state, t.x, t.y);
+    });
+    play(done ? 'sell' : 'error');
+    return;
+  }
+  if (tool === 'move') {
+    const ids = state.buildings.filter((b) => b.x >= r.x0 && b.x <= r.x1 && b.y >= r.y0 && b.y <= r.y1).map((b) => b.id);
+    if (ids.length) {
+      carrying = { ids, anchor: boxDrag!.end };
+      play('click');
+    }
+    return;
+  }
+  const kind = tool;
+  if (isWallTool(kind) || isZoneTool(kind)) return;
+  const tiles = placementTiles(r);
+  const done = record(`build ${toolName(kind)}`, () => {
+    for (const t of tiles) {
+      if (isFloorKind(kind)) placeFloor(state, kind, t.x, t.y);
+      else placeBuilding(state, kind, t.x, t.y, placeRot);
+    }
+  });
+  play(done ? 'place' : 'error');
+}
+
+// --- Tools ------------------------------------------------------------------
 
 // Locked tools and the locked heat map can't be selected.
 const selectTool = (t: Tool): void => {
   if (!toolUnlocked(state, t)) return;
   tool = t;
-  carriedId = null;
+  carrying = null;
+  play('click');
 };
 const toggleHeat = (): void => {
   if (isUnlocked(state, 'heat_map')) heat.visible = !heat.visible;
 };
 
+const carriedBuildings = (): Building[] =>
+  carrying ? state.buildings.filter((b) => carrying!.ids.includes(b.id)) : [];
+
+const pickUp = (b: Building): void => {
+  tool = 'move';
+  carrying = { ids: [b.id], anchor: { x: b.x, y: b.y } };
+  placeRot = b.rot;
+  play('click');
+};
+
+// Puts down whatever the move tool is carrying, at the hovered tile.
+function dropCarried(tile: Tile): void {
+  const group = carriedBuildings();
+  if (!carrying || group.length === 0) return;
+  const dx = tile.x - carrying.anchor.x;
+  const dy = tile.y - carrying.anchor.y;
+  let ok: boolean;
+  if (group.length === 1) {
+    const b = group[0]!;
+    ok = record(`move ${b.kind}`, () => void moveBuilding(state, b.x, b.y, b.x + dx, b.y + dy, placeRot));
+    ok = ok || (dx === 0 && dy === 0);
+  } else {
+    ok = (dx === 0 && dy === 0) || record(`move ${group.length} buildings`, () => void moveGroup(state, carrying!.ids, dx, dy));
+  }
+  if (ok) {
+    carrying = null;
+    play('move');
+  } else play('error');
+}
+
+// A click (or a box that's a single tile) with the current tool.
+function handleClick(cx: number, cy: number): void {
+  if (tool === 'sell') {
+    const wall = wallUnderCursor();
+    if (wall) {
+      if (record('remove wall', () => void removeWall(state, wall.x, wall.y, wall.dir))) play('sell');
+      return;
+    }
+  }
+  const tile = picker.pick(cx, cy);
+  if (!tile) return;
+  if (tool === 'move') {
+    if (carrying) dropCarried(tile);
+    else {
+      const b = getBuildingAt(state, tile.x, tile.y);
+      if (b) pickUp(b);
+    }
+    return;
+  }
+  // Clicking a room for sale offers to buy it.
+  if (!isOwnedTile(state, tile.x, tile.y)) {
+    const lot = lotAt(state, tile.x, tile.y);
+    if (lot && purchasableLots(state).some((l) => l.id === lot.id)) roomSale.ask(lot.id);
+    return;
+  }
+  const preview = previewTool(state, tool, tile.x, tile.y);
+  let action: ReturnType<typeof applyTool> = null;
+  if (preview?.action === 'place' || preview?.action === 'sell') {
+    record(preview.action === 'place' ? `build ${toolName(tool)}` : 'sell', () => {
+      action = applyTool(state, tool, tile.x, tile.y, placeRot);
+    });
+  } else {
+    // Repairs, inspecting and blocked clicks aren't undoable.
+    action = applyTool(state, tool, tile.x, tile.y, placeRot);
+  }
+  if (action === 'place') play('place');
+  else if (action === 'sell') play('sell');
+  else if (action === 'repair') play('cash');
+  else if (action === 'blocked') play('error');
+  const clicked = state.buildings.find((b) => b.x === tile.x && b.y === tile.y);
+  if (action === 'inspect' && clicked) buildingPanel.show(clicked.id);
+  else if (action !== 'repair') buildingPanel.close();
+}
+
+// --- Panels -----------------------------------------------------------------
+
 const toasts = new Toasts(document.body);
-const announcer = new Announcer(toasts, state);
+const announcer = new Announcer(toasts, state, (cue) => play(cue));
 const goals = new GoalsPanel(document.body);
 const contracts = new ContractsPanel(document.body, {
-  onSign: (id) => signContract(state, id),
+  onSign: (id) => {
+    if (signContract(state, id).ok) play('cash');
+  },
   onCancel: (id) => cancelContract(state, id),
 });
 const toggleContracts = (): void => {
@@ -198,32 +418,68 @@ const withBuilding = (id: number, run: (x: number, y: number) => void): void => 
   const b = state.buildings.find((x) => x.id === id);
   if (b) run(b.x, b.y);
 };
+// Panel actions that change a building can be undone.
+const recorded = (label: string, id: number, run: (x: number, y: number) => void, cue: SoundName = 'cash'): void =>
+  withBuilding(id, (x, y) => {
+    if (record(label, () => run(x, y))) play(cue);
+  });
 const buildingPanel = new BuildingPanel(document.body, {
-  onUpgrade: (id) => withBuilding(id, (x, y) => upgradeBuilding(state, x, y)),
-  onUpgradePart: (id, slot) => withBuilding(id, (x, y) => upgradePart(state, x, y, slot)),
-  onUpgradeMax: (id) => withBuilding(id, (x, y) => void upgradeMax(state, x, y)),
-  onSell: (id) => withBuilding(id, (x, y) => sellBuilding(state, x, y)),
-  onRepair: (id) => withBuilding(id, (x, y) => repairRack(state, x, y)),
-  onRotate: (id) => withBuilding(id, (x, y) => rotateBuilding(state, x, y)),
+  onUpgrade: (id) => recorded('upgrade', id, (x, y) => void upgradeBuilding(state, x, y)),
+  onUpgradePart: (id, slot) => recorded('upgrade part', id, (x, y) => void upgradePart(state, x, y, slot)),
+  onUpgradeMax: (id) => recorded('upgrade max', id, (x, y) => void upgradeMax(state, x, y)),
+  onSell: (id) => recorded('sell', id, (x, y) => void sellBuilding(state, x, y), 'sell'),
+  onRepair: (id) => withBuilding(id, (x, y) => {
+    if (repairRack(state, x, y).ok) play('cash');
+  }),
+  onRotate: (id) => recorded('rotate', id, (x, y) => void rotateBuilding(state, x, y), 'click'),
   onMove: (id) => {
     const b = state.buildings.find((x) => x.id === id);
     if (!b) return;
     pickUp(b);
     buildingPanel.close();
   },
-  onRefurbish: (id) => withBuilding(id, (x, y) => refurbishRack(state, x, y)),
+  onRefurbish: (id) => withBuilding(id, (x, y) => {
+    if (refurbishRack(state, x, y).ok) play('cash');
+  }),
 });
 const stylePanel = new StylePanel(document.body, { onChoose: (id) => buyStyle(state, id) });
 const toggleStyle = (): void => {
   if (isUnlocked(state, 'room_styles')) stylePanel.toggle();
 };
 const staffPanel = new StaffPanel(document.body, {
-  onHire: (role) => hireStaff(state, role),
+  onHire: (role) => {
+    if (hireStaff(state, role).ok) play('cash');
+  },
   onFire: (id) => fireStaff(state, id),
 });
-const networkPanel = new NetworkPanel(document.body, { onUpgrade: () => upgradeUplink(state) });
+const networkPanel = new NetworkPanel(document.body, {
+  onUpgrade: () => {
+    if (upgradeUplink(state).ok) play('cash');
+  },
+});
+const researchPanel = new ResearchPanel(document.body, {
+  onStart: (id) => {
+    if (startResearch(state, id).ok) play('research');
+  },
+  onSellCompany: () => {
+    const next = sellCompany(state, randomSeed());
+    if (!next) return;
+    const points = next.legacy.points - state.legacy.points;
+    startNewGame(next);
+    toasts.show(`<b>Company sold!</b><br>+${points} legacy points. Your new company starts with the bonus.`, 'level');
+    play('level');
+  },
+});
+const toggleResearch = (): void => {
+  if (isUnlocked(state, 'research')) researchPanel.toggle();
+};
+const statsPanel = new StatsPanel(document.body);
 const guide = new GuidePanel(document.body);
-const roomSale = new RoomSale(document.body, { onBuy: (id) => buyLot(state, id) });
+const roomSale = new RoomSale(document.body, {
+  onBuy: (id) => {
+    if (buyLot(state, id).ok) play('cash');
+  },
+});
 
 // First time playing: open the guide once.
 if (!settings.seenGuide) {
@@ -232,8 +488,9 @@ if (!settings.seenGuide) {
   saveSettings(settings);
 }
 
-const startNewGame = (): void => {
-  state = newGame();
+// Swaps in a new game (fresh, or the next one after selling the company).
+function startNewGame(next: GameState = newGame()): void {
+  state = next;
   clock.accumulator = 0;
   buildings.clear();
   floor.clear();
@@ -242,18 +499,19 @@ const startNewGame = (): void => {
   people.clear();
   tool = 'rack_basic';
   heat.visible = false;
+  undoStack = [];
   closePanels();
   rig.focus(startCentre.x, startCentre.z);
   announcer.reset(state);
   persist();
-};
+}
 
 // Set while reloading after an import, so the page-hide autosave can't
 // overwrite the imported save with the old game.
 let saveBlocked = false;
 let pendingImport: GameState | null = null;
 
-const menu = new Menu(document.body, settings.autosave, {
+const menu = new Menu(document.body, settings, {
   onSaveNow: () => persist(),
   onExport: () => exportSaveFile(state),
   onImportFile: async (file) => {
@@ -273,7 +531,17 @@ const menu = new Menu(document.body, settings.autosave, {
     settings.autosave = on;
     saveSettings(settings);
   },
-  onNewGame: startNewGame,
+  onSetSound: (on) => {
+    settings.sound = on;
+    sound.setEnabled(on);
+    saveSettings(settings);
+  },
+  onSetVolume: (volume) => {
+    settings.volume = volume;
+    sound.setVolume(volume);
+    saveSettings(settings);
+  },
+  onNewGame: () => startNewGame(),
 });
 
 function persist(): boolean {
@@ -301,7 +569,7 @@ window.addEventListener('pagehide', autosave);
 const hud = new Hud(document.body, {
   onTogglePause: () => togglePause(state),
   onSetSpeed: (speed) => setSpeed(state, speed),
-  onRestart: startNewGame,
+  onRestart: () => startNewGame(),
   onOpenNetwork: () => networkPanel.toggle(),
 });
 
@@ -316,16 +584,21 @@ const toolbar = new Toolbar(document.body, {
   onToggleWallHeight: toggleWallHeight,
   onToggleStaff: () => staffPanel.toggle(),
   onToggleGuide: () => guide.toggle(),
+  onToggleResearch: toggleResearch,
+  onToggleStats: () => statsPanel.toggle(),
+  onUndo: undo,
 });
 
 function closePanels(): void {
-  carriedId = null;
+  carrying = null;
   toolbar.close();
   buildingPanel.close();
   contracts.toggle(false);
   stylePanel.toggle(false);
   staffPanel.toggle(false);
   networkPanel.toggle(false);
+  researchPanel.toggle(false);
+  statsPanel.toggle(false);
   guide.toggle(false);
   roomSale.close();
 }
@@ -339,86 +612,69 @@ const updateInput = attachInput(renderer.domElement, rig, {
     hoveredTile = null;
     hoverGrid = null;
   },
-  isDrawMode: () => (isWallTool(tool) || isZoneTool(tool)) && toolUnlocked(state, tool),
+  // Walls and zones always draw. With a mouse, building, sell and move tools
+  // drag a box too; on touch one finger keeps panning for those.
+  isDrawMode: (pointerType) => {
+    if (!toolUnlocked(state, tool)) return false;
+    if (isWallTool(tool) || isZoneTool(tool)) return true;
+    if (pointerType === 'touch') return false;
+    if (tool === 'move') return carrying === null;
+    return true;
+  },
   onDrawStart: (cx, cy) => {
-    if (isZoneTool(tool)) {
-      const t = picker.pick(cx, cy);
-      if (t) zoneDrag = { start: t, end: t };
+    if (isWallTool(tool)) {
+      const grid = picker.pickGrid(cx, cy);
+      if (!grid) return;
+      const corner = nearestCorner(grid.gx, grid.gy);
+      wallDrag = { start: corner, end: corner };
       return;
     }
-    const grid = picker.pickGrid(cx, cy);
-    if (!grid) return;
-    const corner = nearestCorner(grid.gx, grid.gy);
-    wallDrag = { start: corner, end: corner };
+    const t = picker.pick(cx, cy);
+    if (t) boxDrag = { start: t, end: t };
   },
   onDrawMove: (cx, cy) => {
-    if (zoneDrag) {
+    if (boxDrag) {
       const t = picker.pick(cx, cy);
-      if (t) zoneDrag.end = t;
+      if (t) boxDrag.end = t;
       return;
     }
     const grid = picker.pickGrid(cx, cy);
     if (wallDrag && grid) wallDrag.end = nearestCorner(grid.gx, grid.gy);
   },
-  onDrawEnd: (_cx, _cy, cancelled) => {
-    if (!cancelled && isZoneTool(tool)) {
-      const rect = zoneRect();
-      const kind = zoneOfTool(tool);
-      if (rect) for (let y = rect.y0; y <= rect.y1; y++) for (let x = rect.x0; x <= rect.x1; x++) paintZone(state, kind, x, y);
-    } else if (!cancelled && isWallTool(tool)) {
-      for (const { edge, ok } of checkWallEdges(plannedWallEdges())) {
-        if (ok) placeWall(state, tool, edge.x, edge.y, edge.dir);
-      }
+  onDrawEnd: (cx, cy, cancelled) => {
+    if (!cancelled && isWallTool(tool)) {
+      const planned = checkWallEdges(plannedWallEdges()).filter((p) => p.ok);
+      const kind = tool;
+      if (record('build walls', () => planned.forEach(({ edge }) => placeWall(state, kind, edge.x, edge.y, edge.dir)))) play('place');
+    } else if (!cancelled && boxDrag) {
+      const r = boxRect()!;
+      // A box that never left its tile is just a click (zones paint it).
+      if (isSingleTile(r) && !isZoneTool(tool)) handleClick(cx, cy);
+      else applyBox(r);
     }
     wallDrag = null;
-    zoneDrag = null;
+    boxDrag = null;
   },
   onToggleWallHeight: toggleWallHeight,
   onToggleStaff: () => staffPanel.toggle(),
   onToggleGuide: () => guide.toggle(),
+  onToggleResearch: toggleResearch,
+  onToggleStats: () => statsPanel.toggle(),
+  onUndo: undo,
   onRotate: () => {
     // Rotates the building whose panel is open, otherwise the next placement
     // (or the building being carried).
-    const selected = carriedId === null ? buildingPanel.update(state) : null;
-    if (selected) rotateBuilding(state, selected.x, selected.y);
+    const selected = carrying === null ? buildingPanel.update(state) : null;
+    if (selected) record('rotate', () => void rotateBuilding(state, selected.x, selected.y));
     else placeRot = (placeRot + 1) % 4;
+    play('click');
   },
   // Esc first drops a carried building back where it was, then closes panels.
   onEscape: () => {
-    if (carriedId !== null) carriedId = null;
+    if (carrying !== null) carrying = null;
     else closePanels();
   },
-  onClick: (cx, cy) => {
-    if (tool === 'sell') {
-      const wall = wallUnderCursor();
-      if (wall) {
-        removeWall(state, wall.x, wall.y, wall.dir);
-        return;
-      }
-    }
-    const tile = picker.pick(cx, cy);
-    if (!tile) return;
-    if (tool === 'move') {
-      const carried = carriedBuilding();
-      if (!carried) {
-        const b = getBuildingAt(state, tile.x, tile.y);
-        if (b) pickUp(b);
-      } else if (moveBuilding(state, carried.x, carried.y, tile.x, tile.y, placeRot).ok) {
-        carriedId = null;
-      }
-      return;
-    }
-    // Clicking a room for sale offers to buy it.
-    if (!isOwnedTile(state, tile.x, tile.y)) {
-      const lot = lotAt(state, tile.x, tile.y);
-      if (lot && purchasableLots(state).some((l) => l.id === lot.id)) roomSale.ask(lot.id);
-      return;
-    }
-    const action = applyTool(state, tool, tile.x, tile.y, placeRot);
-    const clicked = state.buildings.find((b) => b.x === tile.x && b.y === tile.y);
-    if (action === 'inspect' && clicked) buildingPanel.show(clicked.id);
-    else if (action !== 'repair') buildingPanel.close();
-  },
+  onClick: handleClick,
   onTogglePause: () => togglePause(state),
   onSetSpeed: (speed) => setSpeed(state, speed),
   onSelectTool: selectTool,
@@ -463,23 +719,29 @@ function frame(now: number): void {
 
   updateInput(dt);
   advanceClock(clock, state, dt);
+  pruneUndo();
 
-  const carried = tool === 'move' ? carriedBuilding() : undefined;
-  if (!carried) carriedId = null; // e.g. it was sold or the game restarted
+  // The move tool: what's being carried, drawn at the cursor.
+  const carried = tool === 'move' ? carriedBuildings() : [];
+  if (carried.length === 0) carrying = null; // e.g. sold or the game restarted
   let preview: ToolPreview | null = null;
-  if (hoveredTile && carried) preview = previewMove(state, carried, hoveredTile.x, hoveredTile.y);
-  else if (hoveredTile) preview = previewTool(state, tool, hoveredTile.x, hoveredTile.y);
-  if (preview?.action === 'place' && !isZoneTool(tool) && !carried) {
-    preview = { ...preview, text: `${preview.text} · facing ${FACING[placeRot]} (Q)` };
+  if (hoveredTile && carried.length === 1) {
+    const b = carried[0]!;
+    const target = { x: b.x + hoveredTile.x - carrying!.anchor.x, y: b.y + hoveredTile.y - carrying!.anchor.y };
+    preview = previewMove(state, b, target.x, target.y);
+  } else if (hoveredTile && carried.length > 1) {
+    preview = { action: 'place', text: `Move ${carried.length} buildings here (free) · Esc to cancel` };
+  } else if (hoveredTile) preview = previewTool(state, tool, hoveredTile.x, hoveredTile.y);
+  if (preview?.action === 'place' && isBuildTool(tool) && !carried.length) {
+    preview = { ...preview, text: `${preview.text} · facing ${FACING[placeRot]} (Q) · drag for many` };
   }
-  buildings.carry(
-    carried ? { id: carried.id, x: hoveredTile?.x ?? carried.x, y: hoveredTile?.y ?? carried.y, rot: placeRot } : null,
-  );
+  const offset = carrying && hoveredTile ? { x: hoveredTile.x - carrying.anchor.x, y: hoveredTile.y - carrying.anchor.y } : { x: 0, y: 0 };
+  buildings.carry(carried.map((b) => ({ id: b.id, x: b.x + offset.x, y: b.y + offset.y, rot: carried.length === 1 ? placeRot : b.rot })));
 
-  // Walls and zones get their own previews: a ghost wall or a painted
+  // Walls and boxes get their own previews: a ghost wall or a coloured
   // rectangle, with a cost summary instead of a tile highlight.
   let ghosts: { edge: Edge; ok: boolean }[] = [];
-  const sellWall = tool === 'sell' ? wallUnderCursor() : null;
+  const sellWall = tool === 'sell' && !boxDrag ? wallUnderCursor() : null;
   if (sellWall) {
     const kind = wallAt(state, sellWall.x, sellWall.y, sellWall.dir)!.kind;
     const refund = CONFIG.walls[kind].cost * CONFIG.economy.sellRefund;
@@ -495,12 +757,17 @@ function frame(now: number): void {
     }
   }
   walls.showGhost(ghosts, state);
-  const rect = isZoneTool(tool) ? zoneRect() : null;
-  zonePreview.show(state, rect, isZoneTool(tool) ? zoneOfTool(tool) : null);
-  if (rect && isZoneTool(tool)) {
-    const n = (rect.x1 - rect.x0 + 1) * (rect.y1 - rect.y0 + 1);
-    preview = { action: 'draw', text: `Paint ${n} tile${n > 1 ? 's' : ''}` };
-  }
+  const rect = boxRect();
+  if (rect && (!isSingleTile(rect) || isZoneTool(tool))) {
+    const plan = planBox(rect);
+    if (isZoneTool(tool)) boxPreview.show(state, rect, zoneOfTool(tool));
+    else boxPreview.showBox(state, rect, plan.colour);
+    preview = { action: 'draw', text: plan.text };
+  } else boxPreview.showBox(state, null, 0);
+
+  // Server-room hum: louder with more running racks, quiet when paused.
+  const running = racksOf(state).filter(isRunning).length;
+  sound.setAmbient(state.paused || state.bankrupt ? 0.15 : Math.min(1, 0.25 + running / 60));
 
   buildings.sync(state, dt);
   floor.sync(state);
@@ -519,15 +786,20 @@ function frame(now: number): void {
     heat: heat.visible,
     contracts: contracts.open,
     staff: staffPanel.open,
+    research: researchPanel.open,
+    stats: statsPanel.open,
     style: stylePanel.open,
-    tallWalls: walls.tall,
+    wallHeight: walls.tall,
     guide: guide.open,
+    undo: undoStack.length > 0,
   });
   goals.update(state);
   contracts.update(state);
   stylePanel.update(state);
   staffPanel.update(state);
   networkPanel.update(state);
+  researchPanel.update(state);
+  statsPanel.update(state);
   const selected = buildingPanel.update(state);
   selection.set(selected ? { x: selected.x, y: selected.y } : null, 'inspect');
   announcer.update(state);

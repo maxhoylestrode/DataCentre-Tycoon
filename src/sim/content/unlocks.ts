@@ -2,7 +2,7 @@ import type { Unlock } from './types';
 
 // Every building, floor type, wall type and mechanic, and the level it
 // unlocks at. The build menu, tooltips and level-up popup all read from this
-// table. (Rack parts, internet lines and room styles carry their own level.)
+// table. (Rack parts, internet lines, research and room styles carry their own level.)
 export const UNLOCKS: Unlock[] = [
   { id: 'rack_basic', type: 'building', level: 1 },
   { id: 'power_basic', type: 'building', level: 2 },
@@ -71,7 +71,25 @@ export const UNLOCKS: Unlock[] = [
   { id: 'bean_bag', type: 'building', level: 6 },
   { id: 'sofa', type: 'building', level: 7 },
   { id: 'vending_machine', type: 'building', level: 7 },
+  {
+    id: 'events',
+    type: 'mechanic',
+    level: 7,
+    name: 'Incidents',
+    description: 'Power cuts, heatwaves, fires and cyber attacks can now happen, more often as you grow. Build UPS batteries, fire suppression and firewalls (Safety menu).',
+  },
+  { id: 'ups_battery', type: 'building', level: 7 },
+  { id: 'fire_suppression', type: 'building', level: 7 },
   { id: 'rack_performance', type: 'building', level: 8 },
+  { id: 'power_gas', type: 'building', level: 8 },
+  {
+    id: 'research',
+    type: 'mechanic',
+    level: 8,
+    name: 'Research',
+    description: 'Spend cash and time on permanent bonuses: power, cooling, contract pay and more (Research panel, Y).',
+  },
+  { id: 'firewall', type: 'building', level: 9 },
   { id: 'wall_glass', type: 'wall', level: 8 },
   { id: 'bonsai', type: 'building', level: 8 },
   { id: 'cooling_inrow', type: 'building', level: 9 },
@@ -82,19 +100,23 @@ export const UNLOCKS: Unlock[] = [
   { id: 'chiller', type: 'building', level: 11 },
   { id: 'floor_vent', type: 'floor', level: 11 },
   { id: 'fountain', type: 'building', level: 11 },
+  { id: 'power_solar', type: 'building', level: 11 },
   { id: 'neon_sign', type: 'building', level: 12 },
   { id: 'globe', type: 'building', level: 12 },
   { id: 'status_wall', type: 'building', level: 13 },
   { id: 'rack_enterprise', type: 'building', level: 14 },
   { id: 'aquarium', type: 'building', level: 14 },
   { id: 'server_showcase', type: 'building', level: 15 },
+  { id: 'power_fuelcell', type: 'building', level: 15 },
   { id: 'sculpture', type: 'building', level: 16 },
   { id: 'circuit_art', type: 'building', level: 17 },
   { id: 'cooling_ac', type: 'building', level: 18 },
   { id: 'piano', type: 'building', level: 19 },
   { id: 'trophy_case', type: 'building', level: 20 },
+  { id: 'power_substation', type: 'building', level: 21 },
   { id: 'rack_gpu', type: 'building', level: 22 },
   { id: 'robot_mascot', type: 'building', level: 24 },
   { id: 'golden_server', type: 'building', level: 28 },
+  { id: 'power_reactor', type: 'building', level: 30 },
   { id: 'rack_hyperscale', type: 'building', level: 31 },
 ];

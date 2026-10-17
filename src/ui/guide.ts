@@ -1,3 +1,4 @@
+import { CONFIG } from '../config';
 import { ICONS } from './icons';
 
 // The in-game how-to guide (G). Plain text sections; the first one opens
@@ -21,15 +22,20 @@ const SECTIONS: Section[] = [
         <li>Watch the HUD: <b>Net £/min</b> is income minus costs. Keep it positive.</li>
         <li>Follow the <b>Goals</b> panel (top right) for XP, cash and unlocks.</li>
       </ol>
-      <p class="tip">Don't spend every penny at once: new racks cost upkeep before they earn, and below the overdraft limit you go bankrupt.</p>`,
+      <p class="tip">Don't spend every penny at once: new racks take a day to fill with customers. If cash drops below the overdraft limit you have 12 game hours to recover before you go bankrupt.</p>`,
   },
   {
     id: 'power',
     title: 'Power',
     html: `
-      <p>Racks and coolers draw <b>kW</b>. Your building supplies a little; <b>Power units</b> add more. If you draw more than you supply, everything slows down (a brownout).</p>
-      <p>Put <b>four power units in a 2×2 square</b> to form a multiblock: each produces 25% more.</p>
-      <p>You also pay an <b>electricity bill</b> for what you draw. The more you use, the higher the rate per kW.</p>`,
+      <p>Racks and coolers draw <b>kW</b>. Your building supplies a little; power sources add more. If you draw more than you supply, everything slows down (a brownout).</p>
+      <ul>
+        <li><b>Power unit</b> (20 kW), then <b>Gas generator</b> (60), <b>Fuel cell stack</b> (130), <b>Grid substation</b> (320) and <b>Micro reactor</b> (1000 kW) as you level up.</li>
+        <li><b>Solar array</b>: its power is free, so it comes off your electricity bill.</li>
+        <li>Grid-fed sources (power units, substations) lose most of their output in a <b>power cut</b>; on-site generators keep going.</li>
+      </ul>
+      <p>Put <b>four of the same kind in a 2×2 square</b> to form a multiblock: each produces 25% more.</p>
+      <p>You pay an <b>electricity bill</b> for what you draw. The more you use, the higher the rate per kW.</p>`,
   },
   {
     id: 'heat',
@@ -88,6 +94,45 @@ const SECTIONS: Section[] = [
       <p class="tip">Contracted racks don't count towards market saturation: walk-in customers run out as you grow, so contracts are how big datacentres make money.</p>`,
   },
   {
+    id: 'incidents',
+    title: 'Incidents',
+    html: `
+      <p>From level 7, things go wrong now and then, and more often the bigger you are:</p>
+      <ul>
+        <li><b>Power cut</b>: grid power drops for a few hours. <b>UPS battery banks</b> cover the gap.</li>
+        <li><b>Heatwave</b>: the room gets ${CONFIG.events.heatwaveBoost}°C warmer for up to a day. Have spare cooling.</li>
+        <li><b>Fire</b>: a hot rack and its neighbours burn out, unless <b>fire suppression</b> covers them.</li>
+        <li><b>Cyber attack</b>: most of your internet line is lost for a while. <b>Firewalls</b> block it.</li>
+      </ul>
+      <p>Some news is good: <b>rush jobs</b> pay cash, and <b>press visits</b> pay more the more prestige (decor) you have.</p>
+      <p class="tip">Build protection from the <b>Safety</b> menu (F). Research <i>Predictive monitoring</i> to make incidents rarer.</p>`,
+  },
+  {
+    id: 'research',
+    title: 'Research & selling up',
+    html: `
+      <p>From level 8, open <b>Research (Y)</b>. Each project costs cash and takes game days, and gives a permanent bonus: more power, better cooling, cheaper electricity, higher contract pay and more. One runs at a time; later ones need earlier ones.</p>
+      <p>From level ${CONFIG.legacy.minLevel}, you can <b>sell the company</b> (at the bottom of the Research panel). You start again from scratch, but earn <b>legacy points</b> from the company's value. Each point gives +${CONFIG.legacy.incomePerPoint * 100}% income and extra starting cash in every future game.</p>`,
+  },
+  {
+    id: 'editing',
+    title: 'Building faster',
+    html: `
+      <ul>
+        <li><b>Drag</b> with a build tool to place many at once. A wide box places rows with aisles between them, so staff can reach every rack.</li>
+        <li>Drag with <b>Sell</b> to sell everything in a box.</li>
+        <li><b>Move (M)</b>: click a building to carry it, or drag a box to carry a whole group, then click where it should go. Free.</li>
+        <li><b>Ctrl+Z</b> (or the undo button) undoes your last few changes, for up to a minute.</li>
+        <li>Right-drag or WASD to move the camera while a build tool is selected.</li>
+      </ul>`,
+  },
+  {
+    id: 'stats',
+    title: 'Stats',
+    html: `
+      <p>Open <b>Stats (N)</b> for graphs of income, costs, profit, cash, power and uptime over the last day, week or two weeks, plus a list of recent incidents.</p>`,
+  },
+  {
     id: 'rooms',
     title: 'Rooms & walls',
     html: `
@@ -99,13 +144,16 @@ const SECTIONS: Section[] = [
     title: 'Controls',
     html: `
       <table class="keys">
-        <tr><td>Drag / WASD</td><td>Pan</td></tr>
+        <tr><td>Right-drag / WASD</td><td>Pan (left-drag too, unless a tool drags a box)</td></tr>
         <tr><td>Wheel / pinch</td><td>Zoom</td></tr>
         <tr><td>Space, 1 2 3</td><td>Pause, speed</td></tr>
-        <tr><td>R P C Z B X</td><td>Racks, Power, Cooling, Zones, Walls, Sell</td></tr>
-        <tr><td>M</td><td>Move: click a building to pick it up, click to put it down (free; Q turns it, Esc cancels)</td></tr>
+        <tr><td>R P C F Z B X</td><td>Racks, Power, Cooling, Safety, Zones, Walls, Sell</td></tr>
+        <tr><td>M</td><td>Move: click (or drag a box) to pick up, click to put down. Q turns it, Esc cancels</td></tr>
+        <tr><td>Drag</td><td>Place, sell or pick up everything in a box</td></tr>
+        <tr><td>Ctrl+Z</td><td>Undo</td></tr>
         <tr><td>Q</td><td>Rotate what you're placing</td></tr>
-        <tr><td>H K T L V G</td><td>Heat, Contracts, Staff, Style, Tall walls, Guide</td></tr>
+        <tr><td>H K T Y N</td><td>Heat, Contracts, Staff, Research, Stats</td></tr>
+        <tr><td>L V G</td><td>Style, Tall walls, Guide</td></tr>
         <tr><td>Esc</td><td>Cancel / close panels</td></tr>
       </table>`,
   },
