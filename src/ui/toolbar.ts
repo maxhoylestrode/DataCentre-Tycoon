@@ -172,6 +172,18 @@ export class Toolbar {
       if (target.classList.contains('locked')) return;
       handlers.onSelectTool(target.dataset.tool as Tool);
     });
+
+    // The cards scroll sideways: let a normal mouse wheel do that.
+    this.panel.addEventListener(
+      'wheel',
+      (e) => {
+        const cards = this.panel.querySelector<HTMLElement>('.hb-cards');
+        if (!cards || cards.scrollWidth <= cards.clientWidth) return;
+        e.preventDefault();
+        cards.scrollBy({ left: Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX });
+      },
+      { passive: false },
+    );
   }
 
   close(): void {
@@ -224,8 +236,16 @@ export class Toolbar {
       <div class="hb-head">${ICONS[group.id]}<span>${group.label}</span><button data-act="close" aria-label="Close">✕</button></div>
       <div class="hb-cards">${cards.join('')}</div>`;
     if (html !== this.lastPanelHtml) {
+      // Re-rendering (e.g. cash changed) must not jump the scroll back to the start,
+      // but switching groups should.
+      const sameGroup = this.lastPanelHtml !== '';
+      const scroll = this.panel.querySelector<HTMLElement>('.hb-cards')?.scrollLeft ?? 0;
       this.lastPanelHtml = html;
       this.panel.innerHTML = html;
+      const cards = this.panel.querySelector<HTMLElement>('.hb-cards')!;
+      cards.style.scrollBehavior = 'auto';
+      cards.scrollLeft = sameGroup ? scroll : 0;
+      cards.style.scrollBehavior = '';
     }
     this.panel.classList.add('open');
   }

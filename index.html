@@ -139,9 +139,18 @@
       .hb-head svg { width: 18px; height: 18px; color: var(--hb-accent); }
       .hb-head button { margin-left: auto; padding: 0 8px; background: transparent; border: 0; color: #8a94a3; }
       .hb-head button:hover { color: #fff; background: transparent; }
-      .hb-cards { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+      /* Always two rows; extra items continue sideways and scroll. */
+      .hb-cards {
+        display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: 118px;
+        gap: 8px; overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; touch-action: pan-x;
+        scroll-behavior: smooth; padding-bottom: 6px; justify-content: safe center;
+        scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+      }
+      .hb-cards::-webkit-scrollbar { height: 6px; }
+      .hb-cards::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.25); border-radius: 3px; }
+      .hb-cards::-webkit-scrollbar-track { background: transparent; }
       .hb-card {
-        width: 118px; padding: 8px; border-radius: 10px; cursor: pointer; box-sizing: border-box;
+        width: 118px; min-height: 132px; padding: 8px; border-radius: 10px; cursor: pointer; box-sizing: border-box;
         background: rgba(255, 255, 255, 0.04); border: 1px solid transparent; transition: background 0.12s, border-color 0.12s;
       }
       .hb-card:hover { background: rgba(255, 255, 255, 0.08); }
@@ -165,6 +174,7 @@
       @media (max-width: 600px) {
         .hotbar .hb-btn { width: 52px; height: 52px; }
         .hb-card { width: 100px; }
+        .hb-cards { grid-auto-columns: 100px; }
       }
       .menu-toggle { position: fixed; top: 12px; right: 12px; font: 13px system-ui, sans-serif; padding: 6px 12px; }
       .menu {
