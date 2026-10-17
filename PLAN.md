@@ -316,6 +316,18 @@ Done when: I can create an account, play on one device, log in on another and co
 
 (Claude Code: add dated entries here when a decision changes the plan.)
 
+- 2026-10-17: Sales staff who automate contracts (user: "new types of staff which can automate the contract hiring"). `sim/sales.ts`, numbers in `CONFIG.staff.sales`.
+  - **Account manager** (level 7, £6,000, £1.10/min):
+    - Walks to a free reception desk and stands beside it (one per desk, never in the clients' spot).
+    - Talks to each waiting client for 20 ticks, then signs if three things hold. Otherwise it leaves a ✓/✕ note on the offer.
+      - The racks are free.
+      - Uptime over the last 12 game hours beats the promise by 0.5%.
+      - Total income goes up. This compares real income with and without the contract, so a crowded walk-in market counts in the contract's favour.
+    - A switch in the Contracts panel turns signing off ("advice only").
+  - **Sales rep** (level 10, £9,000, £1.60/min): each brings +1 offer a day and +3% pay on new offers, capped at +4 offers and +15%. They don't walk to jobs.
+  - **Roles:** staff roles gained `minLevel`. Account managers wear a teal shirt and headset; sales reps wear purple and carry a briefcase.
+  - **Save:** `contracts.autoSign`, offer `review`, `signedByStaff`, `stats.staffSigned` and the `desk` task kind. All read tolerantly, so there is no version bump.
+
 - 2026-10-17: Statistics screen, repair markers and upgradable safety (user request).
   - **Statistics (N):** rebuilt in the style of a city builder's stats screen.
     - A sidebar lists 35 stats in 9 groups, each with its latest value and a trend (green or red by whether up is good).

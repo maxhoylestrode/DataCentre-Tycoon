@@ -3,8 +3,9 @@ import { CUSTOMER_TYPES } from '../sim/content/customers';
 import type { GameState } from '../sim/state';
 
 // Little low-poly people with legs, arms, a head and hair, and a walk cycle.
-// Engineers wear hi-vis and a hard hat, technicians a uniform and cap, and
-// clients a shirt in their company's colour with a tie and briefcase. Skin,
+// Engineers wear hi-vis and a hard hat, technicians a uniform and cap,
+// account managers a teal shirt and headset, sales reps purple with a
+// briefcase, and clients a shirt in their company's colour with a tie and briefcase. Skin,
 // hair and trousers vary per person. Positions glide towards the sim's.
 
 const SKIN = [0xf1c9a5, 0xe0ac7e, 0xc68a5b, 0x8d5a3b, 0x5c3a24];
@@ -36,9 +37,19 @@ const G = {
   stripe: new THREE.CylinderGeometry(0.118, 0.118, 0.02, 18, 1, true),
   tie: new THREE.BoxGeometry(0.026, 0.13, 0.012),
   case: new THREE.BoxGeometry(0.04, 0.09, 0.13),
+  band: new THREE.TorusGeometry(0.104, 0.008, 6, 20, Math.PI),
+  mic: new THREE.SphereGeometry(0.014, 6, 4),
 };
 
-type Kind = 'engineer' | 'technician' | 'client';
+// manager: account manager (headset); sales: sales rep (dark briefcase).
+type Kind = 'engineer' | 'technician' | 'client' | 'manager' | 'sales';
+
+const STAFF_LOOK: Record<string, { kind: Kind; shirt: number }> = {
+  engineer: { kind: 'engineer', shirt: 0xf28c28 },
+  technician: { kind: 'technician', shirt: 0x2f6fb0 },
+  account_manager: { kind: 'manager', shirt: 0x2aa39d },
+  sales_rep: { kind: 'sales', shirt: 0x7a4fb8 },
+};
 
 interface Rig {
   group: THREE.Group;
@@ -127,9 +138,17 @@ function person(kind: Kind, key: string, shirtColour: number): Rig {
   } else {
     const style = mesh(G.hair, hair, 0, 0.885, -0.008);
     style.rotation.x = -0.3;
-    body.add(style, mesh(G.tie, mat(0x1d2230, 0.6), 0, 0.62, 0.078));
-    // Briefcase in the right hand.
-    armR.add(mesh(G.case, mat(0x3a2a1e, 0.5), 0.02, -0.34, 0));
+    body.add(style, mesh(G.tie, mat(kind === 'client' ? 0x1d2230 : 0xd9e0e6, 0.6), 0, 0.62, 0.078));
+    if (kind === 'manager') {
+      // A headset: band over the head and a mic by the mouth.
+      const band = mesh(G.band, mat(0x1b1d22, 0.5), 0, 0.89);
+      band.rotation.z = Math.PI / 2;
+      band.rotation.y = Math.PI / 2;
+      body.add(band, mesh(G.mic, mat(0x1b1d22, 0.5), 0.07, 0.85, 0.07));
+    } else {
+      // Briefcase in the right hand (clients and sales reps).
+      armR.add(mesh(G.case, mat(kind === 'sales' ? 0x1d2230 : 0x3a2a1e, 0.5), 0.02, -0.34, 0));
+    }
   }
 
   return { group, body, legL, legR, armL, armR };
@@ -199,9 +218,10 @@ export class PeopleLayer {
 
     for (const s of state.staff) {
       const working = s.task !== null && s.path.length === 0;
-      const kind: Kind = s.role === 'engineer' ? 'engineer' : 'technician';
-      const shirt = kind === 'engineer' ? 0xf28c28 : 0x2f6fb0;
-      place(`s${s.id}`, () => person(kind, `s${s.id}`, shirt), s.x, s.y, working);
+      const look = STAFF_LOOK[s.role] ?? STAFF_LOOK.technician!;
+      // Account managers stand at their desk rather than tinkering with it.
+      const busy = working && s.task?.kind !== 'desk';
+      place(`s${s.id}`, () => person(look.kind, `s${s.id}`, look.shirt), s.x, s.y, busy);
     }
     for (const c of state.clients) {
       if (state.tick < c.spawnTick) continue;

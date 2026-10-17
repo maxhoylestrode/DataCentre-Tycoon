@@ -43,13 +43,16 @@ export interface Building {
   buildRemaining: number;
 }
 
-export type StaffTaskKind = 'build' | 'repair' | 'service';
+// 'desk': an account manager staffing a reception desk (sim/sales.ts).
+export type StaffTaskKind = 'build' | 'repair' | 'service' | 'desk';
 
 export interface StaffTask {
   kind: StaffTaskKind;
   buildingId: number;
-  // Work left once on site, in ticks.
+  // Work left once on site, in ticks. At a desk: time left talking to a client.
   workLeft: number;
+  // At a desk: the offer whose client they're talking to.
+  offerId?: number;
 }
 
 export interface StaffMember {
@@ -142,6 +145,8 @@ export interface Stats {
   services: number;
   refurbishes: number;
   clientsServed: number;
+  // Contracts account managers signed.
+  staffSigned: number;
 }
 
 // What a customer is offering. Rolled once when the offer is made, then
@@ -163,6 +168,10 @@ export interface ContractTerms {
   requirement?: ContractRequirement;
   // Offers only: whether the client has reached reception (can be signed).
   arrived?: boolean;
+  // Offers only: an account manager's verdict after talking to the client.
+  review?: { recommend: boolean; note: string };
+  // Signed by an account manager rather than the player.
+  signedByStaff?: boolean;
 }
 
 export interface Contract extends ContractTerms {
@@ -190,10 +199,12 @@ export interface ContractsState {
   nextId: number;
   // Day the current offers were made; 0 means never.
   offersDay: number;
+  // Whether account managers sign contracts they recommend, or only advise.
+  autoSign: boolean;
 }
 
 export function createContractsState(): ContractsState {
-  return { offers: [], active: [], history: [], nextId: 1, offersDay: 0 };
+  return { offers: [], active: [], history: [], nextId: 1, offersDay: 0, autoSign: true };
 }
 
 export interface Progress {
@@ -229,6 +240,7 @@ export function createProgress(): Progress {
       services: 0,
       refurbishes: 0,
       clientsServed: 0,
+      staffSigned: 0,
     },
   };
 }

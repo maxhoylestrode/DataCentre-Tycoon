@@ -18,6 +18,7 @@ import {
   repairRack,
   rotateBuilding,
   sellBuilding,
+  setAutoSign,
   setSpeed,
   signContract,
   startResearch,
@@ -418,6 +419,10 @@ const contracts = new ContractsPanel(document.body, {
     if (signContract(state, id).ok) play('cash');
   },
   onCancel: (id) => cancelContract(state, id),
+  onAutoSign: () => {
+    setAutoSign(state, !state.contracts.autoSign);
+    play('click');
+  },
 });
 const toggleContracts = (): void => {
   if (isUnlocked(state, 'contract_board')) contracts.toggle();

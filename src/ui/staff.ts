@@ -1,8 +1,9 @@
 import { buildingDef, CONFIG, type StaffRole } from '../config';
 import { buildTicks, isOverdue } from '../sim/buildings';
 import { wagesPerTick } from '../sim/economy';
-import { staffSpeedFactor } from '../sim/people';
-import { isUnlocked, unlockFor } from '../sim/progression';
+import { receptionDesks, staffSpeedFactor } from '../sim/people';
+import { isUnlocked, levelOf, unlockFor } from '../sim/progression';
+import { salesExtraOffers, salesPayBonus } from '../sim/sales';
 import { categoryOf, type GameState, type StaffMember } from '../sim/state';
 import { hasStorage, staffCapacity } from '../sim/zones';
 import { ICONS } from './icons';
@@ -13,19 +14,37 @@ export interface StaffHandlers {
 }
 
 const money = (n: number): string => `£${Math.round(n).toLocaleString('en-GB')}`;
+const S = CONFIG.staff.sales;
 const tile = (label: string, value: string, cls = ''): string =>
   `<div class="ct-tile ${cls}"><div class="ct-tile-value">${value}</div><div class="ct-tile-label">${label}</div></div>`;
 
 const ROLE_INFO: Record<StaffRole, { blurb: string; colour: string }> = {
   engineer: { blurb: 'Builds everything you place and repairs failed racks.', colour: '#ffb347' },
   technician: { blurb: `Services racks every ${CONFIG.maintenance.intervalTicks / CONFIG.time.ticksPerDay} days so they keep full income.`, colour: '#4aa8ff' },
+  account_manager: {
+    blurb: 'Staffs a reception desk and signs good contracts for you: only ones you have racks for, can keep the uptime promise on, and that raise your income.',
+    colour: '#3fd0c9',
+  },
+  sales_rep: {
+    blurb: `Finds new clients: +${S.offersPerRep} contract offer a day and +${S.payPerRep * 100}% pay on new offers each (up to +${S.maxExtraOffers} offers, +${S.maxPayBonus * 100}% pay).`,
+    colour: '#c58cff',
+  },
 };
 
 function doing(state: GameState, s: StaffMember): string {
+  if (s.role === 'sales_rep') return `Out meeting clients · +${salesExtraOffers(state)} offers/day, +${Math.round(salesPayBonus(state) * 100)}% pay`;
+  if (s.role === 'account_manager' && !s.task) {
+    return receptionDesks(state).length === 0 ? 'Needs a reception desk to work at' : 'Every desk is staffed: build another reception desk';
+  }
   if (!s.task) return s.path.length ? 'Heading to the staff room' : 'Idle';
+  if (s.task.kind === 'desk') {
+    if (s.path.length > 0) return 'Walking to reception';
+    const offer = state.contracts.offers.find((o) => o.id === s.task!.offerId);
+    return offer ? `Talking to ${offer.name}` : 'At reception, waiting for clients';
+  }
   const b = state.buildings.find((x) => x.id === s.task!.buildingId);
   const name = b ? buildingDef(b.kind).name : 'job';
-  const verb = { build: 'Building', repair: 'Repairing', service: 'Servicing' }[s.task.kind];
+  const verb = { build: 'Building', repair: 'Repairing', service: 'Servicing' }[s.task.kind as 'build' | 'repair' | 'service'];
   if (s.path.length > 0) return `Walking to ${verb.toLowerCase()} ${name}`;
   if (s.task.kind === 'build' && b) return `${verb} ${name} · ${Math.round((1 - b.buildRemaining / buildTicks(b.kind)) * 100)}%`;
   return `${verb} ${name}`;
@@ -88,7 +107,11 @@ export class StaffPanel {
     const hire = (Object.keys(CONFIG.staff.roles) as StaffRole[]).map((role) => {
       const def = CONFIG.staff.roles[role];
       const info = ROLE_INFO[role];
-      const reason = !canHire ? `Hiring unlocks at level ${unlockFor('staff')?.level ?? '?'}` : state.cash < def.hireFee ? `Need ${money(def.hireFee)}` : '';
+      const reason =
+        !canHire ? `Hiring unlocks at level ${unlockFor('staff')?.level ?? '?'}`
+        : levelOf(state) < def.minLevel ? `Unlocks at level ${def.minLevel}`
+        : state.cash < def.hireFee ? `Need ${money(def.hireFee)}`
+        : '';
       return `
         <div class="ct-card" style="--ct-color:${info.colour}">
           <div class="ct-card-head"><div class="ct-avatar" style="background:${info.colour}">${def.name[0]}</div>

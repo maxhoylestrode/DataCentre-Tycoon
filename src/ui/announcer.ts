@@ -31,6 +31,7 @@ export class Announcer {
   private lastResult: ContractResult | undefined;
   private lastEvent: EventRecord | undefined;
   private research = 0;
+  private staffSigned = 0;
 
   constructor(
     private readonly toasts: Toasts,
@@ -48,6 +49,7 @@ export class Announcer {
     this.lastResult = state.contracts.history.at(-1);
     this.lastEvent = state.events.history.at(-1);
     this.research = state.research.done.length;
+    this.staffSigned = state.progress.stats.staffSigned;
   }
 
   update(state: GameState): void {
@@ -69,6 +71,17 @@ export class Announcer {
       this.cue('research');
     }
     this.research = state.research.done.length;
+
+    // Contracts an account manager signed since last time.
+    const staffSigned = state.progress.stats.staffSigned;
+    if (staffSigned > this.staffSigned) {
+      for (const c of state.contracts.active.filter((x) => x.signedByStaff).slice(this.staffSigned - staffSigned)) {
+        const pay = `£${(c.payPerRackPerTick * c.racks).toFixed(2)}/min`;
+        this.toasts.show(`<b>Account manager signed:</b> ${c.name}<br>${c.racks} racks for ${c.days} days &middot; ${pay}`, 'goal');
+      }
+      this.cue('good');
+    }
+    this.staffSigned = staffSigned;
 
     const history = state.contracts.history;
     if (history.at(-1) !== this.lastResult) {

@@ -1,8 +1,9 @@
 // Staff and clients, simulated only when state.staffSim is on.
 //
 // Engineers build new buildings and repair failed racks; technicians service
-// racks before maintenance runs out. Each picks the nearest job nobody else
-// has taken, walks there, works, and moves on. Idle staff head back to the
+// racks before maintenance runs out; account managers staff reception desks.
+// Each picks the nearest job nobody else has taken, walks there, works, and
+// moves on. Idle staff head back to the
 // staff room. Clients walk in through a front door, queue at a reception
 // desk (which makes their contract offer signable) and walk out again.
 
@@ -60,8 +61,12 @@ function needsService(state: GameState, b: Building): boolean {
 // Engineers build and repair; when there's nothing to build or repair they
 // service racks too, so a small company run by the founder still copes.
 // Technicians only service.
+// Account managers staff a free reception desk; sales reps are out
+// on the road, so they never take jobs here (sim/sales.ts).
 function jobsFor(state: GameState, member: StaffMember, taken: Set<number>): Building[] {
   const open = state.buildings.filter((b) => !taken.has(b.id));
+  if (member.role === 'account_manager') return open.filter((b) => b.kind === 'desk_reception' && isRunning(b));
+  if (member.role === 'sales_rep') return [];
   if (member.role === 'engineer') {
     const engineering = open.filter((b) => b.status === 'building' || (b.status === 'repairing' && b.repairDoneTick === null));
     if (engineering.length > 0) return engineering;
@@ -69,7 +74,8 @@ function jobsFor(state: GameState, member: StaffMember, taken: Set<number>): Bui
   return open.filter((b) => needsService(state, b));
 }
 
-function taskFor(b: Building): StaffTask {
+function taskFor(member: StaffMember, b: Building): StaffTask {
+  if (member.role === 'account_manager') return { kind: 'desk', buildingId: b.id, workLeft: 0 };
   if (b.status === 'building') return { kind: 'build', buildingId: b.id, workLeft: b.buildRemaining };
   if (b.status === 'repairing') return { kind: 'repair', buildingId: b.id, workLeft: CONFIG.economy.repairTicks };
   return { kind: 'service', buildingId: b.id, workLeft: CONFIG.maintenance.workTicks };
@@ -82,6 +88,11 @@ function stillNeeded(state: GameState, task: StaffTask): Building | undefined {
   if (task.kind === 'build') return b.status === 'building' ? b : undefined;
   if (task.kind === 'repair') return b.status === 'repairing' ? b : undefined;
   return isRunning(b) ? b : undefined;
+}
+
+// The tile in front of a desk, where its queue starts.
+export function deskFront(desk: Building): Tile {
+  return [desk.x + [0, 1, 0, -1][desk.rot % 4]!, desk.y + [1, 0, -1, 0][desk.rot % 4]!];
 }
 
 function finish(state: GameState, task: StaffTask, b: Building): void {
@@ -107,7 +118,10 @@ function assignJob(grid: WalkGrid, state: GameState, member: StaffMember, taken:
   // One search reaching whichever job is nearest on foot.
   const byTile = new Map<string, Building[]>();
   for (const job of jobs) {
+    // Behind or beside a reception desk, never in the clients' spot in front.
+    const front = member.role === 'account_manager' ? deskFront(job) : null;
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      if (front && job.x + dx === front[0] && job.y + dy === front[1]) continue;
       const k = `${job.x + dx},${job.y + dy}`;
       byTile.set(k, [...(byTile.get(k) ?? []), job]);
     }
@@ -120,7 +134,7 @@ function assignJob(grid: WalkGrid, state: GameState, member: StaffMember, taken:
   });
   if (!path || !target) return idle(grid, state, member);
   member.path = path;
-  member.task = taskFor(target);
+  member.task = taskFor(member, target);
   taken.add(target.id);
 }
 
@@ -160,6 +174,8 @@ export function stepStaff(state: GameState): void {
       }
     }
     if (!walk(member, speed)) continue;
+    // At a desk: stay there; sim/sales.ts does the talking.
+    if (member.task!.kind === 'desk') continue;
     // On site: work.
     const task = member.task!;
     const b = stillNeeded(state, task)!;
@@ -228,7 +244,7 @@ function queueSpots(grid: WalkGrid, state: GameState, count: number): Tile[] {
   const spots: Tile[] = [];
   const seen = new Set<string>();
   for (const desk of receptionDesks(state)) {
-    const front: Tile = [desk.x + [0, 1, 0, -1][desk.rot % 4]!, desk.y + [1, 0, -1, 0][desk.rot % 4]!];
+    const front = deskFront(desk);
     if (!isWalkable(grid, front[0], front[1]) || !canStep(grid, front[0], front[1], desk.x, desk.y)) continue;
     const queue: Tile[] = [front];
     seen.add(`${front[0]},${front[1]}`);

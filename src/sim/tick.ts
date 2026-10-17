@@ -8,6 +8,7 @@ import { recordHistory } from './history';
 import { stepResearch } from './research';
 import { stepClients, stepStaff } from './people';
 import { powerEfficiency } from './power';
+import { stepSales } from './sales';
 import { checkProgress, endDay, recordTick } from './progression';
 import type { GameState } from './state';
 
@@ -28,6 +29,7 @@ export function tick(state: GameState): void {
   completeRepairs(state);
   stepStaff(state);
   stepClients(state);
+  stepSales(state);
   stepHeat(state, powerEfficiency(state));
   failOverheatedRacks(state);
 

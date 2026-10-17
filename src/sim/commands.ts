@@ -314,8 +314,10 @@ export function signContract(state: GameState, offerId: number): CommandResult {
   if (!canTakeOffer(state, offer)) return { ok: false, reason: 'not_enough_racks' };
 
   state.contracts.offers = state.contracts.offers.filter((o) => o.id !== offerId);
+  // Offer-only fields don't carry over.
+  const { arrived: _arrived, review: _review, ...terms } = offer;
   state.contracts.active.push({
-    ...offer,
+    ...terms,
     startTick: state.tick,
     endTick: state.tick + offer.days * CONFIG.time.ticksPerDay,
     servedRackTicks: 0,
@@ -451,12 +453,19 @@ export function hireStaff(state: GameState, role: StaffRole): CommandResult {
   if (!isUnlocked(state, 'staff')) return { ok: false, reason: 'locked' };
   const def = CONFIG.staff.roles[role];
   if (!def) return { ok: false, reason: 'unknown_role' };
+  if (levelOf(state) < def.minLevel) return { ok: false, reason: 'locked' };
   if (state.cash < def.hireFee) return { ok: false, reason: 'insufficient_funds' };
   state.cash -= def.hireFee;
   const [x, y] = entrance(state);
   state.staff.push({ id: state.nextStaffId++, role, founder: false, x, y, path: [], task: null });
   state.progress.stats.staffHired += 1;
   afterProgress(state);
+  return { ok: true };
+}
+
+// Whether account managers sign the contracts they recommend, or only advise.
+export function setAutoSign(state: GameState, on: boolean): CommandResult {
+  state.contracts.autoSign = on;
   return { ok: true };
 }
 

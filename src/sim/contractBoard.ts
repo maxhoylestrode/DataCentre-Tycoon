@@ -8,6 +8,7 @@ import { isUnlocked, levelOf } from './progression';
 import { dismissClient, spawnClients } from './people';
 import { prestigeExtraOffers, prestigePayBonus } from './prestige';
 import { pick, randomInt, randomRange } from './rng';
+import { salesExtraOffers, salesPayBonus } from './sales';
 import { type ContractTerms, dayOf, type GameState, racksOf } from './state';
 
 export function contractBoardOpen(state: GameState): boolean {
@@ -43,7 +44,7 @@ export function volumeDiscount(state: GameState): number {
 export function rollOffer(state: GameState, type: CustomerType): ContractTerms {
   const racks = randomInt(state, type.racks[0], type.racks[1]);
   const days = randomInt(state, type.days[0], type.days[1]);
-  const prestige = 1 + prestigePayBonus(state);
+  const prestige = 1 + prestigePayBonus(state) + salesPayBonus(state);
   const payPerRackPerTick = roundTo(
     CONFIG.contracts.basePayPerRackPerTick * rollRange(state, type.payMultiplier) * prestige * volumeDiscount(state),
     0.01,
@@ -80,7 +81,7 @@ export function refreshOffers(state: GameState): void {
   // Yesterday's clients who didn't sign go home.
   for (const old of state.contracts.offers) dismissClient(state, old.id, false);
   state.contracts.offers = [];
-  const count = CONFIG.contracts.offersPerDay + prestigeExtraOffers(state);
+  const count = CONFIG.contracts.offersPerDay + prestigeExtraOffers(state) + salesExtraOffers(state);
   for (let i = 0; i < count && types.length > 0; i++) {
     // With people simulated, an offer can only be signed once its client
     // has walked in and reached reception.

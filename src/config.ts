@@ -86,12 +86,31 @@ export const CONFIG = {
   multiblock: {
     bonus: 0.25,
   },
-  // Staff: engineers build and repair, technicians service racks. Hiring is a
-  // one-off fee; wages are paid every tick. The founder engineer is free.
+  // Staff: engineers build and repair, technicians service racks, account
+  // managers sign contracts at reception, sales reps bring in more and better
+  // offers (sim/sales.ts). Hiring is a one-off fee; wages are paid every tick.
+  // The founder engineer is free. minLevel: player level needed to hire.
   staff: {
     roles: {
-      engineer: { name: 'Engineer', hireFee: 2_500, wagePerTick: 0.6 },
-      technician: { name: 'Technician', hireFee: 1_800, wagePerTick: 0.45 },
+      engineer: { name: 'Engineer', hireFee: 2_500, wagePerTick: 0.6, minLevel: 0 },
+      technician: { name: 'Technician', hireFee: 1_800, wagePerTick: 0.45, minLevel: 0 },
+      account_manager: { name: 'Account manager', hireFee: 6_000, wagePerTick: 1.1, minLevel: 7 },
+      sales_rep: { name: 'Sales rep', hireFee: 9_000, wagePerTick: 1.6, minLevel: 10 },
+    },
+    sales: {
+      // Ticks an account manager spends talking to a client before deciding.
+      negotiateTicks: 20,
+      // Account managers only sign if your recent uptime beats the promised
+      // uptime by at least this much, so they don't sign contracts you'd break.
+      uptimeMargin: 0.005,
+      // Recent uptime is averaged over this many stats samples (game hours).
+      uptimeHours: 12,
+      // Each sales rep brings one more client a day, up to maxExtraOffers...
+      offersPerRep: 1,
+      maxExtraOffers: 4,
+      // ...and negotiates this much more pay on new offers, up to maxPayBonus.
+      payPerRep: 0.03,
+      maxPayBonus: 0.15,
     },
     // Tiles per tick at full speed. 0.15 = 1.5 tiles a second at 1x.
     walkSpeed: 0.15,

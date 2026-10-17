@@ -111,7 +111,7 @@ const MIGRATIONS: Record<number, (data: Data) => Data> = {
   // between saves but the same save always migrates the same way.
   2: (data) => ({
     ...data,
-    contracts: { offers: [], active: [], history: [], nextId: 1, offersDay: 0 },
+    contracts: { offers: [], active: [], history: [], nextId: 1, offersDay: 0, autoSign: true },
     rngSeed: typeof data.tick === 'number' ? data.tick + 1 : 1,
   }),
   // Every existing building starts un-upgraded.
@@ -215,6 +215,7 @@ export function serialize(state: GameState, now: Date = new Date()): string {
         history: state.contracts.history.map((h) => ({ ...h })),
         nextId: state.contracts.nextId,
         offersDay: state.contracts.offersDay,
+        autoSign: state.contracts.autoSign,
       },
       rngSeed: state.rngSeed,
       research: { done: [...state.research.done], current: state.research.current ? { ...state.research.current } : null },
@@ -425,7 +426,7 @@ function readZones(raw: unknown, state: GameState): ZoneTile[] {
   return zones;
 }
 
-const TASK_KINDS: StaffTaskKind[] = ['build', 'repair', 'service'];
+const TASK_KINDS: StaffTaskKind[] = ['build', 'repair', 'service', 'desk'];
 
 function readStaff(raw: unknown, state: GameState): StaffMember[] {
   const staff: StaffMember[] = [];
@@ -518,6 +519,7 @@ function readContracts(raw: unknown): ContractsState {
   const maxId = Math.max(0, ...contracts.offers.map((o) => o.id), ...contracts.active.map((c) => c.id));
   contracts.nextId = Math.max(maxId + 1, intIn(raw.nextId, 1, Number.MAX_SAFE_INTEGER) ?? 1);
   contracts.offersDay = intIn(raw.offersDay, 0, Number.MAX_SAFE_INTEGER) ?? 0;
+  contracts.autoSign = raw.autoSign !== false;
   return contracts;
 }
 
@@ -542,6 +544,10 @@ function readTerms(raw: unknown): ContractTerms | null {
     xp: Math.max(0, finite(raw.xp) ?? 0),
     ...readRequirement(raw.requirement),
     ...(raw.arrived === true ? { arrived: true } : {}),
+    ...(isObject(raw.review) && typeof raw.review.note === 'string'
+      ? { review: { recommend: raw.review.recommend === true, note: raw.review.note.slice(0, 200) } }
+      : {}),
+    ...(raw.signedByStaff === true ? { signedByStaff: true } : {}),
   };
 }
 

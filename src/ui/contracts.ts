@@ -4,12 +4,15 @@ import type { ContractRequirement } from '../sim/content/types';
 import { canTakeOffer, committedRacks, freeRacks, qualifyingRacks, uptimeOf } from '../sim/contracts';
 import { incomeBreakdown } from '../sim/economy';
 import { receptionProblem } from '../sim/people';
+import { managersAtDesks } from '../sim/sales';
 import { type Contract, type ContractTerms, type GameState, isRunning, racksOf } from '../sim/state';
 import { ICONS } from './icons';
 
 export interface ContractsHandlers {
   onSign(offerId: number): void;
   onCancel(contractId: number): void;
+  // Flips whether account managers sign contracts or only advise.
+  onAutoSign(): void;
 }
 
 const money = (n: number): string => `£${Math.round(n).toLocaleString('en-GB')}`;
@@ -69,6 +72,7 @@ export class ContractsPanel {
       const act = button.dataset.act;
       if (act === 'close') this.toggle(false);
       else if (act === 'sign') handlers.onSign(id);
+      else if (act === 'autosign') handlers.onAutoSign();
       else if (act === 'cancel') {
         if (this.confirmCancelId === id) {
           handlers.onCancel(id);
@@ -170,6 +174,7 @@ export class ContractsPanel {
     return `
       <div class="ct-card" style="--ct-color:${hex(type?.color ?? 0x8a94a3)}">
         ${this.cardHead(c)}
+        ${c.signedByStaff ? '<div class="ct-review staff">Signed by your account manager</div>' : ''}
         ${this.requirements(state, c)}
         <div class="ct-meter">
           <div class="ct-meter-label"><span>Uptime</span><b class="${ok ? 'good' : 'bad'}">${pct(uptime)}</b><span class="muted">promised ${pct(c.sla)}</span></div>
@@ -187,9 +192,28 @@ export class ContractsPanel {
       </div>`;
   }
 
+  // Account managers: how many are at a desk, and the auto-sign switch.
+  private salesDesk(state: GameState): string {
+    const managers = state.staff.filter((m) => m.role === 'account_manager');
+    if (managers.length === 0) {
+      const level = CONFIG.staff.roles.account_manager.minLevel;
+      return `<div class="ct-sales muted">Hire an <b>account manager</b> (Staff, from level ${level}) to talk to clients and sign good contracts for you.</div>`;
+    }
+    const atDesk = managersAtDesks(state).length;
+    const on = state.contracts.autoSign;
+    return `
+      <div class="ct-sales">
+        <span class="ct-sales-who"><b>${atDesk}</b> / ${managers.length} account manager${managers.length > 1 ? 's' : ''} at reception
+          · ${state.progress.stats.staffSigned} signed so far</span>
+        <button data-act="autosign" class="ct-switch ${on ? 'on' : ''}" title="When off, they only give advice">
+          <i></i>${on ? 'Signing for you' : 'Advice only'}</button>
+      </div>`;
+  }
+
   private offerList(state: GameState): string {
     const offers = state.contracts.offers;
     const problem = receptionProblem(state);
+    const talking = new Map(managersAtDesks(state).flatMap((m) => (m.task?.offerId !== undefined ? [[m.task.offerId, true] as const] : [])));
     const cards = offers.map((o) => {
       const type = customerType(o.customerType);
       const here = !state.staffSim || o.arrived === true;
@@ -197,16 +221,23 @@ export class ContractsPanel {
       const why = !here
         ? problem ? 'Client can’t reach reception' : 'Client walking to reception…'
         : o.requirement ? 'Not enough suitable racks free' : `Needs ${o.racks} free rack${o.racks > 1 ? 's' : ''}`;
+      const review = talking.has(o.id)
+        ? '<div class="ct-review talking">Account manager talking to them…</div>'
+        : o.review
+          ? `<div class="ct-review ${o.review.recommend ? 'good' : 'bad'}"><b>${o.review.recommend ? '✓ Recommended' : '✕ Not recommended'}</b> ${o.review.note}</div>`
+          : '';
       return `
         <div class="ct-card offer" style="--ct-color:${hex(type?.color ?? 0x8a94a3)}">
           ${this.cardHead(o)}
           ${this.terms(o)}
           ${this.requirements(state, o)}
+          ${review}
           <button data-act="sign" data-id="${o.id}" class="primary ct-sign" ${canSign ? '' : 'disabled'}>${canSign ? 'Sign contract' : why}</button>
         </div>`;
     });
     return (
       `<h3>Offers <span class="ct-count">${offers.length}</span><span class="muted ct-note">new clients every morning</span></h3>` +
+      (state.staffSim ? this.salesDesk(state) : '') +
       (problem ? `<div class="ct-alert">${problem}</div>` : '') +
       (cards.length ? `<div class="ct-grid">${cards.join('')}</div>` : '<div class="ct-empty">No offers left today.</div>')
     );

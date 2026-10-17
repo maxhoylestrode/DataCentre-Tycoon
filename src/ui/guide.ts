@@ -72,6 +72,11 @@ const SECTIONS: Section[] = [
     html: `
       <p>Nothing builds itself: <b>engineers</b> walk to new buildings and build them, and repair failed racks. <b>Technicians</b> service racks every few days; overdue racks earn less.</p>
       <p>Open <b>Staff (T)</b> to hire. Each hire costs a fee and a wage every minute.</p>
+      <p>Later you can hire people to handle contracts:</p>
+      <ul>
+        <li><b>Account manager</b> (level ${CONFIG.staff.roles.account_manager.minLevel}): stands at a reception desk and talks to each client. They sign the contract if you have the racks, your recent uptime beats the promise, and it raises your total income. Otherwise they leave a note saying why. One per desk. Turn signing off in the Contracts panel if you only want their advice.</li>
+        <li><b>Sales rep</b> (level ${CONFIG.staff.roles.sales_rep.minLevel}): brings an extra client every day and negotiates better pay on new offers.</li>
+      </ul>
       <p>Staff need somewhere to rest: without enough <b>staff room</b> space everyone works slower, and without a <b>storage room</b> engineers build slower.</p>`,
   },
   {
