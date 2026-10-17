@@ -189,9 +189,24 @@ The user's list, grouped. Each group gets a detailed plan and its open questions
 - **Walls and doors replace each other:** placing a door or glass on an existing wall swaps it (paying the difference) instead of being blocked.
 - **More decoration types.**
 
-**C. Staff and build time** (expands the old Milestone 8, "Staff and random incidents")
+**C0. Room zoning** (needed by staff, so it comes before C)
+- **Zones:** paint a zone onto a walled-off room (or an area of tiles): **Server room**, **Staff room**, **Storage room**, later others such as Reception, Office and Security. Zones are a tile layer like floor vents, so they can sit under buildings.
+- **Each zone has requirements and items:** a Staff room needs e.g. a break table, coffee machine and lockers; a Storage room needs shelving. New decoration-style items fit each zone.
+- **Effects:**
+  - Staff need a staff room to rest in. Too small, or too far away, and they work slower.
+  - Engineers fetch parts from storage. No storage room, or storage too far away, means slower builds and repairs.
+  - Racks outside a server room could earn less, or count against uptime.
+- Shown with a coloured floor tint and a label, with a toggle like the heat map.
+- *Ask:*
+  - Zones by painting tiles, or by clicking inside a walled room to zone the whole room?
+  - Minimum sizes?
+  - Should a zone only count when fully enclosed by walls and doors?
+  - Which zones are required to hire staff at all?
+
+**C. Staff and build time** (expands the old Milestone 8, "Staff and random incidents"; needs C0)
 - **Engineers build servers:** placing a rack starts a 5–10 second build (it isn't live until finished), done by an engineer who walks to it. More engineers means more builds at once.
 - **Maintenance staff:** servers need periodic maintenance by staff; too few staff and racks degrade or fail more often, so you hire more as you grow. Wages are a running cost.
+- **Staff use the zones:** they take breaks in the staff room and collect parts from the storage room, so where those rooms sit in your layout matters.
   - *Ask:* do staff show as little people walking around? Is build time in real seconds or game minutes (it must scale with speed)?
 
 **D. Clients as people**
