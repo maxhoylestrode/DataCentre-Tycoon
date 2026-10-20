@@ -17,7 +17,7 @@ const P = CONFIG.progression;
 
 // Mechanics that exist in code and can be gated by an unlock.
 export const MECHANICS = [
-  'heat_map', 'contract_board', 'upgrades', 'room_styles', 'staff', 'zones', 'events', 'research',
+  'heat_map', 'contract_board', 'upgrades', 'room_styles', 'staff', 'zones', 'events', 'research', 'compliance',
 ] as const;
 
 export function levelOf(state: GameState): number {
@@ -113,9 +113,24 @@ export function checkProgress(state: GameState): void {
     }
   }
 
+  // Achievements are only earned here; their rewards wait to be claimed.
   for (const achievement of ACHIEVEMENTS) {
     if (progress.achievements.includes(achievement.id) || !isMet(state, achievement.condition)) continue;
     progress.achievements.push(achievement.id);
-    grant(state, achievement.reward);
   }
+}
+
+// Earned achievements whose reward hasn't been claimed yet.
+export function unclaimedAchievements(state: GameState): string[] {
+  const claimed = new Set(state.progress.claimedAchievements);
+  return state.progress.achievements.filter((id) => !claimed.has(id));
+}
+
+// Pays an earned achievement's reward, once. Returns whether it did.
+export function claimAchievement(state: GameState, id: string): boolean {
+  const achievement = ACHIEVEMENTS.find((a) => a.id === id);
+  if (!achievement || !unclaimedAchievements(state).includes(id)) return false;
+  state.progress.claimedAchievements.push(id);
+  grant(state, achievement.reward);
+  return true;
 }

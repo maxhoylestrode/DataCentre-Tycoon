@@ -167,6 +167,9 @@ export interface CustomerType {
   color: number;
   // Only racks meeting this can serve the contract (and it can't be signed without them).
   requirement?: ContractRequirement;
+  // Certification ids (content/certifications.ts) you must hold for this
+  // client to visit. Losing one breaks their contracts.
+  certifications?: string[];
 }
 
 export interface Achievement {
@@ -176,4 +179,38 @@ export interface Achievement {
   description: string;
   condition: Condition;
   reward: Reward;
+}
+
+// A check an auditor makes (content/certifications.ts). Uses the same
+// conditions as goals: met when the current value reaches `min`.
+export interface CertRequirement {
+  label: string;
+  condition: Condition;
+}
+
+// An industry certification, audited against what's actually in place.
+export interface Certification {
+  // Stable id, stored in saves. Never rename or reuse one.
+  id: string;
+  name: string;
+  description: string;
+  level: number;
+  // Paid when you apply for the audit; a share of it again at each renewal.
+  fee: number;
+  // Extra pay on new contract offers while held, as a fraction.
+  payBonus: number;
+  // Certification ids you must already hold.
+  requires: string[];
+  requirements: CertRequirement[];
+}
+
+// Decorations that look good together: one of each, built, adds `prestige`
+// on top of the items' own.
+export interface DecorSet {
+  // Stable id. Never rename or reuse one.
+  id: string;
+  name: string;
+  // Building ids with category 'decor' or 'furniture'.
+  items: string[];
+  prestige: number;
 }

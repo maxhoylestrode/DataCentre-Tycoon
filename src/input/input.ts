@@ -8,7 +8,8 @@ const DRAG_THRESHOLD = 5;
 export interface InputHandlers {
   onHover(clientX: number, clientY: number): void;
   onHoverEnd(): void;
-  onClick(clientX: number, clientY: number): void;
+  // shift: held during the click (adds to a selection).
+  onClick(clientX: number, clientY: number, shift: boolean): void;
   onTogglePause(): void;
   onSetSpeed(speed: Speed): void;
   onSelectTool(tool: Tool): void;
@@ -23,13 +24,14 @@ export interface InputHandlers {
   onToggleResearch(): void;
   onToggleStats(): void;
   onToggleRackList(): void;
+  onToggleCompliance(): void;
   onEscape(): void;
   // Draw mode: left-drag draws (walls, zones, boxes of buildings) instead of
   // panning. Gets the pointer type so touch can keep one-finger panning.
   isDrawMode(pointerType: string): boolean;
   onDrawStart(clientX: number, clientY: number): void;
   onDrawMove(clientX: number, clientY: number): void;
-  onDrawEnd(clientX: number, clientY: number, cancelled: boolean): void;
+  onDrawEnd(clientX: number, clientY: number, cancelled: boolean, shift?: boolean): void;
 }
 
 const SPEED_KEYS: Record<string, Speed> = { Digit1: 1, Digit2: 2, Digit3: 3 };
@@ -40,7 +42,7 @@ const TOOL_KEYS: Record<string, Tool> = Object.fromEntries(
 // Left click: use the selected tool on a tile. Drag with any button: pan,
 // except left-drag with a wall tool, which draws walls.
 // Wheel: zoom. WASD / arrow keys: pan. Space: pause. 1/2/3: speed.
-// R/P/C/F/Z/B/M/X: select tool. Q: rotate. H: heat map. K: contracts. T: staff.
+// E/R/P/C/F/Z/B/M/X: select tool (E is Select). I: compliance. Q: rotate. H: heat map. K: contracts. T: staff.
 // L: room style. V: walls up/down. G: guide. Y: research. N: stats.
 // Ctrl+Z: undo. Esc: cancel / close panels.
 // Returns an update function to call every frame.
@@ -125,8 +127,8 @@ export function attachInput(canvas: HTMLCanvasElement, rig: CameraRig, handlers:
       return;
     }
     if (!press || press.id !== e.pointerId) return;
-    if (press.drawing) handlers.onDrawEnd(e.clientX, e.clientY, cancelled);
-    else if (!cancelled && !press.dragging && press.button === 0) handlers.onClick(e.clientX, e.clientY);
+    if (press.drawing) handlers.onDrawEnd(e.clientX, e.clientY, cancelled, e.shiftKey);
+    else if (!cancelled && !press.dragging && press.button === 0) handlers.onClick(e.clientX, e.clientY, e.shiftKey);
     press = null;
   };
   canvas.addEventListener('pointerup', (e) => endPress(e, false));
@@ -175,6 +177,7 @@ export function attachInput(canvas: HTMLCanvasElement, rig: CameraRig, handlers:
     if (e.code === 'KeyY') handlers.onToggleResearch();
     if (e.code === 'KeyN') handlers.onToggleStats();
     if (e.code === 'KeyJ') handlers.onToggleRackList();
+    if (e.code === 'KeyI') handlers.onToggleCompliance();
     if (e.code === 'Escape') {
       // Cancels a wall being drawn; otherwise closes panels.
       if (press?.drawing) {

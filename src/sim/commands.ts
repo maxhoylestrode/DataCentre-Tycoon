@@ -21,6 +21,7 @@ import {
 import { isRoomBoundaryEdge, isValidWallEdge, wallAt } from './walls';
 import { nextUplink } from './network';
 import { researchProject, researchStatus, researchTicks } from './research';
+import { certification, certStatus } from './compliance';
 import { dismissClient, entrance } from './people';
 import { isOwnedTile, nextLotPrice, purchasableLots } from './lots';
 import { ROOM_STYLES } from './content/styles';
@@ -28,7 +29,7 @@ import { contractBoardOpen, refreshOffers } from './contractBoard';
 import { cancelActiveContract, canTakeOffer } from './contracts';
 import { canAfford, repairCost } from './economy';
 import { buildTicks, investedValue, nextPart, partCost, refurbishCost, slotsOf, upgradeCost } from './buildings';
-import { awardBuildXp, checkProgress, isUnlocked, levelOf, upgradeCap } from './progression';
+import { awardBuildXp, checkProgress, claimAchievement, isUnlocked, levelOf, unclaimedAchievements, upgradeCap } from './progression';
 import {
   type BatteryMode,
   type Building,
@@ -93,6 +94,7 @@ export function sellBuilding(state: GameState, x: number, y: number): CommandRes
   if (index === -1) return { ok: false, reason: 'empty' };
 
   const [sold] = state.buildings.splice(index, 1);
+  if (categoryOf(sold!) === 'rack' && state.tick - sold!.builtAtTick <= 60) state.progress.stats.quickSells += 1;
   state.cash += investedValue(sold!) * CONFIG.economy.sellRefund;
   return { ok: true };
 }
@@ -234,8 +236,14 @@ export function upgradeMax(state: GameState, x: number, y: number): number {
 // Max-upgrades every rack, the cheapest plans first so the money goes as far
 // as possible. Returns how many upgrades were bought.
 export function upgradeAllRacks(state: GameState): number {
+  return upgradeMaxMany(state, state.buildings.filter((b) => slotsOf(b).length > 0).map((b) => b.id));
+}
+
+// "Upgrade max" on each of these buildings (a selection), cheapest plans
+// first so cash goes as far as it can. Returns the upgrades bought.
+export function upgradeMaxMany(state: GameState, ids: number[]): number {
   const racks = state.buildings
-    .filter((b) => slotsOf(b).length > 0 && b.status === 'ok')
+    .filter((b) => ids.includes(b.id) && b.status === 'ok')
     .map((b) => ({ b, cost: planUpgradeMax(state, b.x, b.y).cost }))
     .filter((x) => x.cost > 0)
     .sort((a, b) => a.cost - b.cost);
@@ -246,15 +254,25 @@ export function upgradeAllRacks(state: GameState): number {
 
 // Repairs every failed rack, cheapest first, while the money lasts. Returns how many.
 export function repairAllRacks(state: GameState): number {
-  const failed = state.buildings.filter((b) => categoryOf(b) === 'rack' && b.status === 'failed').sort((a, b) => repairCost(a) - repairCost(b));
+  return repairMany(state, state.buildings.map((b) => b.id));
+}
+
+// Repairs the failed racks among these buildings, cheapest first.
+export function repairMany(state: GameState, ids: number[]): number {
+  const failed = state.buildings.filter((b) => ids.includes(b.id) && categoryOf(b) === 'rack' && b.status === 'failed').sort((a, b) => repairCost(a) - repairCost(b));
   return failed.filter((b) => repairRack(state, b.x, b.y).ok).length;
 }
 
 // Refurbishes every worn rack (see isWorn), most worn first, while the money
 // lasts. Returns how many.
 export function refurbishAllRacks(state: GameState): number {
+  return refurbishMany(state, state.buildings.map((b) => b.id));
+}
+
+// Refurbishes the worn racks among these buildings, most worn first.
+export function refurbishMany(state: GameState, ids: number[]): number {
   const worn = state.buildings
-    .filter((b) => categoryOf(b) === 'rack' && isWorn(state, b))
+    .filter((b) => ids.includes(b.id) && categoryOf(b) === 'rack' && isWorn(state, b))
     .sort((a, b) => rackCondition(state, a) - rackCondition(state, b));
   return worn.filter((b) => refurbishRack(state, b.x, b.y).ok).length;
 }
@@ -623,4 +641,42 @@ export function setSpeed(state: GameState, speed: Speed): CommandResult {
 export function togglePause(state: GameState): CommandResult {
   state.paused = !state.paused;
   return { ok: true };
+}
+
+// Sells every one of these buildings (a selection). Returns how many.
+export function sellMany(state: GameState, ids: number[]): number {
+  const targets = state.buildings.filter((b) => ids.includes(b.id));
+  return targets.filter((b) => sellBuilding(state, b.x, b.y).ok).length;
+}
+
+// Turns every one of these buildings a quarter turn. Returns how many.
+export function rotateMany(state: GameState, ids: number[]): number {
+  const targets = state.buildings.filter((b) => ids.includes(b.id));
+  return targets.filter((b) => rotateBuilding(state, b.x, b.y).ok).length;
+}
+
+// Pays for an audit (sim/compliance.ts). It reports after
+// CONFIG.compliance.auditDays; one audit at a time.
+export function applyForCertification(state: GameState, id: string): CommandResult {
+  if (state.bankrupt) return { ok: false, reason: 'bankrupt' };
+  if (!isUnlocked(state, 'compliance')) return { ok: false, reason: 'locked' };
+  const cert = certification(id);
+  if (!cert) return { ok: false, reason: 'unknown_certification' };
+  if (state.compliance.audit) return { ok: false, reason: 'busy' };
+  const status = certStatus(state, cert, levelOf(state));
+  if (status !== 'available') return { ok: false, reason: status };
+  if (state.cash < cert.fee) return { ok: false, reason: 'insufficient_funds' };
+  state.cash -= cert.fee;
+  state.compliance.audit = { id, endTick: state.tick + CONFIG.compliance.auditDays * CONFIG.time.ticksPerDay };
+  return { ok: true };
+}
+
+// Claims the reward of one earned achievement, or of every one (no id).
+// Returns how many were claimed.
+export function claimAchievements(state: GameState, id?: string): number {
+  if (state.bankrupt) return 0;
+  const ids = id === undefined ? unclaimedAchievements(state) : [id];
+  const n = ids.filter((a) => claimAchievement(state, a)).length;
+  if (n > 0) afterProgress(state);
+  return n;
 }

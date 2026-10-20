@@ -4,6 +4,7 @@
 
 import { buildingDef, CONFIG } from '../src/config';
 import {
+  claimAchievements,
   buyLot,
   hireStaff,
   paintZone,
@@ -202,6 +203,8 @@ function decide(state: GameState, did: Set<string>): void {
   // Sign contracts we can serve, but only while nothing is throttled, the
   // line copes with the peak, and reputation isn't on the floor.
   const healthy = incomeBreakdown(state).efficiency >= 1 && !lineFull && (!state.liveWorld || state.reputation > 30);
+  // Claim achievement rewards as they come, like a player would.
+  claimAchievements(state);
   if (healthy) for (const offer of [...state.contracts.offers]) if (canTakeOffer(state, offer)) signContract(state, offer.id);
 
   // Don't queue more building than the engineers can get through.

@@ -3,17 +3,18 @@
 // to EVALUATORS, and add one test in tests/progression.test.ts.
 
 import { CONFIG, isBuildingKind, ZONE_KINDS, type ZoneKind } from '../config';
-import { installedPart, slotsOf } from './buildings';
+import { installedPart, nextPart, slotsOf } from './buildings';
 import { netIncomePerTick } from './economy';
+import { ddosBlocked, isProtectedFromFire } from './events';
 import { feedVents } from './floor';
 import { levelInfo } from './levels';
 import { roomsOwned } from './lots';
 import { uplinkOf } from './network';
 import { frontDoors } from './paths';
 import { receptionDesks } from './people';
-import { powerMultiblocks } from './power';
-import { prestigeOf } from './prestige';
-import { dayOf, type GameState, racksOf } from './state';
+import { backupPower, powerDraw, powerMultiblocks, supplyBySource } from './power';
+import { completedDecorSets, prestigeOf } from './prestige';
+import { categoryOf, dayOf, type GameState, racksOf } from './state';
 
 export type Condition =
   | { type: 'rackCount'; min: number }
@@ -43,7 +44,28 @@ export type Condition =
   | { type: 'clientsServed'; min: number }
   | { type: 'services'; min: number }
   | { type: 'refurbishes'; min: number }
-  | { type: 'receptionReady'; min: number };
+  | { type: 'receptionReady'; min: number }
+  | { type: 'levelWithoutHires'; min: number }
+  | { type: 'airCooledRacks'; min: number }
+  | { type: 'rackModels'; min: number }
+  | { type: 'maxedRacks'; min: number }
+  | { type: 'decorKinds'; min: number }
+  | { type: 'decorSets'; min: number }
+  | { type: 'overdrafts'; min: number }
+  | { type: 'quickSells'; min: number }
+  | { type: 'fires'; min: number }
+  | { type: 'firesStopped'; min: number }
+  | { type: 'attacksStopped'; min: number }
+  | { type: 'blackoutsWeathered'; min: number }
+  | { type: 'companiesSold'; min: number }
+  | { type: 'researchDone'; min: number }
+  | { type: 'reputation'; min: number }
+  | { type: 'certifications'; min: number }
+  | { type: 'renewableShare'; min: number }
+  | { type: 'upsCoverage'; min: number }
+  | { type: 'suppressionCoverage'; min: number }
+  | { type: 'firewallBlock'; min: number }
+  | { type: 'recentUptime'; min: number; days: number };
 
 export type ConditionType = Condition['type'];
 
@@ -89,7 +111,61 @@ const EVALUATORS: Evaluators = {
   refurbishes: (s) => s.progress.stats.refurbishes,
   // 1 when clients can reach a reception desk through a front door.
   receptionReady: (s) => (frontDoors(s).length > 0 && receptionDesks(s).length > 0 ? 1 : 0),
+  // Your level, as long as you've never hired anyone (0 once you have).
+  levelWithoutHires: (s) => (s.progress.stats.staffHired === 0 ? levelInfo(s.progress.xp).level : 0),
+  // Racks, as long as none of them has liquid cooling (0 once one does).
+  airCooledRacks: (s) => (EVALUATORS.liquidCooledRacks(s, { type: 'liquidCooledRacks', min: 0 }) > 0 ? 0 : racksOf(s).length),
+  rackModels: (s) => new Set(racksOf(s).map((b) => b.kind)).size,
+  // Racks with the best part in every slot.
+  maxedRacks: (s) => racksOf(s).filter((b) => slotsOf(b).every((slot) => nextPart(b, slot) === null)).length,
+  decorKinds: (s) => new Set(s.buildings.filter((b) => categoryOf(b) === 'decor').map((b) => b.kind)).size,
+  decorSets: (s) => completedDecorSets(s).length,
+  overdrafts: (s) => s.progress.stats.overdrafts,
+  quickSells: (s) => s.progress.stats.quickSells,
+  fires: (s) => s.progress.stats.fires,
+  firesStopped: (s) => s.progress.stats.firesStopped,
+  attacksStopped: (s) => s.progress.stats.attacksStopped,
+  blackoutsWeathered: (s) => s.progress.stats.blackoutsWeathered,
+  companiesSold: (s) => s.legacy.sales,
+  researchDone: (s) => s.research.done.length,
+  reputation: (s) => s.reputation,
+  certifications: (s) => s.compliance.held.length,
+  // Share of power drawn that renewables supply, 0..1 (0 with nothing drawn).
+  renewableShare: (s) => {
+    const draw = powerDraw(s);
+    return draw > 0 ? Math.min(1, supplyBySource(s).renewable / draw) : 0;
+  },
+  // UPS backup over power draw, 0..1.
+  upsCoverage: (s) => {
+    const draw = powerDraw(s);
+    return draw > 0 ? Math.min(1, backupPower(s) / draw) : 0;
+  },
+  // Share of racks fire suppression covers, 0..1.
+  suppressionCoverage: (s) => {
+    const racks = racksOf(s);
+    return racks.length ? racks.filter((b) => isProtectedFromFire(s, b.x, b.y)).length / racks.length : 0;
+  },
+  firewallBlock: (s) => ddosBlocked(s),
+  // 0 until there's that many days of history.
+  recentUptime: (s, c) => {
+    const u = uptimeOver(s, c.days);
+    return u.hours >= u.needed ? u.uptime : 0;
+  },
 };
+
+// Average uptime over the last `days` of hourly stats samples, with how
+// many hours there are and how many a full window needs.
+export function uptimeOver(state: GameState, days: number): { uptime: number; hours: number; needed: number } {
+  const needed = Math.round(days * 24);
+  const samples = state.history.samples.slice(-needed).filter((s) => s.uptime !== undefined);
+  const uptime = samples.length ? samples.reduce((sum, s) => sum + s.uptime!, 0) / samples.length : 0;
+  return { uptime, hours: samples.length, needed };
+}
+
+// Condition types whose values are fractions (shown as percentages).
+export const FRACTION_CONDITIONS: ConditionType[] = [
+  'renewableShare', 'upsCoverage', 'suppressionCoverage', 'firewallBlock', 'recentUptime',
+];
 
 export function isConditionType(type: string): type is ConditionType {
   return Object.hasOwn(EVALUATORS, type);
@@ -115,6 +191,13 @@ export function validateCondition(condition: Condition): string[] {
   }
   if (condition.type === 'zoneTiles' && !ZONE_KINDS.includes(condition.zone as ZoneKind)) {
     problems.push(`unknown zone "${condition.zone}"`);
+  }
+  if (FRACTION_CONDITIONS.includes(condition.type) && (condition.min < 0 || condition.min > 1)) {
+    problems.push(`${condition.type} min must be between 0 and 1`);
+  }
+  // Stats history only goes back CONFIG.history.maxSamples hours.
+  if (condition.type === 'recentUptime' && !(condition.days > 0 && condition.days * 24 <= CONFIG.history.maxSamples)) {
+    problems.push(`recentUptime days must be 1 to ${CONFIG.history.maxSamples / 24}`);
   }
   if (condition.type === 'staffCount' && condition.role !== undefined && !Object.hasOwn(CONFIG.staff.roles, condition.role)) {
     problems.push(`unknown staff role "${condition.role}"`);

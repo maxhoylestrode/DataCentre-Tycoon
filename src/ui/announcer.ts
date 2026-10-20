@@ -1,4 +1,4 @@
-import { buildingDef, floorDef, isBuildingKind, isFloorKind } from '../config';
+import { buildingDef, CONFIG, floorDef, isBuildingKind, isFloorKind, isWallKind } from '../config';
 import { ACHIEVEMENTS } from '../sim/content/achievements';
 import { GOALS } from '../sim/content/goals';
 import { PARTS } from '../sim/content/parts';
@@ -7,7 +7,7 @@ import type { Unlock } from '../sim/content/types';
 import { levelOf, tierFor, unlocksBetween } from '../sim/progression';
 import { EVENT_NAMES } from '../sim/events';
 import { researchProject } from '../sim/research';
-import type { ContractResult, EventRecord, GameState } from '../sim/state';
+import type { ComplianceRecord, ContractResult, EventRecord, GameState } from '../sim/state';
 import { rewardText } from './goals';
 import { effectsText } from './research';
 import type { Toasts } from './toasts';
@@ -15,6 +15,7 @@ import type { Toasts } from './toasts';
 function unlockName(unlock: Unlock): string {
   if (unlock.type === 'building' && isBuildingKind(unlock.id)) return buildingDef(unlock.id).name;
   if (unlock.type === 'floor' && isFloorKind(unlock.id)) return floorDef(unlock.id).name;
+  if (unlock.type === 'wall' && isWallKind(unlock.id)) return CONFIG.walls[unlock.id].name;
   return unlock.name ?? unlock.id;
 }
 
@@ -30,6 +31,7 @@ export class Announcer {
   // History is capped, so track the last item seen rather than a count.
   private lastResult: ContractResult | undefined;
   private lastEvent: EventRecord | undefined;
+  private lastCompliance: ComplianceRecord | undefined;
   private research = 0;
   private staffSigned = 0;
 
@@ -48,6 +50,7 @@ export class Announcer {
     this.achievements = state.progress.achievements.length;
     this.lastResult = state.contracts.history.at(-1);
     this.lastEvent = state.events.history.at(-1);
+    this.lastCompliance = state.compliance.log.at(-1);
     this.research = state.research.done.length;
     this.staffSigned = state.progress.stats.staffSigned;
   }
@@ -63,6 +66,16 @@ export class Announcer {
         this.cue(e.good ? 'good' : 'alarm');
       }
       this.lastEvent = events.at(-1);
+    }
+
+    const log = state.compliance.log;
+    if (log.at(-1) !== this.lastCompliance) {
+      const seen = this.lastCompliance ? log.indexOf(this.lastCompliance) : -1;
+      for (const l of log.slice(seen + 1)) {
+        this.toasts.show(`<b>Compliance</b><br>${l.text}`, l.good ? 'goal' : 'failure');
+        this.cue(l.good ? 'good' : 'alarm');
+      }
+      this.lastCompliance = log.at(-1);
     }
 
     for (const id of state.research.done.slice(this.research)) {
@@ -99,7 +112,7 @@ export class Announcer {
 
     for (const id of achievements.slice(this.achievements)) {
       const a = ACHIEVEMENTS.find((x) => x.id === id);
-      if (a) this.toasts.show(`<b>Achievement: ${a.name}</b><br>${a.description} &middot; ${rewardText(a.reward)}`, 'achievement');
+      if (a) this.toasts.show(`<b>Achievement: ${a.name}</b><br>${a.description} &middot; claim ${rewardText(a.reward)} from the trophy (top right)`, 'achievement');
       this.cue('achievement');
     }
     this.achievements = achievements.length;

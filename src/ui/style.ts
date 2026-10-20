@@ -1,6 +1,8 @@
 import { ROOM_STYLES } from '../sim/content/styles';
 import type { RoomStyle } from '../sim/content/types';
-import { prestigeExtraOffers, prestigeOf, prestigePayBonus } from '../sim/prestige';
+import { buildingDef, type BuildingKind } from '../config';
+import { DECOR_SETS } from '../sim/content/decorSets';
+import { decorSetProgress, prestigeExtraOffers, prestigeOf, prestigePayBonus } from '../sim/prestige';
 import { levelOf } from '../sim/progression';
 import type { GameState } from '../sim/state';
 
@@ -73,11 +75,29 @@ export class StylePanel {
     const extra = prestigeExtraOffers(state);
     const html = `
       <div class="capacity">Prestige <b>${prestige}</b> &middot; contracts pay +${Math.round(prestigePayBonus(state) * 100)}%${extra ? ` &middot; +${extra} offer${extra > 1 ? 's' : ''} a day` : ''}
-        <br><span class="muted">Decorations (Decor menu) and the styles in use both add prestige.</span></div>
-      ${sections.join('')}`;
+        <br><span class="muted">Decorations (Decor menu), finished decor sets and the styles in use all add prestige.</span></div>
+      ${sections.join('')}
+      <h3>Decor sets</h3>
+      <p class="muted">Build one of each item in a set, anywhere you own, for bonus prestige.</p>
+      ${this.sets(state)}`;
     if (html !== this.lastHtml) {
       this.lastHtml = html;
       this.body.innerHTML = html;
     }
+  }
+
+  private sets(state: GameState): string {
+    return DECOR_SETS.map((set) => {
+      const { have, missing } = decorSetProgress(state, set);
+      const done = missing.length === 0;
+      const items = set.items
+        .map((id) => `<span class="${have.includes(id) ? 'good' : 'muted'}">${have.includes(id) ? '✓' : '·'} ${buildingDef(id as BuildingKind).name}</span>`)
+        .join('');
+      return `
+        <div class="decor-set ${done ? 'done' : ''}">
+          <div class="rs-top"><b>${set.name}</b><span class="${done ? 'good' : 'muted'}">${done ? 'Complete · ' : `${have.length}/${set.items.length} · `}+${set.prestige} prestige</span></div>
+          <div class="decor-set-items">${items}</div>
+        </div>`;
+    }).join('');
   }
 }

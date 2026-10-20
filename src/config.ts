@@ -318,6 +318,22 @@ export const CONFIG = {
     incomePerPoint: 0.02,
     startingCashPerPoint: 1000,
   },
+  // Certifications (content/certifications.ts, sim/compliance.ts), from the
+  // 'compliance' mechanic.
+  compliance: {
+    // An audit reports this many game days after you apply (and pay).
+    auditDays: 1,
+    // A daily check that finds a requirement missing puts a certification at
+    // risk; still missing this many days later, it's revoked.
+    graceDays: 2,
+    // While held, this share of the fee is charged every renewEveryDays.
+    renewEveryDays: 7,
+    renewFraction: 0.2,
+    // Reputation lost when one is revoked.
+    revokedReputation: -10,
+    // Past audits and checks remembered for the UI.
+    logLength: 10,
+  },
   // Stats history: one sample per game hour, kept for this many samples.
   history: {
     sampleTicks: 60,
@@ -639,6 +655,72 @@ export const CONFIG = {
       name: 'Golden server monument', category: 'decor', cost: 80000, upkeepPerTick: 0, incomePerTick: 0,
       powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
       upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 40,
+    },
+    world_clocks: {
+      name: 'World clocks', category: 'decor', cost: 800, upkeepPerTick: 0.01, incomePerTick: 0,
+      powerDraw: 0.1, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 1,
+    },
+    meeting_table: {
+      name: 'Meeting table', category: 'decor', cost: 3000, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 3,
+    },
+    pinball: {
+      name: 'Pinball machine', category: 'decor', cost: 4500, upkeepPerTick: 0.03, incomePerTick: 0,
+      powerDraw: 0.4, powerSupply: 0, heatPerTick: 0.03, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 5,
+    },
+    phone_booth: {
+      name: 'Phone booth', category: 'decor', cost: 2500, upkeepPerTick: 0.01, incomePerTick: 0,
+      powerDraw: 0.1, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 3,
+    },
+    rock_garden: {
+      name: 'Zen rock garden', category: 'decor', cost: 6500, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 6,
+    },
+    espresso_bar: {
+      name: 'Espresso bar', category: 'decor', cost: 12000, upkeepPerTick: 0.05, incomePerTick: 0,
+      powerDraw: 0.8, powerSupply: 0, heatPerTick: 0.05, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 9,
+    },
+    glass_floor: {
+      name: 'Lit glass floor', category: 'decor', cost: 5000, upkeepPerTick: 0.02, incomePerTick: 0,
+      powerDraw: 0.3, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 5,
+    },
+    founder_bust: {
+      name: "Founder's bust", category: 'decor', cost: 20000, upkeepPerTick: 0, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 15,
+    },
+    racing_sim: {
+      name: 'Racing simulator', category: 'decor', cost: 16000, upkeepPerTick: 0.04, incomePerTick: 0,
+      powerDraw: 0.8, powerSupply: 0, heatPerTick: 0.08, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 11,
+    },
+    // Hyperscale HQ pieces: expensive, and a set together.
+    hologram_globe: {
+      name: 'Hologram globe', category: 'decor', cost: 120000, upkeepPerTick: 0.1, incomePerTick: 0,
+      powerDraw: 1, powerSupply: 0, heatPerTick: 0.05, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 55,
+    },
+    hq_logo_wall: {
+      name: 'HQ logo wall', category: 'decor', cost: 90000, upkeepPerTick: 0.05, incomePerTick: 0,
+      powerDraw: 0.6, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 45,
+    },
+    atrium_tree: {
+      name: 'Atrium tree', category: 'decor', cost: 150000, upkeepPerTick: 0.02, incomePerTick: 0,
+      powerDraw: 0, powerSupply: 0, heatPerTick: 0, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 65,
+    },
+    data_waterfall: {
+      name: 'Data waterfall', category: 'decor', cost: 200000, upkeepPerTick: 0.12, incomePerTick: 0,
+      powerDraw: 1.2, powerSupply: 0, heatPerTick: 0.05, coolingStrength: 0, coolingRadius: 0,
+      upgrade: { output: 0, powerDraw: 0, heat: 0 }, prestige: 80,
     },
   },
   // Things painted on the floor layer, which can sit under buildings.

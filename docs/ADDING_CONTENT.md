@@ -97,12 +97,25 @@ Code that implements the mechanic checks `isUnlocked(state, 'contract_board')`.
 | `services` | `min` | racks have been serviced at least `min` times |
 | `refurbishes` | `min` | at least `min` racks refurbished |
 | `receptionReady` | `min: 1` | there's a front door and a finished reception desk |
+| `levelWithoutHires` | `min` | your level, while you have never hired anyone (0 after) |
+| `airCooledRacks` | `min` | your rack count, while no rack has liquid cooling (0 after) |
+| `rackModels` | `min` | different rack models owned |
+| `maxedRacks` | `min` | racks with the best part in every slot |
+| `decorKinds` | `min` | different decorations owned (not furniture) |
+| `decorSets` | `min` | decor sets complete |
+| `overdrafts` / `quickSells` / `fires` / `firesStopped` / `attacksStopped` / `blackoutsWeathered` | `min` | counters in `progress.stats` |
+| `companiesSold` | `min` | companies sold (legacy) |
+| `researchDone` | `min` | research projects finished |
+| `reputation` | `min` | reputation (0-100) |
+| `certifications` | `min` | certifications held |
+| `renewableShare` / `upsCoverage` / `suppressionCoverage` / `firewallBlock` | `min` (0..1) | renewables over draw, UPS backup over draw, share of racks fire suppression covers, share of an attack blocked |
+| `recentUptime` | `min` (0..1), `days` | average uptime over the last `days` (0 until there is that much history; at most 14) |
 
 **Adding a condition type** is engine work, but small: in `src/sim/conditions.ts` add it to the `Condition` union and add one evaluator (a function returning the current value) to `EVALUATORS`. TypeScript won't compile until both are there. Then add a test for it in the `conditions` block of `tests/progression.test.ts`.
 
 ## Add an achievement
 
-`src/sim/content/achievements.ts`. Same conditions as goals. Earned once, the first time the condition is met.
+`src/sim/content/achievements.ts`. Same conditions as goals. Earned once, the first time the condition is met; the player then claims the reward from the trophy button (top right).
 
 ```ts
 {
@@ -145,7 +158,29 @@ Real product names are fine (names only, never logos); the in-game note covers t
 
 ## Add a decoration
 
-Add it to `CONFIG.buildings` with `category: 'decor'` and a `prestige` value, an unlock entry, and a model in `FACTORIES` (`src/render/models.ts`). It shows up in the Decor menu automatically.
+Add it to `CONFIG.buildings` with `category: 'decor'` and a `prestige` value, an unlock entry, a model in `FACTORIES` (`src/render/models.ts`) and an icon in `ITEM_ICONS` (`src/ui/icons.ts`). It shows up in the Decor menu automatically, and the build tool shows its model as a hologram.
+
+## Add a decor set
+
+`src/sim/content/decorSets.ts`. Built one of each item, a set adds its `prestige` on top of the items' own. Items are building ids (decor or furniture), and an item can be in more than one set. The Style panel lists sets and what's missing; each item's card names its first set.
+
+```ts
+{ id: 'set_lounge', name: 'Lounge', items: ['sofa', 'coffee_table', 'rug', 'floor_lamp', 'bean_bag'], prestige: 6 },
+```
+
+## Add a certification
+
+`src/sim/content/certifications.ts`. Requirements are ordinary goal conditions (fractions such as `upsCoverage` are 0..1), each with a label for the Compliance panel. `requires` lists certifications that must be held first.
+
+```ts
+{
+  id: 'pci_dss', name: 'PCI DSS', description: 'Card payments security.', level: 26, fee: 500_000, payBonus: 0.03,
+  requires: ['iso_27001'],
+  requirements: [{ label: 'Firewalls block 80% of a cyber attack', condition: { type: 'firewallBlock', min: 0.8 } }],
+},
+```
+
+To make a client need it, add `certifications: ['pci_dss']` to a customer type: that type only visits while you hold it, and losing it breaks their contracts. Fees, grace days and renewals are in `CONFIG.compliance`.
 
 ## Add a research project
 

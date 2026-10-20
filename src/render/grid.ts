@@ -169,3 +169,28 @@ export class TilePicker {
     return { gx: this.hit.x + this.gridWidth / 2, gy: this.hit.z + this.gridHeight / 2 };
   }
 }
+
+const markGeo = new THREE.PlaneGeometry(0.96, 0.96);
+const markMat = new THREE.MeshBasicMaterial({ color: HOVER_COLOURS.inspect, transparent: true, opacity: 0.5, depthWrite: false });
+
+// A highlight on every tile in a list, e.g. the buildings that are selected.
+export class TileMarks {
+  readonly group = new THREE.Group();
+  private key = '';
+
+  constructor(private readonly gridWidth: number, private readonly gridHeight: number) {}
+
+  set(tiles: Tile[]): void {
+    const key = tiles.map((t) => `${t.x},${t.y}`).join(';');
+    if (key === this.key) return;
+    this.key = key;
+    this.group.clear();
+    for (const t of tiles) {
+      const mesh = new THREE.Mesh(markGeo, markMat);
+      mesh.rotation.x = -Math.PI / 2;
+      const p = tileToWorld(this.gridWidth, this.gridHeight, t.x, t.y);
+      mesh.position.set(p.x, 0.005, p.z);
+      this.group.add(mesh);
+    }
+  }
+}

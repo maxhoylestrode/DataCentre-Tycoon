@@ -1,5 +1,6 @@
 import { CONFIG } from '../config';
 import { refreshOffers } from './contractBoard';
+import { dailyCompliance, stepCompliance } from './compliance';
 import { finishContracts, recordService } from './contracts';
 import { costBreakdown, incomeBreakdown } from './economy';
 import { stepEvents } from './events';
@@ -52,20 +53,25 @@ export function tick(state: GameState): void {
   recordHistory(state, income, costs, tax);
   stepReputation(state, income.efficiency);
   stepResearch(state);
-  stepEvents(state, total);
+  stepCompliance(state);
+  stepEvents(state, total, income.efficiency);
 
   state.tick += 1;
   finishContracts(state);
   if (state.tick % CONFIG.time.ticksPerDay === 0) {
     closeTaxDay(state);
     endDay(state);
+    dailyCompliance(state);
   }
   refreshCandidates(state);
 
   // Below the overdraft limit you have a grace period to recover (sell
   // something, cancel a contract); still below at the end of it, you're bankrupt.
   if (state.cash < -CONFIG.economy.overdraftLimit) {
-    state.overdrawnSince ??= state.tick;
+    if (state.overdrawnSince === null) {
+      state.overdrawnSince = state.tick;
+      state.progress.stats.overdrafts += 1;
+    }
     if (state.tick - state.overdrawnSince >= CONFIG.economy.bankruptcyGraceTicks) {
       state.bankrupt = true;
       return;

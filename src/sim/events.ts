@@ -131,6 +131,7 @@ export function triggerEvent(state: GameState, kind: EventKind, incomePerTick = 
       const origin = racks.slice(0, 5).length ? pick(state, racks.slice(0, 5)) : undefined;
       if (!origin) return null;
       if (isProtectedFromFire(state, origin.x, origin.y)) {
+        state.progress.stats.firesStopped += 1;
         return record(state, kind, 'A fire started in a rack, but the fire suppression put it out.', true);
       }
       // A normal fire takes a couple of neighbours; a major one everything
@@ -145,6 +146,7 @@ export function triggerEvent(state: GameState, kind: EventKind, incomePerTick = 
         r.status = 'failed';
         state.progress.stats.failures += 1;
       }
+      state.progress.stats.fires += 1;
       adjustReputation(state, CONFIG.reputation.fire * (big ? 2 : 1));
       const n = 1 + near.length;
       return record(state, kind, `${big ? 'Major fire' : 'Fire'}! ${n} rack${n > 1 ? 's' : ''} burned out. Fire suppression would have stopped it.`, false);
@@ -155,6 +157,7 @@ export function triggerEvent(state: GameState, kind: EventKind, incomePerTick = 
     }
     case 'ransomware': {
       if (ddosBlocked(state) >= CONFIG.lateEvents.ransomwareShield) {
+        state.progress.stats.attacksStopped += 1;
         return record(state, kind, 'Your firewalls stopped a ransomware attack.', true);
       }
       const t = startTimed(state, kind, CONFIG.lateEvents.ransomwareTicks);
@@ -175,9 +178,16 @@ export function triggerEvent(state: GameState, kind: EventKind, incomePerTick = 
   }
 }
 
-// Runs every tick. Ends events whose time is up and, once an hour, maybe
-// starts a new one. Returns a newly started event, if any.
-export function stepEvents(state: GameState, incomePerTick: number): EventRecord | null {
+// Runs every tick with this tick's income and efficiency (1 = nothing lost to
+// brownouts or a full line). Ends events whose time is up and, once an hour,
+// maybe starts a new one. Returns a newly started event, if any.
+export function stepEvents(state: GameState, incomePerTick: number, efficiency = 1): EventRecord | null {
+  for (const e of state.events.active) {
+    if (e.kind !== 'blackout') continue;
+    if (state.tick < e.endTick && efficiency < 0.999) e.hit = true;
+    // A blackout that ends without ever causing a brownout was weathered.
+    if (state.tick >= e.endTick && !e.hit) state.progress.stats.blackoutsWeathered += 1;
+  }
   state.events.active = state.events.active.filter((e) => state.tick < e.endTick);
   if (!isUnlocked(state, 'events') || state.tick % 60 !== 0 || state.tick === 0) return null;
   const hourly = eventChancePerDay(state) / 24;

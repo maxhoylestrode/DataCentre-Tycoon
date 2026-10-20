@@ -2,6 +2,7 @@ import { BUILDING_KINDS, buildingDef, CONFIG, FLOOR_KINDS, isFloorKind, WALL_KIN
 import { isWallTool, isZoneTool, type Tool, TOOL_HOTKEYS, toolCost, toolName, ZONE_TOOLS } from '../input/tools';
 import { buildingStats } from '../sim/buildings';
 import { formatMbps } from '../sim/network';
+import { decorSetOf } from '../sim/prestige';
 import { isUnlocked, unlockFor } from '../sim/progression';
 import type { GameState } from '../sim/state';
 import { kw } from './format';
@@ -18,8 +19,11 @@ export interface ToolbarHandlers {
   onToggleResearch(): void;
   onToggleStats(): void;
   onToggleRackList(): void;
+  onToggleCompliance(): void;
   onToggleAgeBars(): void;
   onUndo(): void;
+  // A build menu (group of items) just opened.
+  onOpenGroup(): void;
 }
 
 interface Group {
@@ -34,6 +38,7 @@ const byCategory = (...cats: string[]): Tool[] => BUILDING_KINDS.filter((k) => c
 // The hotbar, in the style of Cities: Skylines 2: icon buttons per group,
 // and a panel of item cards above the bar for groups with several items.
 const GROUPS: Group[] = [
+  { id: 'select', label: 'Select', tools: ['select'], hotkey: TOOL_HOTKEYS.select },
   { id: 'racks', label: 'Racks', tools: byCategory('rack'), hotkey: TOOL_HOTKEYS.rack_basic },
   { id: 'power', label: 'Power', tools: byCategory('power'), hotkey: TOOL_HOTKEYS.power_basic },
   { id: 'cooling', label: 'Cooling', tools: [...byCategory('cooling', 'chiller'), ...FLOOR_KINDS], hotkey: TOOL_HOTKEYS.cooling_fan },
@@ -63,6 +68,7 @@ const money = (n: number): string => `£${n.toLocaleString('en-GB')}`;
 function stat(tool: Tool): string {
   if (tool === 'sell') return `${CONFIG.economy.sellRefund * 100}% refund`;
   if (tool === 'move') return 'Free · keeps upgrades';
+  if (tool === 'select') return 'Pick buildings';
   if (isFloorKind(tool)) return 'Under racks · needs chiller';
   if (isZoneTool(tool)) return ZONE_HINTS[tool] ?? '';
   if (isWallTool(tool)) {
@@ -85,7 +91,10 @@ function stat(tool: Tool): string {
       return `Filters ${formatMbps(def.ddosFilterMbps ?? 0)} of attacks · upgradable`;
     case 'cooling': return s.coolingRadius > 20 ? `Whole room · ${kw(s.powerDraw)}` : `${s.coolingRadius * 2 + 1}×${s.coolingRadius * 2 + 1} area · ${kw(s.powerDraw)}`;
     case 'chiller': return `Feeds ${def.chillerCapacity} vents · ${def.chillerRange} tiles`;
-    case 'decor': return `+${s.prestige} prestige`;
+    case 'decor': {
+      const set = decorSetOf(tool);
+      return `+${s.prestige} prestige${set ? ` · ${set.name} set` : ''}`;
+    }
     case 'furniture': return FURNITURE_HINTS[tool] ?? '';
   }
 }
@@ -96,7 +105,7 @@ const GROUP_HINTS: Partial<Record<GroupIcon, string>> = {
   power: 'Keep supply above draw · 4 of a kind in a 2×2 square = +25%',
   cooling: 'Keep racks under 45°C · press H for the heat map',
   safety: 'Protection against power cuts, fires and cyber attacks · place anywhere, upgrade by clicking',
-  decor: 'Prestige: better contract pay and more offers',
+  decor: 'Prestige: better contract pay and more offers · finish a set for a bonus (Style, L)',
   zones: 'Drag to paint rooms, then add their furniture',
   walls: 'Drag along grid lines · walls block heat',
 };
@@ -117,7 +126,7 @@ const FURNITURE_HINTS: Record<string, string> = {
 
 // The unlock id gating a tool: zone tools share the "zones" mechanic.
 const unlockIdOf = (tool: Tool): string | null =>
-  tool === 'sell' || tool === 'move' ? null : isZoneTool(tool) ? 'zones' : tool;
+  tool === 'sell' || tool === 'move' || tool === 'select' ? null : isZoneTool(tool) ? 'zones' : tool;
 
 export function toolUnlocked(state: GameState, tool: Tool): boolean {
   const id = unlockIdOf(tool);
@@ -173,6 +182,7 @@ export class Toolbar {
           handlers.onSelectTool(group.tools[0]!);
         } else {
           this.openGroup = this.openGroup === group.id ? null : group.id;
+          if (this.openGroup) handlers.onOpenGroup();
         }
         this.lastPanelHtml = '';
       });
@@ -190,6 +200,7 @@ export class Toolbar {
       { id: 'research', label: 'Research', hotkey: 'Y', unlockId: 'research', onClick: handlers.onToggleResearch },
       { id: 'stats', label: 'Stats', hotkey: 'N', unlockId: 'rack_basic', onClick: handlers.onToggleStats },
       { id: 'racklist', label: 'All racks', hotkey: 'J', unlockId: 'rack_basic', onClick: handlers.onToggleRackList },
+      { id: 'compliance', label: 'Compliance', hotkey: 'I', unlockId: 'compliance', onClick: handlers.onToggleCompliance },
       { id: 'agebars', label: 'Rack condition bars', unlockId: 'rack_basic', onClick: handlers.onToggleAgeBars },
       { id: 'style', label: 'Style', hotkey: 'L', unlockId: 'room_styles', onClick: handlers.onToggleStyle },
       { id: 'wallHeight', label: 'Tall walls', hotkey: 'V', unlockId: 'wall_basic', onClick: handlers.onToggleWallHeight },
@@ -212,37 +223,26 @@ export class Toolbar {
         this.openGroup = null;
         return;
       }
-      if (target.dataset.act === 'left' || target.dataset.act === 'right') {
+      if (target.dataset.act === 'up' || target.dataset.act === 'down') {
         const cards = this.panel.querySelector<HTMLElement>('.hb-cards');
-        if (cards) cards.scrollBy({ left: (target.dataset.act === 'left' ? -1 : 1) * cards.clientWidth * 0.8 });
+        if (cards) cards.scrollBy({ top: (target.dataset.act === 'up' ? -1 : 1) * cards.clientHeight * 0.8 });
         return;
       }
       if (target.classList.contains('locked')) return;
       handlers.onSelectTool(target.dataset.tool as Tool);
     });
 
-    // The cards scroll sideways: let a normal mouse wheel do that.
-    this.panel.addEventListener(
-      'wheel',
-      (e) => {
-        const cards = this.panel.querySelector<HTMLElement>('.hb-cards');
-        if (!cards || cards.scrollWidth <= cards.clientWidth) return;
-        e.preventDefault();
-        cards.scrollBy({ left: Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX });
-      },
-      { passive: false },
-    );
     // Scroll events don't bubble; capture them to update the edge fades.
     this.panel.addEventListener('scroll', () => this.updateScrollHints(), true);
   }
 
-  // Shows the fades and arrows on whichever side has more cards.
+  // Shows the fades and arrows above or below when there are more cards.
   private updateScrollHints(): void {
     const cards = this.panel.querySelector<HTMLElement>('.hb-cards');
     const scroller = this.panel.querySelector<HTMLElement>('.hb-scroller');
     if (!cards || !scroller) return;
-    scroller.classList.toggle('more-left', cards.scrollLeft > 4);
-    scroller.classList.toggle('more-right', cards.scrollLeft + cards.clientWidth < cards.scrollWidth - 4);
+    scroller.classList.toggle('more-up', cards.scrollTop > 4);
+    scroller.classList.toggle('more-down', cards.scrollTop + cards.clientHeight < cards.scrollHeight - 4);
   }
 
   close(): void {
@@ -305,21 +305,21 @@ export class Toolbar {
         <button data-act="close" aria-label="Close">✕</button>
       </div>
       <div class="hb-scroller">
-        <button class="hb-arrow left" data-act="left" aria-label="Scroll left">‹</button>
+        <button class="hb-arrow up" data-act="up" aria-label="Scroll up">▴</button>
         <div class="hb-cards">${cards.join('')}</div>
-        <button class="hb-arrow right" data-act="right" aria-label="Scroll right">›</button>
+        <button class="hb-arrow down" data-act="down" aria-label="Scroll down">▾</button>
       </div>`;
     this.panel.dataset.group = group.id;
     if (html !== this.lastPanelHtml) {
       // Re-rendering (e.g. cash changed) must not jump the scroll back to the start,
       // but switching groups should.
       const sameGroup = this.lastPanelHtml !== '';
-      const scroll = this.panel.querySelector<HTMLElement>('.hb-cards')?.scrollLeft ?? 0;
+      const scroll = this.panel.querySelector<HTMLElement>('.hb-cards')?.scrollTop ?? 0;
       this.lastPanelHtml = html;
       this.panel.innerHTML = html;
       const cards = this.panel.querySelector<HTMLElement>('.hb-cards')!;
       cards.style.scrollBehavior = 'auto';
-      cards.scrollLeft = sameGroup ? scroll : 0;
+      cards.scrollTop = sameGroup ? scroll : 0;
       cards.style.scrollBehavior = '';
     }
     this.panel.classList.add('open');

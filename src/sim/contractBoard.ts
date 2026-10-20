@@ -4,6 +4,7 @@
 import { CONFIG } from '../config';
 import { CUSTOMER_NAME_PREFIXES, CUSTOMER_TYPES } from './content/customers';
 import type { CustomerType, Range } from './content/types';
+import { compliancePayBonus } from './compliance';
 import { isUnlocked, levelOf } from './progression';
 import { dismissClient, spawnClients } from './people';
 import { prestigeExtraOffers, prestigePayBonus } from './prestige';
@@ -17,8 +18,9 @@ export function contractBoardOpen(state: GameState): boolean {
   return isUnlocked(state, 'contract_board');
 }
 
-export function availableCustomerTypes(level: number): CustomerType[] {
-  return CUSTOMER_TYPES.filter((t) => t.minLevel <= level);
+// Clients who need certifications only come while you hold them all.
+export function availableCustomerTypes(level: number, held: string[] = []): CustomerType[] {
+  return CUSTOMER_TYPES.filter((t) => t.minLevel <= level && (t.certifications ?? []).every((id) => held.includes(id)));
 }
 
 // toFixed strips float noise like 4.3100000000000005.
@@ -49,7 +51,7 @@ export function rollOffer(state: GameState, type: CustomerType): ContractTerms {
   const P = CONFIG.pressure;
   const racks = Math.round(randomInt(state, type.racks[0], type.racks[1]) * (1 + late * P.lateRacksStep));
   const days = randomInt(state, type.days[0], type.days[1]);
-  const prestige = 1 + prestigePayBonus(state) + salesPayBonus(state);
+  const prestige = 1 + prestigePayBonus(state) + salesPayBonus(state) + compliancePayBonus(state);
   const payPerRackPerTick = roundTo(
     CONFIG.contracts.basePayPerRackPerTick * rollRange(state, type.payMultiplier) * prestige * volumeDiscount(state) * reputationPay(state),
     0.01,
@@ -71,6 +73,7 @@ export function rollOffer(state: GameState, type: CustomerType): ContractTerms {
     penalty: roundTo(totalPay * type.penaltyFraction * (1 + late * P.latePenaltyStep), 50),
     xp: type.xp,
     ...(type.requirement ? { requirement: { ...type.requirement } } : {}),
+    ...(type.certifications?.length ? { certifications: [...type.certifications] } : {}),
   };
   state.contracts.nextId += 1;
   return terms;
@@ -83,7 +86,7 @@ export function refreshOffers(state: GameState): void {
   const day = dayOf(state);
   if (state.contracts.offersDay === day) return;
 
-  const types = availableCustomerTypes(levelOf(state));
+  const types = availableCustomerTypes(levelOf(state), state.compliance.held.map((h) => h.id));
   // Yesterday's clients who didn't sign go home.
   for (const old of state.contracts.offers) dismissClient(state, old.id, false);
   state.contracts.offers = [];

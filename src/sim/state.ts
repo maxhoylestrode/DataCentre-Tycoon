@@ -175,6 +175,16 @@ export interface Stats {
   lastTax: number;
   overheadPaid: number;
   ransomsPaid: number;
+  // For achievements: times cash went under the overdraft limit, racks sold
+  // within an hour of being built, fires that burned racks and fires put
+  // out, ransomware stopped by firewalls, and blackouts ridden out with no
+  // brownout.
+  overdrafts: number;
+  quickSells: number;
+  fires: number;
+  firesStopped: number;
+  attacksStopped: number;
+  blackoutsWeathered: number;
 }
 
 // What a customer is offering. Rolled once when the offer is made, then
@@ -200,6 +210,8 @@ export interface ContractTerms {
   review?: { recommend: boolean; note: string };
   // Signed by an account manager rather than the player.
   signedByStaff?: boolean;
+  // Certifications this client needs you to hold (copied from the customer type).
+  certifications?: string[];
 }
 
 export interface Contract extends ContractTerms {
@@ -240,7 +252,9 @@ export interface Progress {
   xp: number;
   // Ids from content/goals.ts and content/achievements.ts.
   completedGoals: string[];
+  // Achievements earned, and those whose reward has been claimed (Achievements panel).
   achievements: string[];
+  claimedAchievements: string[];
   stats: Stats;
 }
 
@@ -249,6 +263,7 @@ export function createProgress(): Progress {
     xp: 0,
     completedGoals: [],
     achievements: [],
+    claimedAchievements: [],
     stats: {
       totalEarned: 0,
       built: 0,
@@ -274,6 +289,12 @@ export function createProgress(): Progress {
       lastTax: 0,
       overheadPaid: 0,
       ransomsPaid: 0,
+      overdrafts: 0,
+      quickSells: 0,
+      fires: 0,
+      firesStopped: 0,
+      attacksStopped: 0,
+      blackoutsWeathered: 0,
     },
   };
 }
@@ -294,6 +315,8 @@ export interface ActiveEvent {
   kind: EventKind;
   startTick: number;
   endTick: number;
+  // Blackouts: set once it caused a brownout (for the "weathered" achievement).
+  hit?: boolean;
 }
 
 export interface EventRecord {
@@ -309,6 +332,33 @@ export interface EventsState {
   active: ActiveEvent[];
   // Most recent last.
   history: EventRecord[];
+}
+
+// Certifications (sim/compliance.ts, content/certifications.ts).
+export interface HeldCertification {
+  id: string;
+  // Tick it was granted; renewals fall due every CONFIG.compliance.renewEveryDays after.
+  since: number;
+  // Tick a daily check first found a requirement missing (null when all is well).
+  atRiskSince: number | null;
+}
+
+export interface ComplianceRecord {
+  tick: number;
+  text: string;
+  good: boolean;
+}
+
+export interface ComplianceState {
+  held: HeldCertification[];
+  // The audit in progress: which certification, and when it reports.
+  audit: { id: string; endTick: number } | null;
+  // Most recent last.
+  log: ComplianceRecord[];
+}
+
+export function createComplianceState(): ComplianceState {
+  return { held: [], audit: null, log: [] };
 }
 
 // Carried over when the company is sold (sim/legacy.ts).
@@ -380,6 +430,7 @@ export interface GameState {
   overdrawnSince: number | null;
   research: ResearchState;
   events: EventsState;
+  compliance: ComplianceState;
   legacy: LegacyState;
   history: HistoryState;
   // The live world: day and night, reputation, overhead, tax, hardware end of
@@ -450,6 +501,7 @@ export function createInitialState(
     overdrawnSince: null,
     research: { done: [], current: null },
     events: { active: [], history: [] },
+    compliance: createComplianceState(),
     legacy,
     history: createHistoryState(),
     liveWorld: options.liveWorld ?? false,

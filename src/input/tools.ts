@@ -23,7 +23,8 @@ import { type Building, categoryOf, floorAt, type GameState, getBuildingAt } fro
 export type ZoneTool = 'zone_server' | 'zone_staff' | 'zone_storage' | 'zone_clear';
 export const ZONE_TOOLS: ZoneTool[] = ['zone_server', 'zone_staff', 'zone_storage', 'zone_clear'];
 
-export type Tool = BuildingKind | FloorKind | WallKind | ZoneTool | 'sell' | 'move';
+// select: picks buildings (click, shift+click, drag a box) without changing anything.
+export type Tool = BuildingKind | FloorKind | WallKind | ZoneTool | 'sell' | 'move' | 'select';
 // inspect: clicking opens the building panel (stats, upgrades, sell).
 // draw: wall and zone tools, which drag instead of clicking tiles.
 export type ToolAction = 'place' | 'sell' | 'repair' | 'inspect' | 'blocked' | 'draw';
@@ -38,10 +39,11 @@ export const TOOL_HOTKEYS: Partial<Record<Tool, string>> = {
   wall_basic: 'B',
   sell: 'X',
   move: 'M',
+  select: 'E',
 };
 
 export function isWallTool(tool: Tool): tool is WallKind {
-  return tool !== 'sell' && tool !== 'move' && isWallKind(tool);
+  return tool !== 'sell' && tool !== 'move' && tool !== 'select' && isWallKind(tool);
 }
 
 export function isZoneTool(tool: Tool): tool is ZoneTool {
@@ -70,13 +72,14 @@ const money = (n: number): string => `£${Math.round(n).toLocaleString('en-GB')}
 export function toolName(tool: Tool): string {
   if (tool === 'sell') return 'Sell';
   if (tool === 'move') return 'Move';
+  if (tool === 'select') return 'Select';
   if (isZoneTool(tool)) return ZONE_NAMES[tool];
   if (isWallTool(tool)) return CONFIG.walls[tool].name;
   return isFloorKind(tool) ? floorDef(tool).name : buildingDef(tool).name;
 }
 
 export function toolCost(tool: Tool): number {
-  if (tool === 'sell' || tool === 'move' || isZoneTool(tool)) return 0;
+  if (tool === 'sell' || tool === 'move' || tool === 'select' || isZoneTool(tool)) return 0;
   if (isWallTool(tool)) return CONFIG.walls[tool].cost;
   return isFloorKind(tool) ? floorDef(tool).cost : buildingDef(tool).cost;
 }
@@ -103,6 +106,11 @@ export function previewTool(state: GameState, tool: Tool, x: number, y: number):
       return { action: 'sell', text: `Remove ${def.name}: +${money(def.cost * CONFIG.economy.sellRefund)}` };
     }
     return { action: 'blocked', text: 'Nothing to sell here' };
+  }
+
+  if (tool === 'select') {
+    if (building) return { action: 'inspect', text: `Select ${buildingDef(building.kind).name} · Shift+click to add · drag a box for many` };
+    return { action: 'blocked', text: 'Click a building to select it, or drag a box over several' };
   }
 
   // The move tool's second step (carrying a building) is previewMove.
@@ -165,7 +173,7 @@ export function previewMove(state: GameState, carried: Building, x: number, y: n
 // 'inspect'. rot is the facing for new buildings. The move tool is handled
 // by the caller, which knows what is being carried.
 export function applyTool(state: GameState, tool: Tool, x: number, y: number, rot = 0): ToolAction | null {
-  if (tool === 'move') return null;
+  if (tool === 'move' || tool === 'select') return null;
   const preview = previewTool(state, tool, x, y);
   if (!preview) return null;
   if (preview.action === 'place') {

@@ -26,6 +26,7 @@ import { ACHIEVEMENTS } from './content/achievements';
 import { GOALS } from './content/goals';
 import { PARTS } from './content/parts';
 import { RESEARCH } from './content/research';
+import { CERTIFICATIONS } from './content/certifications';
 import type { ContractRequirement } from './content/types';
 import { ROOM_STYLES } from './content/styles';
 import {
@@ -39,6 +40,8 @@ import {
   type ContractResult,
   type ContractsState,
   type ContractTerms,
+  type ComplianceState,
+  createComplianceState,
   createContractsState,
   createInitialState,
   createProgress,
@@ -238,6 +241,7 @@ export function serialize(state: GameState, now: Date = new Date()): string {
         xp: state.progress.xp,
         completedGoals: [...state.progress.completedGoals],
         achievements: [...state.progress.achievements],
+        claimedAchievements: [...state.progress.claimedAchievements],
         stats: { ...state.progress.stats },
       },
       // Contract terms are the numbers rolled when the offer was made, not
@@ -254,6 +258,11 @@ export function serialize(state: GameState, now: Date = new Date()): string {
       research: { done: [...state.research.done], current: state.research.current ? { ...state.research.current } : null },
       events: { active: state.events.active.map((e) => ({ ...e })), history: state.events.history.map((e) => ({ ...e })) },
       legacy: { ...state.legacy },
+      compliance: {
+        held: state.compliance.held.map((h) => ({ ...h })),
+        audit: state.compliance.audit ? { ...state.compliance.audit } : null,
+        log: state.compliance.log.map((l) => ({ ...l })),
+      },
       overdrawnSince: state.overdrawnSince,
       liveWorld: state.liveWorld,
       difficulty: state.difficulty,
@@ -379,6 +388,7 @@ function readState(data: Data): GameState {
   state.research = readResearch(data.research);
   state.events = readEvents(data.events);
   state.legacy = readLegacy(data.legacy);
+  state.compliance = readCompliance(data.compliance);
   state.overdrawnSince = intIn(data.overdrawnSince, 0, Number.MAX_SAFE_INTEGER);
   state.history = readHistory(data.history);
   state.liveWorld = data.liveWorld === true;
@@ -437,7 +447,7 @@ function readEvents(raw: unknown): EventsState {
     const startTick = finite(e.startTick);
     const endTick = finite(e.endTick);
     if (startTick === null || endTick === null) continue;
-    events.active.push({ kind: e.kind as EventKind, startTick, endTick });
+    events.active.push({ kind: e.kind as EventKind, startTick, endTick, ...(e.hit === true ? { hit: true } : {}) });
   }
   for (const e of Array.isArray(raw.history) ? raw.history : []) {
     if (!isObject(e) || !EVENT_KINDS.includes(e.kind as EventKind) || typeof e.text !== 'string') continue;
@@ -445,6 +455,34 @@ function readEvents(raw: unknown): EventsState {
   }
   events.history = events.history.slice(-CONFIG.events.historyLength);
   return events;
+}
+
+const CERT_IDS = new Set(CERTIFICATIONS.map((c) => c.id));
+
+// Known certification ids on a contract; unknown ones are dropped.
+function readCertIds(raw: unknown): { certifications?: string[] } {
+  const ids = uniqueKnown(raw, CERT_IDS);
+  return ids.length ? { certifications: ids } : {};
+}
+
+// Certifications held, the audit running and the log. Unknown ids are dropped.
+function readCompliance(raw: unknown): ComplianceState {
+  const compliance = createComplianceState();
+  if (!isObject(raw)) return compliance;
+  for (const h of Array.isArray(raw.held) ? raw.held : []) {
+    if (!isObject(h) || typeof h.id !== 'string' || !CERT_IDS.has(h.id) || compliance.held.some((x) => x.id === h.id)) continue;
+    compliance.held.push({ id: h.id, since: finite(h.since) ?? 0, atRiskSince: finite(h.atRiskSince) });
+  }
+  const a = isObject(raw.audit) ? raw.audit : null;
+  if (a && typeof a.id === 'string' && CERT_IDS.has(a.id) && !compliance.held.some((h) => h.id === a.id)) {
+    compliance.audit = { id: a.id, endTick: finite(a.endTick) ?? 0 };
+  }
+  for (const l of Array.isArray(raw.log) ? raw.log : []) {
+    if (!isObject(l) || typeof l.text !== 'string') continue;
+    compliance.log.push({ tick: finite(l.tick) ?? 0, text: l.text.slice(0, 300), good: l.good === true });
+  }
+  compliance.log = compliance.log.slice(-CONFIG.compliance.logLength);
+  return compliance;
 }
 
 function readLegacy(raw: unknown): LegacyState {
@@ -631,6 +669,7 @@ function readTerms(raw: unknown): ContractTerms | null {
       ? { review: { recommend: raw.review.recommend === true, note: raw.review.note.slice(0, 200) } }
       : {}),
     ...(raw.signedByStaff === true ? { signedByStaff: true } : {}),
+    ...readCertIds(raw.certifications),
   };
 }
 
@@ -712,6 +751,10 @@ function readProgress(raw: unknown): Progress {
   progress.xp = Math.max(0, finite(raw.xp) ?? 0);
   progress.completedGoals = uniqueKnown(raw.completedGoals, GOAL_IDS);
   progress.achievements = uniqueKnown(raw.achievements, ACHIEVEMENT_IDS);
+  // Saves from before claiming paid every reward on the spot: all claimed.
+  progress.claimedAchievements = Array.isArray(raw.claimedAchievements)
+    ? uniqueKnown(raw.claimedAchievements, ACHIEVEMENT_IDS).filter((id) => progress.achievements.includes(id))
+    : [...progress.achievements];
 
   const stats = isObject(raw.stats) ? raw.stats : {};
   for (const key of Object.keys(progress.stats) as (keyof Stats)[]) {

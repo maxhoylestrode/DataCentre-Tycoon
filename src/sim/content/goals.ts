@@ -437,4 +437,32 @@ export const GOALS: Goal[] = [
     reward: { xp: 5_000 },
     after: ['net_150'],
   },
+  {
+    id: 'first_set',
+    description: 'Complete a decor set (see the Style panel)',
+    condition: { type: 'decorSets', min: 1 },
+    reward: { xp: 400, cash: 3_000 },
+    after: ['decorate'],
+  },
+  {
+    id: 'first_certification',
+    description: 'Pass an audit and get certified (Compliance panel)',
+    condition: { type: 'certifications', min: 1 },
+    reward: { xp: 3_000, cash: 50_000 },
+    after: ['earn_1m'],
+  },
+  {
+    id: 'three_certifications',
+    description: 'Hold 3 certifications',
+    condition: { type: 'certifications', min: 3 },
+    reward: { xp: 6_000, cash: 150_000 },
+    after: ['first_certification'],
+  },
+  {
+    id: 'six_sets',
+    description: 'Complete 6 decor sets',
+    condition: { type: 'decorSets', min: 6 },
+    reward: { xp: 8_000 },
+    after: ['first_set', 'three_certifications'],
+  },
 ];

@@ -1,4 +1,4 @@
-import { CONFIG, type Difficulty, isFloorKind } from './config';
+import { CONFIG, type Difficulty, isBuildingKind, isFloorKind } from './config';
 import { advanceClock, createClock } from './sim/clock';
 import {
   buyLot,
@@ -35,15 +35,22 @@ import {
   upgradePart,
   upgradeUplink,
   wallPlacementCost,
+  applyForCertification,
+  claimAchievements,
+  refurbishMany,
+  repairMany,
+  rotateMany,
+  sellMany,
+  upgradeMaxMany,
 } from './sim/commands';
 import { wallAt } from './sim/walls';
 import { type Edge, edgesBetween, nearestCorner, nearestEdge } from './input/walls';
 import { WallLayer } from './render/walls';
 import { type Building, createInitialState, floorAt, type GameState, getBuildingAt, isRunning, racksOf } from './sim/state';
 import { CameraRig } from './render/camera';
-import { HoverHighlight, LotsLayer, type Tile, TilePicker, tileToWorld } from './render/grid';
+import { HoverHighlight, LotsLayer, type Tile, TileMarks, TilePicker, tileToWorld } from './render/grid';
 import { HeatOverlay } from './render/heatmap';
-import { BuildingLayer, FloorLayer, MultiblockLayer } from './render/models';
+import { BuildingLayer, FloorLayer, HologramLayer, MultiblockLayer } from './render/models';
 import { PeopleLayer } from './render/people';
 import { createScene } from './render/scene';
 import { ZoneLayer, ZonePreview } from './render/zones';
@@ -85,6 +92,9 @@ import { RackListPanel } from './ui/racks';
 import { StylePanel } from './ui/style';
 import { Toasts } from './ui/toasts';
 import { Toolbar, toolUnlocked } from './ui/toolbar';
+import { AchievementsPanel } from './ui/achievements';
+import { CompliancePanel } from './ui/compliance';
+import { SelectionBar } from './ui/selection';
 
 const randomSeed = (): number => Math.floor(Math.random() * 2 ** 31);
 // Each new game gets its own random seed (the sim itself never calls
@@ -120,7 +130,13 @@ const zones = new ZoneLayer();
 const boxPreview = new ZonePreview();
 const people = new PeopleLayer();
 const multiblocks = new MultiblockLayer();
+// Tiles of the buildings picked with the Select tool.
+const marks = new TileMarks(state.width, state.height);
+// See-through previews of what a build tool would place.
+const holograms = new HologramLayer();
 scene.add(
+  marks.group,
+  holograms.group,
   floor.group,
   zones.group,
   boxPreview.mesh,
@@ -135,7 +151,12 @@ scene.add(
 );
 
 // UI state: lives here, not in the sim.
-let tool: Tool = 'rack_basic';
+// Select is the default: looking around never builds anything by accident.
+let tool: Tool = 'select';
+// Buildings picked with the Select tool, by id. multiSelect makes taps add
+// and remove (for touch, which has no Shift).
+let selectedIds: number[] = [];
+let multiSelect = false;
 // Facing for the next building placed (quarter turns), changed with Q.
 let placeRot = 0;
 let hoveredTile: Tile | null = null;
@@ -258,10 +279,16 @@ function placementTiles(r: Rect): Tile[] {
   return tilesIn(r).filter((t) => (rowsAlongX ? (t.y - r.y0) % 2 === 0 : (t.x - r.x0) % 2 === 0));
 }
 
-const isBuildTool = (t: Tool): boolean => t !== 'sell' && t !== 'move' && !isWallTool(t) && !isZoneTool(t);
+const isBuildTool = (t: Tool): boolean => t !== 'sell' && t !== 'move' && t !== 'select' && !isWallTool(t) && !isZoneTool(t);
+
+const buildingsIn = (r: Rect): Building[] => state.buildings.filter((b) => b.x >= r.x0 && b.x <= r.x1 && b.y >= r.y0 && b.y <= r.y1);
 
 // What a box would do with the current tool: a summary for the HUD.
 function planBox(r: Rect): { text: string; colour: number } {
+  if (tool === 'select') {
+    const n = buildingsIn(r).length;
+    return { text: `Select ${n} building${n === 1 ? '' : 's'}${selectedIds.length ? ' (Shift adds to the selection)' : ''}`, colour: 0xb28cff };
+  }
   if (isZoneTool(tool)) {
     const n = tilesIn(r).length;
     return { text: `Paint ${n} tile${n > 1 ? 's' : ''}`, colour: 0 };
@@ -289,7 +316,14 @@ function planBox(r: Rect): { text: string; colour: number } {
   };
 }
 
-function applyBox(r: Rect): void {
+function applyBox(r: Rect, shift = false): void {
+  if (tool === 'select') {
+    const ids = buildingsIn(r).map((b) => b.id);
+    selectedIds = shift || multiSelect ? [...new Set([...selectedIds, ...ids])] : ids;
+    buildingPanel.close();
+    play('click');
+    return;
+  }
   if (isZoneTool(tool)) {
     const kind = zoneOfTool(tool);
     if (record(kind ? 'paint zone' : 'clear zone', () => tilesIn(r).forEach((t) => paintZone(state, kind, t.x, t.y)))) play('click');
@@ -331,6 +365,9 @@ const selectTool = (t: Tool): void => {
   if (!toolUnlocked(state, t)) return;
   tool = t;
   carrying = null;
+  if (t !== 'select') selectedIds = [];
+  // Picking a tool clears the screen for building (the menu it came from stays).
+  closeOthers(null, { menu: true });
   play('click');
 };
 const toggleHeat = (): void => {
@@ -376,8 +413,26 @@ function pickWithAlerts(cx: number, cy: number): Tile | null {
   return b ? { x: b.x, y: b.y } : picker.pick(cx, cy);
 }
 
+// A Select-tool click: pick that building (Shift or multi-select adds or
+// removes it); clicking the only selected building again opens its details.
+function selectAt(tile: Tile, shift: boolean): void {
+  const b = getBuildingAt(state, tile.x, tile.y);
+  if (shift || multiSelect) {
+    if (b) selectedIds = selectedIds.includes(b.id) ? selectedIds.filter((id) => id !== b.id) : [...selectedIds, b.id];
+  } else if (!b) {
+    selectedIds = [];
+    buildingPanel.close();
+  } else if (selectedIds.length === 1 && selectedIds[0] === b.id) {
+    showBuilding(b.id);
+  } else {
+    selectedIds = [b.id];
+    buildingPanel.close();
+  }
+  play('click');
+}
+
 // A click (or a box that's a single tile) with the current tool.
-function handleClick(cx: number, cy: number): void {
+function handleClick(cx: number, cy: number, shift = false): void {
   if (tool === 'sell') {
     const wall = wallUnderCursor();
     if (wall) {
@@ -391,6 +446,7 @@ function handleClick(cx: number, cy: number): void {
   if (!carrying && previewTool(state, tool, tile.x, tile.y)?.action !== 'place') {
     const staffId = PeopleLayer.staffIdOf(picker.pickObject(cx, cy, people.staffFigures(), true));
     if (staffId !== null) {
+      closeOthers(staffPanel);
       staffPanel.show(staffId);
       play('click');
       return;
@@ -410,6 +466,10 @@ function handleClick(cx: number, cy: number): void {
     if (lot && purchasableLots(state).some((l) => l.id === lot.id)) roomSale.ask(lot.id);
     return;
   }
+  if (tool === 'select') {
+    selectAt(tile, shift);
+    return;
+  }
   const preview = previewTool(state, tool, tile.x, tile.y);
   let action: ReturnType<typeof applyTool> = null;
   if (preview?.action === 'place' || preview?.action === 'sell') {
@@ -425,7 +485,7 @@ function handleClick(cx: number, cy: number): void {
   else if (action === 'repair') play('cash');
   else if (action === 'blocked') play('error');
   const clicked = state.buildings.find((b) => b.x === tile.x && b.y === tile.y);
-  if (action === 'inspect' && clicked) buildingPanel.show(clicked.id);
+  if (action === 'inspect' && clicked) showBuilding(clicked.id);
   else if (action !== 'repair') buildingPanel.close();
 }
 
@@ -449,7 +509,7 @@ const contracts = new ContractsPanel(document.body, {
   },
 });
 const toggleContracts = (): void => {
-  if (isUnlocked(state, 'contract_board')) contracts.toggle();
+  if (isUnlocked(state, 'contract_board')) togglePanel(contracts);
 };
 // The panel works with building ids; commands take tile coordinates.
 const withBuilding = (id: number, run: (x: number, y: number) => void): void => {
@@ -480,7 +540,7 @@ const rackList = new RackListPanel(document.body, {
     if (!b) return;
     const p = tileToWorld(state.width, state.height, b.x, b.y);
     rig.focus(p.x, p.z);
-    buildingPanel.show(id);
+    showBuilding(id);
   },
 });
 const toggleAgeBars = (): void => {
@@ -517,7 +577,7 @@ const buildingPanel = new BuildingPanel(document.body, {
 });
 const stylePanel = new StylePanel(document.body, { onChoose: (id) => buyStyle(state, id) });
 const toggleStyle = (): void => {
-  if (isUnlocked(state, 'room_styles')) stylePanel.toggle();
+  if (isUnlocked(state, 'room_styles')) togglePanel(stylePanel);
 };
 const staffPanel = new StaffPanel(document.body, {
   onHire: (id) => {
@@ -549,10 +609,62 @@ const researchPanel = new ResearchPanel(document.body, {
   },
 });
 const toggleResearch = (): void => {
-  if (isUnlocked(state, 'research')) researchPanel.toggle();
+  if (isUnlocked(state, 'research')) togglePanel(researchPanel);
 };
 const statsPanel = new StatsPanel(document.body);
 const guide = new GuidePanel(document.body);
+const compliancePanel = new CompliancePanel(document.body, {
+  onApply: (id) => play(applyForCertification(state, id).ok ? 'cash' : 'error'),
+});
+const toggleCompliance = (): void => {
+  if (isUnlocked(state, 'compliance')) togglePanel(compliancePanel);
+};
+const achievementsPanel = new AchievementsPanel(document.body, {
+  onToggle: () => togglePanel(achievementsPanel),
+  onClaim: (id) => {
+    const n = claimAchievements(state, id);
+    play(n > 0 ? 'cash' : 'error');
+    if (n > 1) toasts.show(`<b>Claimed ${n} achievements</b>`, 'achievement');
+  },
+});
+// Bulk actions on the selection. Layout changes can be undone, like elsewhere.
+const selectionBar = new SelectionBar(document.body, {
+  onDetails: (id) => showBuilding(id),
+  onUpgrade: (ids) => {
+    if (record('upgrade selection', () => void upgradeMaxMany(state, ids))) play('cash');
+    else play('error');
+  },
+  onRepair: (ids) => play(repairMany(state, ids) > 0 ? 'cash' : 'error'),
+  onRefurbish: (ids) => play(refurbishMany(state, ids) > 0 ? 'cash' : 'error'),
+  onRotate: (ids) => {
+    if (record('rotate selection', () => void rotateMany(state, ids))) play('click');
+  },
+  onMove: (ids) => {
+    const first = state.buildings.find((b) => ids.includes(b.id));
+    if (!first) return;
+    tool = 'move';
+    carrying = { ids, anchor: { x: first.x, y: first.y } };
+    placeRot = first.rot;
+    selectedIds = [];
+    buildingPanel.close();
+    play('click');
+  },
+  onSell: (ids) => {
+    const done = record(`sell ${ids.length} buildings`, () => void sellMany(state, ids));
+    selectedIds = [];
+    buildingPanel.close();
+    play(done ? 'sell' : 'error');
+  },
+  onToggleMulti: () => {
+    multiSelect = !multiSelect;
+    play('click');
+  },
+  onClear: () => {
+    selectedIds = [];
+    multiSelect = false;
+    buildingPanel.close();
+  },
+});
 const roomSale = new RoomSale(document.body, {
   onBuy: (id) => {
     if (buyLot(state, id).ok) play('cash');
@@ -575,7 +687,8 @@ function startNewGame(next: GameState = newGame(state.difficulty)): void {
   walls.clear();
   zones.clear();
   people.clear();
-  tool = 'rack_basic';
+  tool = 'select';
+  selectedIds = [];
   heat.visible = false;
   undoStack = [];
   closePanels();
@@ -656,7 +769,7 @@ const hud = new Hud(document.body, {
   onTogglePause: () => togglePause(state),
   onSetSpeed: (speed) => setSpeed(state, speed),
   onRestart: () => startNewGame(),
-  onOpenNetwork: () => networkPanel.toggle(),
+  onOpenNetwork: () => togglePanel(networkPanel),
 });
 
 const toggleWallHeight = (): void => {
@@ -668,28 +781,58 @@ const toolbar = new Toolbar(document.body, {
   onToggleContracts: toggleContracts,
   onToggleStyle: toggleStyle,
   onToggleWallHeight: toggleWallHeight,
-  onToggleStaff: () => staffPanel.toggle(),
-  onToggleGuide: () => guide.toggle(),
+  onToggleStaff: () => togglePanel(staffPanel),
+  onToggleGuide: () => togglePanel(guide),
   onToggleResearch: toggleResearch,
-  onToggleStats: () => statsPanel.toggle(),
-  onToggleRackList: () => rackList.toggle(),
+  onToggleStats: () => togglePanel(statsPanel),
+  onToggleRackList: () => togglePanel(rackList),
+  onToggleCompliance: toggleCompliance,
   onToggleAgeBars: toggleAgeBars,
   onUndo: undo,
+  // Opening a build menu closes the big panels and building details.
+  onOpenGroup: () => closeOthers(null, { menu: true }),
 });
 
-function closePanels(): void {
-  rackList.toggle(false);
-  carrying = null;
-  toolbar.close();
-  buildingPanel.close();
-  contracts.toggle(false);
-  stylePanel.toggle(false);
-  staffPanel.toggle(false);
-  networkPanel.toggle(false);
-  researchPanel.toggle(false);
-  statsPanel.toggle(false);
-  guide.toggle(false);
+// --- One panel at a time ------------------------------------------------------
+// The big panels (contracts, staff, stats...), the building panel and the
+// build menu all share the middle of the screen, so opening one closes the rest.
+
+interface Panel {
+  readonly open: boolean;
+  toggle(force?: boolean): void;
+}
+const modalPanels = (): Panel[] => [
+  rackList, contracts, stylePanel, staffPanel, networkPanel, researchPanel, compliancePanel, achievementsPanel, statsPanel, guide,
+];
+
+// Closes every big panel except `keep`, plus the building panel, the build
+// menu and the room-for-sale prompt unless told to keep them.
+function closeOthers(keep: Panel | null, { building = false, menu = false } = {}): void {
+  for (const p of modalPanels()) if (p !== keep && p.open) p.toggle(false);
+  if (!building) buildingPanel.close();
+  if (!menu) toolbar.close();
   roomSale.close();
+}
+
+// Opens a panel on its own, or closes it if it's already open.
+function togglePanel(panel: Panel): void {
+  if (panel.open) {
+    panel.toggle(false);
+    return;
+  }
+  closeOthers(panel);
+  panel.toggle(true);
+}
+
+// A building's details replace whatever panel was open.
+function showBuilding(id: number): void {
+  closeOthers(null, { building: true });
+  buildingPanel.show(id);
+}
+
+function closePanels(): void {
+  carrying = null;
+  closeOthers(null);
 }
 
 const updateInput = attachInput(renderer.domElement, rig, {
@@ -708,6 +851,7 @@ const updateInput = attachInput(renderer.domElement, rig, {
     if (isWallTool(tool) || isZoneTool(tool)) return true;
     if (pointerType === 'touch') return false;
     if (tool === 'move') return carrying === null;
+    // Select drags a box with a mouse; on touch one finger pans.
     return true;
   },
   onDrawStart: (cx, cy) => {
@@ -730,7 +874,7 @@ const updateInput = attachInput(renderer.domElement, rig, {
     const grid = picker.pickGrid(cx, cy);
     if (wallDrag && grid) wallDrag.end = nearestCorner(grid.gx, grid.gy);
   },
-  onDrawEnd: (cx, cy, cancelled) => {
+  onDrawEnd: (cx, cy, cancelled, shift = false) => {
     if (!cancelled && isWallTool(tool)) {
       const planned = checkWallEdges(plannedWallEdges()).filter((p) => p.ok);
       const kind = tool;
@@ -738,31 +882,41 @@ const updateInput = attachInput(renderer.domElement, rig, {
     } else if (!cancelled && boxDrag) {
       const r = boxRect()!;
       // A box that never left its tile is just a click (zones paint it).
-      if (isSingleTile(r) && !isZoneTool(tool)) handleClick(cx, cy);
-      else applyBox(r);
+      if (isSingleTile(r) && !isZoneTool(tool)) handleClick(cx, cy, shift);
+      else applyBox(r, shift);
     }
     wallDrag = null;
     boxDrag = null;
   },
   onToggleWallHeight: toggleWallHeight,
-  onToggleStaff: () => staffPanel.toggle(),
-  onToggleGuide: () => guide.toggle(),
+  onToggleStaff: () => togglePanel(staffPanel),
+  onToggleGuide: () => togglePanel(guide),
   onToggleResearch: toggleResearch,
-  onToggleStats: () => statsPanel.toggle(),
-  onToggleRackList: () => rackList.toggle(),
+  onToggleStats: () => togglePanel(statsPanel),
+  onToggleRackList: () => togglePanel(rackList),
+  onToggleCompliance: toggleCompliance,
   onUndo: undo,
   onRotate: () => {
     // Rotates the building whose panel is open, otherwise the next placement
     // (or the building being carried).
     const selected = carrying === null ? buildingPanel.update(state) : null;
     if (selected) record('rotate', () => void rotateBuilding(state, selected.x, selected.y));
+    else if (carrying === null && selectedIds.length) record('rotate selection', () => void rotateMany(state, selectedIds));
     else placeRot = (placeRot + 1) % 4;
     play('click');
   },
-  // Esc first drops a carried building back where it was, then closes panels.
+  // Esc first drops a carried building back where it was, then clears the
+  // selection, then closes panels and goes back to the Select tool.
   onEscape: () => {
     if (carrying !== null) carrying = null;
-    else closePanels();
+    else if (selectedIds.length) {
+      selectedIds = [];
+      multiSelect = false;
+      buildingPanel.close();
+    } else {
+      closePanels();
+      tool = 'select';
+    }
   },
   onClick: handleClick,
   onTogglePause: () => togglePause(state),
@@ -848,6 +1002,37 @@ function frame(now: number): void {
   }
   walls.showGhost(ghosts, state);
   const rect = boxRect();
+
+  // Holograms of what a build tool would place: the hovered tile, or every
+  // spot in a dragged box. Blue where it fits (and is affordable), red where not.
+  let holo: { x: number; y: number; ok: boolean }[] = [];
+  if (isBuildingKind(tool) && !carried.length) {
+    const kind = tool;
+    const unlocked = isUnlocked(state, kind);
+    const cost = toolCost(kind);
+    if (rect && !isSingleTile(rect)) {
+      let cash = state.cash;
+      holo = placementTiles(rect)
+        .filter((t) => !getBuildingAt(state, t.x, t.y))
+        .map((t) => {
+          const ok = unlocked && isOwnedTile(state, t.x, t.y) && cash >= cost;
+          if (ok) cash -= cost;
+          return { ...t, ok };
+        });
+    } else if (hoveredTile && !getBuildingAt(state, hoveredTile.x, hoveredTile.y)) {
+      holo = [{ ...hoveredTile, ok: preview?.action === 'place' }];
+    }
+  }
+  holograms.show(state, isBuildingKind(tool) ? tool : null, holo, placeRot);
+
+  // The selection: drop buildings that no longer exist, mark the rest.
+  if (selectedIds.length) {
+    const alive = new Set(state.buildings.map((b) => b.id));
+    if (selectedIds.some((id) => !alive.has(id))) selectedIds = selectedIds.filter((id) => alive.has(id));
+  }
+  if (!selectedIds.length) multiSelect = false;
+  marks.set(state.buildings.filter((b) => selectedIds.includes(b.id)).map((b) => ({ x: b.x, y: b.y })));
+  selectionBar.update(state, selectedIds, multiSelect);
   if (rect && (!isSingleTile(rect) || isZoneTool(tool))) {
     const plan = planBox(rect);
     if (isZoneTool(tool)) boxPreview.show(state, rect, zoneOfTool(tool));
@@ -878,6 +1063,7 @@ function frame(now: number): void {
     contracts: contracts.open,
     staff: staffPanel.open,
     research: researchPanel.open,
+    compliance: compliancePanel.open,
     stats: statsPanel.open,
     racklist: rackList.open,
     agebars: buildings.showAgeBars,
@@ -892,6 +1078,8 @@ function frame(now: number): void {
   staffPanel.update(state);
   networkPanel.update(state);
   researchPanel.update(state);
+  compliancePanel.update(state);
+  achievementsPanel.update(state);
   statsPanel.update(state);
   rackList.update(state);
   const selected = buildingPanel.update(state);

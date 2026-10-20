@@ -208,6 +208,54 @@ The whole 2026-10-17 backlog (A0–F), built in one go with Claude choosing the 
 - A redesigned HUD: cash with a hover breakdown of income and costs, clock and speed control, power and network meters, chips, and coloured warnings.
 - Staff panel (T) and network panel.
 
+### Ideas backlog (added 2026-10-20, not planned yet)
+Ideas only. Pick from here, then plan a milestone before building. The tiers in the table below promise problems that have no systems yet (compliance and rivals at L21, mega-halls and custom hardware at L31, the whole Global network tier at L41). Research also ends at L30 and there are only 7 lots, so late game currently runs out.
+
+**User's own requests:**
+- ✅ **Selection mode** (built 2026-10-20, hotkey E since S pans): a `select` tool, the default tool and the one Esc returns to, that never places or sells anything.
+  - Click: select a building and show a small info card, without opening the full panel.
+  - Shift+click: add to the selection.
+  - Drag: select everything in a box.
+  - Bulk actions on the selection: repair, refurbish, upgrade max, move, sell.
+- ✅ **More achievements** (built 2026-10-20, 25 added, claimed from a trophy button). The current ones are mostly milestones. New kinds:
+  - Feats: survive a blackout with zero downtime; finish a contract at 100% uptime during a heatwave.
+  - Challenges: reach L15 without hiring; run 50 racks on air cooling only; run a full day on solar.
+  - Collections: own every rack model; fill every slot with the top part; place every decor item.
+  - Funny ones: go into overdraft 10 times; sell a rack within a minute of building it; 5 fires in one game.
+  - Legacy: sell the company 1, 3 and 10 times.
+  - Needs new condition types, for example `noStaffUntilLevel`, `airOnlyRacks`, `renewableDay`.
+- ✅ **More decor** (built 2026-10-20: 13 new items and 7 decor sets; several ideas below already existed).
+  - Wall clock or world clocks, whiteboard, a NOC wall screen that shows live stats.
+  - Vending machine, pinball, ping-pong table, bean bags, bookshelf.
+  - Trophy cabinet that fills up with achievements, a bust of the founder.
+  - Cable trays, lit glass floor panels.
+  - Fountain, rock garden, bonsai, fish-tank wall.
+  - Meeting table and chairs (maybe a small speed-up for sales staff).
+  - Unlockable sets, e.g. a "Hyperscale HQ" set at L31.
+  - Set bonuses for placing a whole set. Some items should do something besides prestige.
+
+**Late game:**
+- **Rival companies (L21):** 2–3 named AI competitors with a reputation score. They outbid you for contracts, poach staff and undercut walk-in prices. A market share stat and "beat a rival" goals.
+- ✅ **Compliance and certifications (L21–28)** (built 2026-10-20): ISO 27001, SOC 2, Tier III/IV, green certification.
+  - Each needs things in place: security staff, firewall and UPS coverage, 30 days of uptime, a renewable share.
+  - They unlock bank, government and healthcare clients.
+  - Audits can take a certification away.
+- **Second sites / global network (L41):** datacentres in other regions, each with its own electricity price, climate, tax and customers, run from a world map.
+  - Latency-sensitive clients need a site in a given region.
+  - Cheaper option: other sites are "managed" summaries, not full 3D floors.
+- **Custom hardware (L31+):** design your own rack or chip (balance performance, power and heat), pay to tape out, then manufacture it.
+- **Mega-halls:** a bigger lot type (e.g. 40×28) with columns, power distribution rooms and meet-me rooms. Racks far from a meet-me room need extra cabling.
+- **Endless layer:**
+  - Procedural goals that scale with level once the hand-made goals run out.
+  - A legacy rank track.
+- **Smaller depth:**
+  - Hot/cold aisle containment as a layout bonus (dropped in Milestone 7).
+  - Hardware market cycles, e.g. a GPU shortage that doubles prices for a week.
+  - A carbon tax per tonne.
+  - Selling waste heat to district heating.
+  - Contract renewals and long-term clients.
+  - Staff burnout at high workloads.
+
 ### Later milestones (outline only, replan before starting)
 5. ✅ (done 2026-10-16) Local save/load: versioned saves in localStorage, export/import save file, settings. Done early because progression needs persistence.
 8. Staff and random incidents (moved after hardware at the user's request)
@@ -315,6 +363,36 @@ Done when: I can create an account, play on one device, log in on another and co
 ## Decisions log
 
 (Claude Code: add dated entries here when a decision changes the plan.)
+
+- 2026-10-20: One panel at a time, and a new stats screen (user: panels "keep opening and overlapping"; stats should be "a simple dashboard then more details on each section").
+  - **Panels:** opening any big panel closes the others, the building panel and the build menu (`togglePanel` / `closeOthers` in `main.ts`). Picking a tool, opening a build menu, or opening a building's or person's details also closes the panels.
+  - **Stats (N):** the tick-boxes on one shared graph are gone.
+    - The sidebar lists 12 sections, each with its headline number and trend.
+    - Overview is a dashboard: six key numbers (each opens its section), an income-and-costs graph, where money comes from and goes, and the latest incidents.
+    - Every other section has its own number tiles and two or three small graphs. Each graph only plots stats that share a unit (and has warm and fail lines for temperature).
+- 2026-10-20: Selection mode, achievements, decor, compliance, guide, mobile, holograms and claiming (user: "do those 3 all together", then mobile, holograms, claimable achievements and a vertical build menu mid-build). Claude chose the details below. No save version bump: every new field is read tolerantly.
+  - **Select tool (E):** the default tool, and Esc goes back to it.
+    - Click selects; clicking the only selected building again opens its details. Shift+click adds or removes; drag a box selects everything inside it.
+    - On touch, **+ Add mode** in the selection bar makes taps add or remove.
+    - The selection bar has Upgrade max, Repair, Refurbish, Rotate, Move and Sell (click twice) for the whole selection, plus Details for one building. Q rotates the selection.
+    - Bulk commands are `upgradeMaxMany`, `repairMany`, `refurbishMany`, `sellMany` and `rotateMany` in `sim/commands.ts`; the "all racks" commands now use them.
+  - **Holograms:** a build tool shows a see-through copy of the building at the cursor, or at every spot in a dragged box. Blue means it fits and you can afford it; red means it doesn't. It's `HologramLayer` in `render/models.ts`.
+  - **Achievements are claimed:** earning one no longer pays it. A trophy button (top right) shows a count; its panel has Claim and Claim all, and shows progress on the rest. Old saves count every earned achievement as claimed. The balance bot claims as it goes.
+    - 25 new achievements: feats, challenges, collections, compliance, fun ones and legacy. They use 21 new condition types (see `docs/ADDING_CONTENT.md`) and 6 new stat counters.
+    - The trophy case fills with cups as you earn achievements.
+  - **Decor:** 13 new items, including a Hyperscale HQ group from L31 to L35, so L31+ finally unlocks things. There are also 7 **decor sets** (`content/decorSets.ts`): one of each item built adds bonus prestige, and the Style panel shows progress.
+  - **Compliance (L21, panel I):** 5 certifications (`content/certifications.ts`): ISO 27001, SOC 2, Green energy, Tier III and Tier IV (which needs Tier III).
+    - Apply and pay the fee; the audit reports after 1 day and passes if every requirement is met then.
+    - A daily check puts a certification at risk when a requirement slips, and revokes it after 2 days. Revoking breaks contracts that need it and costs 10 reputation.
+    - Renewal costs 20% of the fee every 7 days. Each certification adds 2–5% contract pay.
+    - 5 new client types need certifications: Bank, Healthcare, Climate fund, Government and Stock exchange (L31, since it needs Hyperscale pods).
+  - **Guide** rewritten into five chapters. Each section opens with a one-line summary, then short lists, with level badges and Back and Next buttons. New sections cover the screen layout, selecting, decor, compliance and achievements.
+  - **Build menus:** two rows of smaller cards that scroll down instead of sideways.
+  - **Mobile (≤700px wide or ≤520px tall):**
+    - A compact HUD, with menu, trophy and goals in a column on the right.
+    - A one-row hotbar that scrolls sideways.
+    - Panels fill the width and scroll inside; the building panel and selection bar sit above the hotbar.
+  - Fixed: the level-up toast showed raw ids for walls ("wall_basic").
 
 - 2026-10-17: Milestone 9: a harder mid and late game, day/night, and staff with traits (user: "add all of that"). Save v10.
   - **Live world:** everything below is gated on `state.liveWorld`. It's on in real games and in old saves that simulate people, and off in engine tests, the same pattern as `staffSim`.

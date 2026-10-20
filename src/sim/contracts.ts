@@ -61,7 +61,9 @@ export function allocateRacks(state: GameState): RackAllocation {
 
 // Whether you own enough suitable racks (working or not) to take this offer
 // on top of your current contracts.
+// Clients who need certifications only sign while you hold them all.
 export function canTakeOffer(state: GameState, offer: ContractTerms): boolean {
+  if (offer.certifications?.some((id) => !state.compliance.held.some((h) => h.id === id))) return false;
   const owned = racksOf(state);
   const { assigned } = assign(state, owned, [...state.contracts.active, offer]);
   return state.contracts.active.every((c) => (assigned.get(c.id) ?? 0) >= c.racks) && assigned.get(offer.id) === offer.racks;
@@ -145,4 +147,13 @@ export function cancelActiveContract(state: GameState, contractId: number): Cont
   if (!contract) return null;
   state.contracts.active = state.contracts.active.filter((c) => c.id !== contractId);
   return settle(state, contract, 'cancelled');
+}
+
+// Ends a contract early as a broken promise (e.g. a certification it needs
+// was revoked), paying its penalty.
+export function breakContract(state: GameState, contractId: number): ContractResult | null {
+  const contract = state.contracts.active.find((c) => c.id === contractId);
+  if (!contract) return null;
+  state.contracts.active = state.contracts.active.filter((c) => c.id !== contractId);
+  return settle(state, contract, 'failed');
 }

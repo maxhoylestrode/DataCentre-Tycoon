@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import {
+  claimAchievements,
   hireStaff,
   paintZone,
   placeBuilding,
@@ -11,6 +12,10 @@ import {
 } from '../src/sim/commands';
 import { lotSize } from '../src/sim/lots';
 import { evaluate, isMet } from '../src/sim/conditions';
+import { ACHIEVEMENTS } from '../src/sim/content/achievements';
+import { DECOR_SETS } from '../src/sim/content/decorSets';
+import { PARTS } from '../src/sim/content/parts';
+import { slotsOf } from '../src/sim/buildings';
 import { GOALS } from '../src/sim/content/goals';
 import { TIERS } from '../src/sim/content/tiers';
 import { UNLOCKS } from '../src/sim/content/unlocks';
@@ -24,6 +29,7 @@ import {
   levelOf,
   tierFor,
   totalXpForLevel,
+  unclaimedAchievements,
   unlocksBetween,
   xpToNext,
 } from '../src/sim/progression';
@@ -313,5 +319,150 @@ describe('conditions', () => {
       getBuildingAt(s, 8, h - 2)!.status = 'ok';
       expect(evaluate(s, { type: 'receptionReady', min: 1 }).current).toBe(1);
     });
+  });
+
+  describe('late-game, collection and safety conditions', () => {
+    type Kind = Parameters<typeof placeBuilding>[1];
+    const fresh = (level = 35): ReturnType<typeof createInitialState> => {
+      const s = createInitialState(12, 12);
+      s.progress.xp = totalXpForLevel(level);
+      s.cash = 10_000_000;
+      return s;
+    };
+    const built = (s: ReturnType<typeof createInitialState>, kind: Kind, x: number, y: number): void => {
+      placeBuilding(s, kind, x, y);
+      getBuildingAt(s, x, y)!.status = 'ok';
+    };
+
+    it('levelWithoutHires is 0 once anyone is hired', () => {
+      const s = fresh(12);
+      expect(evaluate(s, { type: 'levelWithoutHires', min: 12 }).current).toBe(12);
+      s.progress.stats.staffHired = 1;
+      expect(evaluate(s, { type: 'levelWithoutHires', min: 12 }).current).toBe(0);
+    });
+    it('airCooledRacks is 0 once a rack has liquid cooling', () => {
+      const s = fresh();
+      built(s, 'rack_basic', 0, 0);
+      built(s, 'rack_basic', 2, 0);
+      expect(evaluate(s, { type: 'airCooledRacks', min: 1 }).current).toBe(2);
+      s.buildings[0]!.parts.cooling = 'cool_rear_door';
+      expect(evaluate(s, { type: 'airCooledRacks', min: 1 }).current).toBe(0);
+    });
+    it('rackModels counts distinct rack models', () => {
+      const s = fresh();
+      built(s, 'rack_basic', 0, 0);
+      built(s, 'rack_basic', 2, 0);
+      built(s, 'rack_gpu', 4, 0);
+      expect(evaluate(s, { type: 'rackModels', min: 1 }).current).toBe(2);
+    });
+    it('maxedRacks counts racks with the best part in every slot', () => {
+      const s = fresh();
+      built(s, 'rack_basic', 0, 0);
+      expect(evaluate(s, { type: 'maxedRacks', min: 1 }).current).toBe(0);
+      const rack = s.buildings[0]!;
+      for (const slot of slotsOf(rack)) {
+        const path = PARTS.filter((p) => p.slot === slot);
+        rack.parts[slot] = path[path.length - 1]!.id;
+      }
+      expect(evaluate(s, { type: 'maxedRacks', min: 1 }).current).toBe(1);
+    });
+    it('decorKinds counts distinct decorations, not furniture', () => {
+      const s = fresh();
+      built(s, 'plant_small', 0, 0);
+      built(s, 'plant_small', 1, 0);
+      built(s, 'sofa', 2, 0);
+      built(s, 'break_table', 3, 0);
+      expect(evaluate(s, { type: 'decorKinds', min: 1 }).current).toBe(2);
+    });
+    it('decorSets counts complete sets of built items', () => {
+      const s = fresh();
+      const lounge = DECOR_SETS.find((d) => d.id === 'set_lounge')!;
+      lounge.items.forEach((kind, i) => built(s, kind as Kind, i, 0));
+      expect(evaluate(s, { type: 'decorSets', min: 1 }).current).toBe(1);
+      getBuildingAt(s, 0, 0)!.status = 'building';
+      expect(evaluate(s, { type: 'decorSets', min: 1 }).current).toBe(0);
+    });
+    it('stat counters', () => {
+      const s = fresh();
+      Object.assign(s.progress.stats, { overdrafts: 2, quickSells: 3, fires: 4, firesStopped: 5, attacksStopped: 6, blackoutsWeathered: 7 });
+      expect(evaluate(s, { type: 'overdrafts', min: 1 }).current).toBe(2);
+      expect(evaluate(s, { type: 'quickSells', min: 1 }).current).toBe(3);
+      expect(evaluate(s, { type: 'fires', min: 1 }).current).toBe(4);
+      expect(evaluate(s, { type: 'firesStopped', min: 1 }).current).toBe(5);
+      expect(evaluate(s, { type: 'attacksStopped', min: 1 }).current).toBe(6);
+      expect(evaluate(s, { type: 'blackoutsWeathered', min: 1 }).current).toBe(7);
+    });
+    it('companiesSold, researchDone, reputation and certifications', () => {
+      const s = fresh();
+      s.legacy.sales = 2;
+      s.research.done = ['r_crm', 'r_hot_aisle'];
+      s.reputation = 77;
+      s.compliance.held = [{ id: 'iso_27001', since: 0, atRiskSince: null }];
+      expect(evaluate(s, { type: 'companiesSold', min: 1 }).current).toBe(2);
+      expect(evaluate(s, { type: 'researchDone', min: 1 }).current).toBe(2);
+      expect(evaluate(s, { type: 'reputation', min: 1 }).current).toBe(77);
+      expect(evaluate(s, { type: 'certifications', min: 1 }).current).toBe(1);
+    });
+    it('renewableShare is renewable supply over draw', () => {
+      const s = fresh();
+      expect(evaluate(s, { type: 'renewableShare', min: 1 }).current).toBe(0);
+      built(s, 'rack_basic', 0, 0);
+      built(s, 'power_solar', 2, 0);
+      expect(evaluate(s, { type: 'renewableShare', min: 1 }).current).toBe(1);
+    });
+    it('upsCoverage is UPS backup over draw', () => {
+      const s = fresh();
+      for (let x = 0; x < 10; x++) built(s, 'rack_basic', x, 0);
+      built(s, 'ups_battery', 0, 2);
+      const full = evaluate(s, { type: 'upsCoverage', min: 1 }).current;
+      expect(full).toBeGreaterThan(0);
+      built(s, 'rack_basic', 0, 4);
+      expect(evaluate(s, { type: 'upsCoverage', min: 1 }).current).toBeLessThanOrEqual(full);
+    });
+    it('suppressionCoverage is the share of racks fire suppression covers', () => {
+      const s = fresh();
+      built(s, 'rack_basic', 0, 0);
+      built(s, 'rack_basic', 11, 11);
+      built(s, 'fire_suppression', 1, 1);
+      expect(evaluate(s, { type: 'suppressionCoverage', min: 1 }).current).toBe(0.5);
+    });
+    it('firewallBlock is the share of an attack blocked', () => {
+      const s = fresh();
+      expect(evaluate(s, { type: 'firewallBlock', min: 1 }).current).toBe(0);
+      built(s, 'firewall', 0, 0);
+      expect(evaluate(s, { type: 'firewallBlock', min: 1 }).current).toBeGreaterThan(0);
+    });
+    it('recentUptime needs a full window of history', () => {
+      const s = fresh();
+      for (let h = 0; h < 23; h++) s.history.samples.push({ tick: h * 60, uptime: 0.98 });
+      expect(evaluate(s, { type: 'recentUptime', min: 0.9, days: 1 }).current).toBe(0);
+      s.history.samples.push({ tick: 23 * 60, uptime: 0.98 });
+      expect(evaluate(s, { type: 'recentUptime', min: 0.9, days: 1 }).current).toBeCloseTo(0.98);
+    });
+  });
+});
+
+describe('claiming achievements', () => {
+  const reward = (id: string): number => ACHIEVEMENTS.find((a) => a.id === id)!.reward.xp;
+  it('earning an achievement waits for a claim to pay its XP', () => {
+    const state = createInitialState(10, 10);
+    placeBuilding(state, 'rack_basic', 0, 0);
+    getBuildingAt(state, 0, 0)!.status = 'failed';
+    repairRack(state, 0, 0);
+    expect(unclaimedAchievements(state)).toContain('first_repair');
+    const xp = state.progress.xp;
+    expect(claimAchievements(state, 'first_repair')).toBe(1);
+    expect(state.progress.xp).toBe(xp + reward('first_repair'));
+    expect(claimAchievements(state, 'first_repair')).toBe(0);
+    expect(state.progress.xp).toBe(xp + reward('first_repair'));
+  });
+  it('an achievement not earned yet cannot be claimed', () => {
+    expect(claimAchievements(createInitialState(10, 10), 'millionaire')).toBe(0);
+  });
+  it('claiming all pays every unclaimed one', () => {
+    const state = createInitialState(10, 10);
+    state.progress.achievements = ['first_repair', 'first_failure'];
+    expect(claimAchievements(state)).toBe(2);
+    expect(unclaimedAchievements(state)).toEqual([]);
   });
 });
